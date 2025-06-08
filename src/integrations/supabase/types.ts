@@ -166,6 +166,38 @@ export type Database = {
           }
         ];
       },
+      justificativa_faltas: {
+        Row: {
+          id: string;
+          aluno_id: string;
+          data: string;
+          motivo: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          aluno_id: string;
+          data: string;
+          motivo: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          aluno_id?: string;
+          data?: string;
+          motivo?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "justificativa_faltas_aluno_id_fkey",
+            columns: ["aluno_id"],
+            isOneToOne: false,
+            referencedRelation: "alunos",
+            referencedColumns: ["id"]
+          }
+        ];
+      },
     }
     Views: {
       alunos_faltosos: {

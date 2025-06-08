@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Clock, ArrowLeft, Search, FileText, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Tables } from "@/integrations/supabase/types";
 
 interface Aluno {
   id: string;
@@ -52,6 +53,7 @@ export default function ConsultarFaltasPage() {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [registros, setRegistros] = useState<RegistroFalta[]>([]);
   const [registrosAtraso, setRegistrosAtraso] = useState<RegistroAtraso[]>([]);
+  const [faltasJustificadas, setFaltasJustificadas] = useState<Tables<'justificativa_faltas'>[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function ConsultarFaltasPage() {
     fetchAlunos();
     fetchRegistros();
     fetchRegistrosAtraso();
+    fetchFaltasJustificadas();
   }, [user, navigate]);
 
   const fetchAlunos = async () => {
@@ -129,6 +132,25 @@ export default function ConsultarFaltasPage() {
       toast({
         title: "Erro",
         description: "Não foi possível carregar os registros de atraso.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchFaltasJustificadas = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("justificativa_faltas")
+        .select("*")
+        .eq("aluno_id", user.id)
+        .order("data", { ascending: false });
+      if (error) throw error;
+      setFaltasJustificadas(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar faltas justificadas:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as faltas justificadas.",
         variant: "destructive",
       });
     }
@@ -342,6 +364,13 @@ export default function ConsultarFaltasPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Lista de Faltas Justificadas */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Faltas Justificadas</CardTitle>
+          </CardHeader>
+          <CardContent>
       </div>
     </div>
   );

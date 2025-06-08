@@ -54,43 +54,54 @@ const ChamadaPage: React.FC = () => {
     setIsSaving(true);
 
     try {
+      const dataChamada = format(date, "yyyy-MM-dd");
       // Preparar os registros de presença para inserção
       const presencasParaInserir = Object.entries(presencas).map(([alunoId, status]) => {
-        // Converter o tipo de presença para boolean
         let presente = false;
+        let justificativa = null;
         if (status === "presente") presente = true;
-        // Atestado também é considerado como presente no banco de dados
-        else if (status === "atestado") presente = true;
-        
+        else if (status === "falta") presente = false;
+        else if (status === "atestado") justificativa = "Atestado";
         return {
           aluno_id: alunoId,
           turma_id: turmaId,
           presente,
-          data_chamada: format(date, "yyyy-MM-dd"),
+          data_chamada: dataChamada,
+          justificativa,
         };
       });
 
-      // Só salva se houver presença registrada
-      if (presencasParaInserir.length > 0) {
-        const { error } = await supabase
-          .from("presencas")
-          .insert(presencasParaInserir);
-
-        if (error) throw error;
-
-        toast({
-          title: "Chamada salva",
-          description: "A chamada foi registrada com sucesso.",
-        });
-
-        // Limpar o estado das presenças após salvar com sucesso
-        setPresencas({});
-      } else {
-        toast({
-          title: "Atenção",
-          description: "Nenhuma presença registrada para salvar.",
-        });
+      // Inserir presenças e justificativas
+      for (const presenca of presencasParaInserir) {
+        if (presenca.justificativa) {
+          // Salva como falta justificada
+          await supabase.from("justificativa_faltas").insert({
+            aluno_id: presenca.aluno_id,
+            data: presenca.data_chamada,
+            motivo: presenca.justificativa,
+          });
+          // Salva como falta (presente: false)
+          await supabase.from("presencas").insert({
+            aluno_id: presenca.aluno_id,
+            turma_id: presenca.turma_id,
+            presente: false,
+            data_chamada: presenca.data_chamada,
+          });
+        } else {
+          await supabase.from("presencas").insert({
+            aluno_id: presenca.aluno_id,
+            turma_id: presenca.turma_id,
+            presente: presenca.presente,
+            data_chamada: presenca.data_chamada,
+          });
+        }
       }
+
+      toast({
+        title: "Chamada salva",
+        description: "A chamada foi registrada com sucesso.",
+      });
+      setPresencas({});
     } catch (error) {
       console.error("Erro ao salvar chamada:", error);
       toast({

@@ -78,7 +78,7 @@ export const useAlunosTurma = (turmaId: string | undefined) => {
       );
 
       setTurmaInfo(turmaData);
-      setAlunos(processedAlunos);
+      setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)));
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     } finally {
