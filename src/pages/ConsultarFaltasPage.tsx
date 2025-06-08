@@ -371,6 +371,33 @@ export default function ConsultarFaltasPage() {
             <CardTitle>Faltas Justificadas</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Motivo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {faltasJustificadas.map((falta) => (
+                    <TableRow key={falta.id}>
+                      <TableCell>{format(new Date(falta.data + 'T03:00:00'), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                      <TableCell>{falta.motivo}</TableCell>
+                    </TableRow>
+                  ))}
+                  {faltasJustificadas.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center py-4 text-gray-500">
+                        Nenhuma falta justificada encontrada
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
