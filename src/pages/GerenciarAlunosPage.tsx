@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TurmaStatsCards } from "@/components/alunos/TurmaStatsCards";
-import { AlunosTable } from "@/components/alunos/AlunosTable";
+import AlunosTable from "@/components/alunos/AlunosTable";
 import { useAlunosTurma } from "@/hooks/useAlunosTurma";
 import AddEditStudentDialog from "@/components/alunos/AddEditStudentDialog";
 
