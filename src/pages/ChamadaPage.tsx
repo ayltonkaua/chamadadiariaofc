@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +6,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Check, X, FileText, Save, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface Aluno {
   id: string;
@@ -22,6 +23,7 @@ const ChamadaPage: React.FC = () => {
   const [presencas, setPresencas] = useState<Record<string, Presenca>>({});
   const [date, setDate] = useState<Date>(new Date());
   const [isSaving, setIsSaving] = useState(false);
+  const [showJustificarFalta, setShowJustificarFalta] = useState<{ alunoId: string } | null>(null);
 
   useEffect(() => {
     const buscarAlunos = async () => {
@@ -158,6 +160,12 @@ const ChamadaPage: React.FC = () => {
                   onClick={() => handlePresenca(aluno.id, "atestado")}
                   title="Atestado"
                 ><FileText size={18}/></Button>
+                <Button
+                  variant="outline"
+                  className="border-yellow-400 text-yellow-700"
+                  onClick={() => setShowJustificarFalta({ alunoId: aluno.id })}
+                  title="Justificar Falta"
+                >Justificar Falta</Button>
               </div>
             </div>
           ))}
@@ -170,6 +178,13 @@ const ChamadaPage: React.FC = () => {
           <Save size={20}/> {isSaving ? "Salvando..." : "Salvar Chamada"}
         </Button>
       </div>
+      <Dialog open={!!showJustificarFalta} onOpenChange={() => setShowJustificarFalta(null)}>
+        <DialogContent>
+          {showJustificarFalta && (
+            <JustificarFaltaForm onClose={() => setShowJustificarFalta(null)} alunoId={showJustificarFalta.alunoId} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

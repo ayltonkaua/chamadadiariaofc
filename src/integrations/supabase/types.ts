@@ -128,6 +128,44 @@ export type Database = {
         }
         Relationships: []
       }
+      atestados: {
+        Row: {
+          id: string;
+          aluno_id: string;
+          data_inicio: string;
+          data_fim: string;
+          descricao: string;
+          status: 'pendente' | 'aprovado' | 'rejeitado';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          aluno_id: string;
+          data_inicio: string;
+          data_fim: string;
+          descricao: string;
+          status?: 'pendente' | 'aprovado' | 'rejeitado';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          aluno_id?: string;
+          data_inicio?: string;
+          data_fim?: string;
+          descricao?: string;
+          status?: 'pendente' | 'aprovado' | 'rejeitado';
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "atestados_aluno_id_fkey",
+            columns: ["aluno_id"],
+            isOneToOne: false,
+            referencedRelation: "alunos",
+            referencedColumns: ["id"]
+          }
+        ];
+      },
     }
     Views: {
       alunos_faltosos: {

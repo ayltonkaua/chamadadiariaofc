@@ -125,7 +125,7 @@ const GerenciarAlunosPage: React.FC = () => {
             <div className="text-center py-8 text-gray-500">Carregando alunos...</div>
           ) : alunos.length > 0 ? (
             <AlunosTable 
-              alunos={alunos}
+              alunos={[...alunos].sort((a, b) => a.nome.localeCompare(b.nome))}
               onEdit={handleEditar}
               onRemove={handleRemover}
             />

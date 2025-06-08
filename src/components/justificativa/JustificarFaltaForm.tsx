@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TablesInsert } from "@/integrations/supabase/types";
 
 interface Aluno {
   id: string;
@@ -24,15 +25,16 @@ interface Aluno {
 
 interface JustificarFaltaFormProps {
   onClose: () => void;
+  alunoId?: string;
 }
 
-const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose }) => {
+const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, alunoId }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [formData, setFormData] = useState({
-    aluno_id: "",
+    aluno_id: alunoId || "",
     data_inicio: "",
     data_fim: "",
     descricao: "",
@@ -61,18 +63,25 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose }) =>
     carregarAlunos();
   }, [toast]);
 
+  useEffect(() => {
+    if (alunoId) {
+      setFormData((prev) => ({ ...prev, aluno_id: alunoId }));
+    }
+  }, [alunoId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { error } = await supabase.from("atestados").insert({
+      const insertData: TablesInsert<'atestados'> = {
         aluno_id: formData.aluno_id,
         data_inicio: formData.data_inicio,
         data_fim: formData.data_fim,
         descricao: formData.descricao,
         status: "pendente",
-      });
+      };
+      const { error } = await supabase.from("atestados").insert(insertData);
 
       if (error) throw error;
 
