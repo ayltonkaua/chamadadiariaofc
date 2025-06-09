@@ -25,16 +25,8 @@ import AlunoPage from "@/pages/AlunoPage";
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
-import AppSidebar from "@/components/ui/AppSidebar";
 
 const queryClient = new QueryClient();
-
-// Adiciona declaração para evitar erro de linter
-declare global {
-  interface Window {
-    OneSignalDeferred?: any[];
-  }
-}
 
 const App = () => {
   useEffect(() => {
@@ -56,7 +48,7 @@ const App = () => {
         const pendentes = await getChamadasPendentes();
         for (const chamadas of pendentes) {
           try {
-            await supabase.from('presencas').insert(chamadas.presencas);
+            await supabase.from('presencas').insert(chamadas);
           } catch (e) {
             return; // Se falhar, pare a sincronização
           }
@@ -84,31 +76,28 @@ const App = () => {
           <TooltipProvider>
             <Toaster />
             <Sonner />
-            <AppSidebar />
-            <div className="min-h-screen">
-              <Router>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
-                  <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
-                  <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
-                  <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-                  <Route path="/atestados" element={<AtestadosPage />} />
-                  <Route path="/alertas" element={<AlertasPage />} />
-                  <Route path="/student-query" element={<StudentQueryPage />} />
-                  <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
-                  <Route path="/notificacoes" element={<NotificacoesPage />} />
-                  <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
-                  <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
-                  <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
-                  <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Router>
-            </div>
+            <Router>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
+                <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
+                <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
+                <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+                <Route path="/atestados" element={<AtestadosPage />} />
+                <Route path="/alertas" element={<AlertasPage />} />
+                <Route path="/student-query" element={<StudentQueryPage />} />
+                <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
+                <Route path="/notificacoes" element={<NotificacoesPage />} />
+                <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
+                <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
+                <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
+                <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Router>
           </TooltipProvider>
         </AttendanceProvider>
       </AuthProvider>
