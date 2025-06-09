@@ -2,9 +2,9 @@ import { set, get } from 'idb-keyval';
 
 const CHAMADA_KEY = 'chamadas_pendentes';
 
-export async function salvarChamadaOffline(chamada) {
+export async function salvarChamadaOffline(presencasArray) {
   const pendentes = (await get(CHAMADA_KEY)) || [];
-  pendentes.push({ ...chamada, timestamp: Date.now() });
+  pendentes.push({ presencas: presencasArray, timestamp: Date.now() });
   await set(CHAMADA_KEY, pendentes);
 }
 

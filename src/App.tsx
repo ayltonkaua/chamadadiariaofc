@@ -28,6 +28,13 @@ import { toast } from "@/components/ui/use-toast";
 
 const queryClient = new QueryClient();
 
+// Adiciona declaração para evitar erro de linter
+declare global {
+  interface Window {
+    OneSignalDeferred?: any[];
+  }
+}
+
 const App = () => {
   useEffect(() => {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -48,7 +55,7 @@ const App = () => {
         const pendentes = await getChamadasPendentes();
         for (const chamadas of pendentes) {
           try {
-            await supabase.from('presencas').insert(chamadas);
+            await supabase.from('presencas').insert(chamadas.presencas);
           } catch (e) {
             return; // Se falhar, pare a sincronização
           }
