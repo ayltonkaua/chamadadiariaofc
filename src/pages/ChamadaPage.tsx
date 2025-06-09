@@ -43,22 +43,22 @@ const ChamadaPage: React.FC = () => {
   };
 
   const handleSalvar = async () => {
-    if (!turmaId) {
+    setTentouSalvar(true);
+    // Validação: todos os alunos devem ter status definido
+    const alunosSemRegistro = alunos.filter(aluno => !presencas[aluno.id]);
+    if (alunosSemRegistro.length > 0) {
       toast({
         title: "Erro",
-        description: "Turma não encontrada",
+        description: "Todos os alunos devem ter presença, falta ou atestado registrados.",
         variant: "destructive",
       });
       return;
     }
-
-    setTentouSalvar(true);
-
+    setIsSaving(true);
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
       // Preparar os registros de presença para inserção
       const presencasParaInserir = Object.entries(presencas)
-        .filter(([, status]) => status !== null && status !== undefined)
         .map(([alunoId, status]) => {
           let presente = false;
           let falta_justificada = false;
@@ -76,17 +76,16 @@ const ChamadaPage: React.FC = () => {
             data_chamada: dataChamada,
           };
         });
-
       if (presencasParaInserir.length > 0) {
         const { error } = await supabase.from("presencas").insert(presencasParaInserir);
         if (error) throw error;
       }
-
       toast({
         title: "Chamada salva",
         description: "A chamada foi registrada com sucesso.",
       });
       setPresencas({});
+      setTentouSalvar(false);
     } catch (error) {
       console.error("Erro ao salvar chamada:", error);
       toast({
@@ -172,7 +171,7 @@ const ChamadaPage: React.FC = () => {
         <Button 
           className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center" 
           onClick={handleSalvar}
-          disabled={isSaving}
+          disabled={isSaving || alunos.some(aluno => !presencas[aluno.id])}
         >
           {isSaving ? (
             <>
