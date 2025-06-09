@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +13,7 @@ interface StudentAttendanceResult {
   className: string;
   totalClasses: number;
   absences: number;
+  justifiedAbsences: number;
   percentagePresent: number;
 }
 
@@ -74,12 +74,20 @@ const StudentQuery: React.FC = () => {
       const total = totalChamadas || 0;
       const frequencia = total > 0 ? Math.round(((total - faltas) / total) * 100) : 100;
 
+      // Buscar faltas justificadas do aluno
+      const { count: totalFaltasJustificadas } = await supabase
+        .from("justificativa_faltas")
+        .select("id", { count: "exact", head: true })
+        .eq("aluno_id", aluno.id);
+      const faltasJustificadas = totalFaltasJustificadas || 0;
+
       setResult({
         name: aluno.nome,
         enrollment: aluno.matricula,
         className: (aluno.turmas as { nome: string }).nome,
         totalClasses: total,
         absences: faltas,
+        justifiedAbsences: faltasJustificadas,
         percentagePresent: frequencia
       });
       
@@ -180,6 +188,10 @@ const StudentQuery: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-500">Faltas:</span>
                     <span className="font-medium text-red-600">{result.absences}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Faltas Justificadas:</span>
+                    <span className="font-medium text-blue-600">{result.justifiedAbsences}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Frequência:</span>
