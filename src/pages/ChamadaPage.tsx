@@ -58,43 +58,31 @@ const ChamadaPage: React.FC = () => {
       // Preparar os registros de presença para inserção
       const presencasParaInserir = Object.entries(presencas).map(([alunoId, status]) => {
         let presente = false;
-        let justificativa = null;
+        let falta_justificada = false;
         if (status === "presente") presente = true;
         else if (status === "falta") presente = false;
-        else if (status === "atestado") justificativa = "Atestado";
+        else if (status === "atestado") {
+          presente = false;
+          falta_justificada = true;
+        }
         return {
           aluno_id: alunoId,
           turma_id: turmaId,
           presente,
+          falta_justificada,
           data_chamada: dataChamada,
-          justificativa,
         };
       });
 
       // Inserir presenças e justificativas
       for (const presenca of presencasParaInserir) {
-        if (presenca.justificativa) {
-          // Salva como falta justificada
-          await supabase.from("justificativa_faltas").insert({
-            aluno_id: presenca.aluno_id,
-            data: presenca.data_chamada,
-            motivo: presenca.justificativa,
-          });
-          // Salva como falta (presente: false)
-          await supabase.from("presencas").insert({
-            aluno_id: presenca.aluno_id,
-            turma_id: presenca.turma_id,
-            presente: false,
-            data_chamada: presenca.data_chamada,
-          });
-        } else {
-          await supabase.from("presencas").insert({
-            aluno_id: presenca.aluno_id,
-            turma_id: presenca.turma_id,
-            presente: presenca.presente,
-            data_chamada: presenca.data_chamada,
-          });
-        }
+        await supabase.from("presencas").insert({
+          aluno_id: presenca.aluno_id,
+          turma_id: presenca.turma_id,
+          presente: presenca.presente,
+          falta_justificada: presenca.falta_justificada,
+          data_chamada: presenca.data_chamada,
+        });
       }
 
       toast({
@@ -171,12 +159,6 @@ const ChamadaPage: React.FC = () => {
                   onClick={() => handlePresenca(aluno.id, "atestado")}
                   title="Atestado"
                 ><FileText size={18}/></Button>
-                <Button
-                  variant="outline"
-                  className="border-yellow-400 text-yellow-700"
-                  onClick={() => setShowJustificarFalta({ alunoId: aluno.id })}
-                  title="Justificar Falta"
-                >Justificar Falta</Button>
               </div>
             </div>
           ))}
