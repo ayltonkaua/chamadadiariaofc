@@ -22,6 +22,9 @@ import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
 import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
+import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 const queryClient = new QueryClient();
 
@@ -39,8 +42,35 @@ const App = () => {
     });
   }, []);
 
+  useEffect(() => {
+    const syncChamadas = async () => {
+      if (navigator.onLine) {
+        const pendentes = await getChamadasPendentes();
+        for (const chamadas of pendentes) {
+          try {
+            await supabase.from('presencas').insert(chamadas);
+          } catch (e) {
+            return; // Se falhar, pare a sincronização
+          }
+        }
+        await limparChamadasPendentes();
+        if (pendentes.length > 0) {
+          toast({ title: "Chamadas sincronizadas", description: "Chamadas offline foram enviadas com sucesso." });
+        }
+      }
+    };
+    window.addEventListener('online', syncChamadas);
+    syncChamadas();
+    return () => window.removeEventListener('online', syncChamadas);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
+      {!navigator.onLine && (
+        <div className="bg-yellow-400 text-center py-2 text-sm font-bold z-50">
+          Você está offline. As chamadas serão salvas localmente.
+        </div>
+      )}
       <AuthProvider>
         <AttendanceProvider>
           <TooltipProvider>

@@ -66,19 +66,19 @@ const Dashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-gradient-to-r from-purple-500 to-blue-500 shadow-md">
-        <div className="max-w-7xl mx-auto p-4 flex flex-row justify-between items-center">
-          <h1 className="text-white text-xl font-bold">
+        <div className="max-w-7xl mx-auto p-2 sm:p-4 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
+          <h1 className="text-white text-lg sm:text-xl font-bold text-center w-full sm:w-auto">
             Chamada Diária
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
             <DashboardMenu />
             <Button
               onClick={handleLogout}
               variant="ghost"
-              className="flex items-center gap-2 text-white hover:bg-white/10 py-2 px-4 rounded-lg transition-colors"
+              className="flex items-center gap-2 text-white hover:bg-white/10 py-2 px-4 rounded-lg transition-colors w-full sm:w-auto"
               title="Sair"
             >
-              <LogOut size={22} /> Sair
+              <LogOut size={22} /> <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>

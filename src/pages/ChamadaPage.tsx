@@ -8,6 +8,7 @@ import { Check, X, FileText, Save, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { salvarChamadaOffline } from '@/lib/offlineChamada';
 
 interface Aluno {
   id: string;
@@ -57,7 +58,6 @@ const ChamadaPage: React.FC = () => {
     setIsSaving(true);
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
-      // Preparar os registros de presença para inserção
       const presencasParaInserir = Object.entries(presencas)
         .map(([alunoId, status]) => {
           let presente = false;
@@ -76,6 +76,17 @@ const ChamadaPage: React.FC = () => {
             data_chamada: dataChamada,
           };
         });
+      if (!navigator.onLine) {
+        await salvarChamadaOffline(presencasParaInserir);
+        toast({
+          title: "Sem internet",
+          description: "Chamada salva localmente. Será enviada quando a conexão voltar.",
+        });
+        setPresencas({});
+        setTentouSalvar(false);
+        setIsSaving(false);
+        return;
+      }
       if (presencasParaInserir.length > 0) {
         const { error } = await supabase.from("presencas").insert(presencasParaInserir);
         if (error) throw error;

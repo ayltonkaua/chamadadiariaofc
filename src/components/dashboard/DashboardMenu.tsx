@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Settings, School, Lock, FileText, AlertTriangle, Clock } from "lucide-react";
+import { Settings, School, Lock, FileText, AlertTriangle, Clock, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,14 @@ export const DashboardMenu: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   const handleTrocarSenha = async () => {
     try {
@@ -88,6 +96,17 @@ export const DashboardMenu: React.FC = () => {
             <Clock className="h-4 w-4 mr-2" />
             Registro de Atrasos
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" onClick={toggleTheme}>
+          {theme === "dark" ? (
+            <>
+              <Sun className="h-4 w-4 mr-2" /> Modo Claro
+            </>
+          ) : (
+            <>
+              <Moon className="h-4 w-4 mr-2" /> Modo Escuro
+            </>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
