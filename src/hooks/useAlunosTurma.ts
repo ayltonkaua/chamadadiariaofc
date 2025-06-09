@@ -16,7 +16,7 @@ interface TurmaInfo {
   numero_sala: string;
 }
 
-export const useAlunosTurma = (turmaId: string | undefined) => {
+export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome", "matricula", "turma_id"]) {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [turmaInfo, setTurmaInfo] = useState<TurmaInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,8 +41,9 @@ export const useAlunosTurma = (turmaId: string | undefined) => {
       // Get students
       const { data: alunosData, error: alunosError } = await supabase
         .from("alunos")
-        .select("id, nome, matricula, turma_id")
-        .eq("turma_id", turmaId);
+        .select(campos.join(", "))
+        .eq("turma_id", turmaId)
+        .order("nome");
       
       if (alunosError) {
         throw alunosError;
@@ -101,4 +102,4 @@ export const useAlunosTurma = (turmaId: string | undefined) => {
     loading,
     refreshAlunos
   };
-};
+}

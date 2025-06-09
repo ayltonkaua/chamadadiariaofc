@@ -51,32 +51,47 @@ const ChamadaPage: React.FC = () => {
       return;
     }
 
+    // Validação: pelo menos um aluno deve ter status definido
+    const algumMarcado = Object.values(presencas).some(
+      (status) => status !== null && status !== undefined
+    );
+    if (!algumMarcado) {
+      toast({
+        title: "Erro",
+        description: "Marque pelo menos um status de presença para algum aluno.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
 
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
       // Preparar os registros de presença para inserção
-      const presencasParaInserir = Object.entries(presencas).map(([alunoId, status]) => {
-        let presente = false;
-        let falta_justificada = false;
-        if (status === "presente") presente = true;
-        else if (status === "falta") presente = false;
-        else if (status === "atestado") {
-          presente = false;
-          falta_justificada = true;
-        }
-        return {
-          aluno_id: alunoId,
-          turma_id: turmaId,
-          presente,
-          falta_justificada,
-          data_chamada: dataChamada,
-        };
-      });
+      const presencasParaInserir = Object.entries(presencas)
+        .filter(([, status]) => status !== null && status !== undefined)
+        .map(([alunoId, status]) => {
+          let presente = false;
+          let falta_justificada = false;
+          if (status === "presente") presente = true;
+          else if (status === "falta") presente = false;
+          else if (status === "atestado") {
+            presente = false;
+            falta_justificada = true;
+          }
+          return {
+            aluno_id: alunoId,
+            turma_id: turmaId,
+            presente,
+            falta_justificada,
+            data_chamada: dataChamada,
+          };
+        });
 
-      // Inserir presenças e justificativas
       if (presencasParaInserir.length > 0) {
-        await supabase.from("presencas").insert(presencasParaInserir);
+        const { error } = await supabase.from("presencas").insert(presencasParaInserir);
+        if (error) throw error;
       }
 
       toast({

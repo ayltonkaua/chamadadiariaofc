@@ -36,7 +36,7 @@ const GerenciarAlunosPage: React.FC = () => {
     turmaInfo, 
     loading,
     refreshAlunos
-  } = useAlunosTurma(turmaId);
+  } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id"]);
 
   const navigate = useNavigate();
 
@@ -66,15 +66,12 @@ const GerenciarAlunosPage: React.FC = () => {
           .from("presencas")
           .delete()
           .eq("aluno_id", alunoParaRemover.id);
-          
         await supabase
           .from("alunos")
           .delete()
           .eq("id", alunoParaRemover.id);
-
         setAlunos((prev) => prev.filter((a) => a.id !== alunoParaRemover.id));
         setAlunoParaRemover(null);
-        
         toast({
           title: "Aluno removido",
           description: `O aluno ${alunoParaRemover.nome} foi removido com sucesso.`,

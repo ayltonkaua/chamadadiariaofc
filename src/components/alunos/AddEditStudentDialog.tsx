@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Dialog,
@@ -56,16 +55,14 @@ export default function AddEditStudentDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!nome.trim() || !matricula.trim()) {
       toast({
-        title: "Campos incompletos",
-        description: "Por favor, preencha todos os campos.",
+        title: "Erro",
+        description: "Nome e matrícula são obrigatórios.",
         variant: "destructive",
       });
       return;
     }
-
     setIsLoading(true);
 
     try {
