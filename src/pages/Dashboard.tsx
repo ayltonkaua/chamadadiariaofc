@@ -8,7 +8,6 @@ import FrequenciaGeralChart from "@/components/dashboard/FrequenciaGeralChart";
 import ComparativoTurmasChart from "@/components/dashboard/ComparativoTurmasChart";
 import EvolucaoAlunoChart from "@/components/dashboard/EvolucaoAlunoChart";
 import { InfoCards } from "@/components/dashboard/InfoCards";
-import { DashboardMenu } from "@/components/dashboard/DashboardMenu";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard: React.FC = () => {
@@ -71,7 +70,6 @@ const Dashboard: React.FC = () => {
             Chamada Diária
           </h1>
           <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
-            <DashboardMenu />
             <Button
               onClick={handleLogout}
               variant="ghost"
