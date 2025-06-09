@@ -15,6 +15,9 @@ interface StudentAttendanceResult {
   absences: number;
   justifiedAbsences: number;
   justifiedReasons: string[];
+  justifiedDates: string[];
+  absenceDates: string[];
+  presenceDates: string[];
   percentagePresent: number;
 }
 
@@ -78,10 +81,20 @@ const StudentQuery: React.FC = () => {
       // Buscar faltas justificadas do aluno
       const { data: justificadas, count: totalFaltasJustificadas } = await supabase
         .from("justificativa_faltas")
-        .select("motivo", { count: "exact" })
+        .select("motivo, data", { count: "exact" })
         .eq("aluno_id", aluno.id);
       const faltasJustificadas = totalFaltasJustificadas || 0;
       const motivos = justificadas?.map(j => j.motivo) || [];
+      const datasFaltasJustificadas = justificadas?.map(j => j.data) || [];
+
+      // Buscar todas as presenças do aluno
+      const { data: presencasData } = await supabase
+        .from("presencas")
+        .select("data_chamada, presente")
+        .eq("aluno_id", aluno.id)
+        .order("data_chamada", { ascending: true });
+      const presenceDates = presencasData?.filter(p => p.presente).map(p => p.data_chamada) || [];
+      const absenceDates = presencasData?.filter(p => !p.presente).map(p => p.data_chamada) || [];
 
       setResult({
         name: aluno.nome,
@@ -91,6 +104,9 @@ const StudentQuery: React.FC = () => {
         absences: faltas,
         justifiedAbsences: faltasJustificadas,
         justifiedReasons: motivos,
+        justifiedDates: datasFaltasJustificadas,
+        absenceDates: absenceDates,
+        presenceDates: presenceDates,
         percentagePresent: frequencia
       });
       
@@ -212,6 +228,32 @@ const StudentQuery: React.FC = () => {
                       {result.percentagePresent}%
                     </span>
                   </div>
+                </div>
+              </div>
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <span className="font-semibold text-purple-700 block mb-1">Dias de Presença</span>
+                  <ul className="list-disc list-inside text-sm text-green-700">
+                    {result.presenceDates.length > 0 ? result.presenceDates.map((date, idx) => (
+                      <li key={idx}>{date}</li>
+                    )) : <li>Nenhum registro</li>}
+                  </ul>
+                </div>
+                <div>
+                  <span className="font-semibold text-red-700 block mb-1">Dias de Falta</span>
+                  <ul className="list-disc list-inside text-sm text-red-700">
+                    {result.absenceDates.length > 0 ? result.absenceDates.map((date, idx) => (
+                      <li key={idx}>{date}</li>
+                    )) : <li>Nenhum registro</li>}
+                  </ul>
+                </div>
+                <div>
+                  <span className="font-semibold text-blue-700 block mb-1">Dias de Falta Justificada</span>
+                  <ul className="list-disc list-inside text-sm text-blue-700">
+                    {result.justifiedDates.length > 0 ? result.justifiedDates.map((date, idx) => (
+                      <li key={idx}>{date}</li>
+                    )) : <li>Nenhum registro</li>}
+                  </ul>
                 </div>
               </div>
             </CardContent>
