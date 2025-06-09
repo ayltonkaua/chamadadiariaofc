@@ -20,10 +20,11 @@ type Presenca = "presente" | "falta" | "atestado" | null;
 const ChamadaPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [presencas, setPresencas] = useState<Record<string, Presenca>>({});
+  const [presencas, setPresencas] = useState<Record<string, Presenca | null>>({});
   const [date, setDate] = useState<Date>(new Date());
   const [isSaving, setIsSaving] = useState(false);
   const [showJustificarFalta, setShowJustificarFalta] = useState<{ alunoId: string } | null>(null);
+  const [tentouSalvar, setTentouSalvar] = useState(false);
 
   useEffect(() => {
     const buscarAlunos = async () => {
@@ -51,20 +52,7 @@ const ChamadaPage: React.FC = () => {
       return;
     }
 
-    // Validação: pelo menos um aluno deve ter status definido
-    const algumMarcado = Object.values(presencas).some(
-      (status) => status !== null && status !== undefined
-    );
-    if (!algumMarcado) {
-      toast({
-        title: "Erro",
-        description: "Marque pelo menos um status de presença para algum aluno.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSaving(true);
+    setTentouSalvar(true);
 
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
@@ -143,34 +131,43 @@ const ChamadaPage: React.FC = () => {
           <h3 className="font-semibold text-gray-700">Alunos</h3>
         </div>
         <div className="flex flex-col gap-2">
-          {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => (
-            <div key={aluno.id} className="flex items-center justify-between border rounded-md p-2 gap-2 bg-gray-50">
-              <div>
-                <span className="font-medium">{aluno.nome}</span>{" "}
-                <span className="text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
+          {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
+            const semRegistro = tentouSalvar && !presencas[aluno.id];
+            return (
+              <div
+                key={aluno.id}
+                className={`flex items-center justify-between border rounded-md p-2 gap-2 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
+              >
+                <div>
+                  <span className="font-medium">{aluno.nome}</span>{" "}
+                  <span className="text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={presencas[aluno.id] === "presente" ? "default" : "outline"}
+                    className={presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}
+                    onClick={() => handlePresenca(aluno.id, "presente")}
+                    title="Presente"
+                  ><Check size={18}/></Button>
+                  <Button
+                    variant={presencas[aluno.id] === "falta" ? "default" : "outline"}
+                    className={presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}
+                    onClick={() => handlePresenca(aluno.id, "falta")}
+                    title="Falta"
+                  ><X size={18}/></Button>
+                  <Button
+                    variant={presencas[aluno.id] === "atestado" ? "default" : "outline"}
+                    className={presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}
+                    onClick={() => handlePresenca(aluno.id, "atestado")}
+                    title="Atestado"
+                  ><FileText size={18}/></Button>
+                </div>
+                {semRegistro && (
+                  <span className="text-xs text-red-600 font-semibold ml-2">Obrigatório registrar presença</span>
+                )}
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant={presencas[aluno.id] === "presente" ? "default" : "outline"}
-                  className={presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}
-                  onClick={() => handlePresenca(aluno.id, "presente")}
-                  title="Presente"
-                ><Check size={18}/></Button>
-                <Button
-                  variant={presencas[aluno.id] === "falta" ? "default" : "outline"}
-                  className={presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}
-                  onClick={() => handlePresenca(aluno.id, "falta")}
-                  title="Falta"
-                ><X size={18}/></Button>
-                <Button
-                  variant={presencas[aluno.id] === "atestado" ? "default" : "outline"}
-                  className={presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}
-                  onClick={() => handlePresenca(aluno.id, "atestado")}
-                  title="Atestado"
-                ><FileText size={18}/></Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <Button 
           className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center" 
