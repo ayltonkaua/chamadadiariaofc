@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import TurmasCards from "@/components/TurmasCards";
 import { useAuth } from "@/contexts/AuthContext";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FrequenciaGeralChart from "@/components/dashboard/FrequenciaGeralChart";
@@ -10,7 +10,6 @@ import EvolucaoAlunoChart from "@/components/dashboard/EvolucaoAlunoChart";
 import { InfoCards } from "@/components/dashboard/InfoCards";
 import { DashboardMenu } from "@/components/dashboard/DashboardMenu";
 import { useNavigate } from "react-router-dom";
-import { Drawer, DrawerTrigger, DrawerContent, DrawerHeader, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
 
 const Dashboard: React.FC = () => {
   const { logout, user } = useAuth();
@@ -68,43 +67,10 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-gray-100">
       <header className="bg-gradient-to-r from-purple-500 to-blue-500 shadow-md">
         <div className="max-w-7xl mx-auto p-2 sm:p-4 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
-          <div className="flex items-center w-full sm:w-auto justify-between">
-            {/* Botão de menu lateral só no mobile */}
-            <div className="sm:hidden flex items-center">
-              <Drawer>
-                <DrawerTrigger asChild>
-                  <Button variant="ghost" className="text-white mr-2">
-                    <Menu size={24} />
-                  </Button>
-                </DrawerTrigger>
-                <DrawerContent>
-                  <DrawerHeader>
-                    <h2 className="text-lg font-bold">Menu</h2>
-                  </DrawerHeader>
-                  <div className="flex flex-col gap-2 px-4 pb-4">
-                    <DashboardMenu />
-                    <Button
-                      onClick={handleLogout}
-                      variant="destructive"
-                      className="flex items-center gap-2 w-full"
-                    >
-                      <LogOut size={20} /> Sair
-                    </Button>
-                  </div>
-                  <DrawerFooter>
-                    <DrawerClose asChild>
-                      <Button variant="outline" className="w-full">Fechar</Button>
-                    </DrawerClose>
-                  </DrawerFooter>
-                </DrawerContent>
-              </Drawer>
-            </div>
-            <h1 className="text-white text-lg sm:text-xl font-bold text-center w-full sm:w-auto">
-              Chamada Diária
-            </h1>
-          </div>
-          {/* Menu e sair só no desktop */}
-          <div className="hidden sm:flex flex-row items-center gap-4 w-full sm:w-auto justify-end">
+          <h1 className="text-white text-lg sm:text-xl font-bold text-center w-full sm:w-auto">
+            Chamada Diária
+          </h1>
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
             <DashboardMenu />
             <Button
               onClick={handleLogout}
