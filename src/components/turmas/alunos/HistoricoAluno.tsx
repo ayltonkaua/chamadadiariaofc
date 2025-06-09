@@ -14,6 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useNavigate } from "react-router-dom";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ArrowLeft } from "lucide-react";
 
 interface HistoricoAlunoProps {
   alunoId: string;
@@ -129,13 +131,15 @@ const HistoricoAluno = ({ alunoId, turmaId }: HistoricoAlunoProps) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end mb-2">
+      <div className="flex items-center mb-2">
         <button
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
-          onClick={() => navigate("/dashboard")}
+          className="mr-2 bg-transparent hover:bg-gray-200 rounded-full p-2"
+          onClick={() => navigate(`/turmas/${turmaId}/alunos`)}
+          title="Voltar para Gerenciar Alunos"
         >
-          Voltar ao Dashboard
+          <ArrowLeft className="w-5 h-5 text-purple-700" />
         </button>
+        <span className="font-bold text-lg text-purple-700">Histórico do Aluno</span>
       </div>
       <Card>
         <CardHeader>
@@ -162,64 +166,84 @@ const HistoricoAluno = ({ alunoId, turmaId }: HistoricoAlunoProps) => {
           </div>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico Detalhado</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Tabs defaultValue="presencas" className="mt-4">
+        <TabsList className="mb-4">
+          <TabsTrigger value="presencas">Presenças</TabsTrigger>
+          <TabsTrigger value="faltas">Faltas</TabsTrigger>
+          <TabsTrigger value="justificadas">Faltas Justificadas</TabsTrigger>
+          <TabsTrigger value="atestados">Atestados</TabsTrigger>
+        </TabsList>
+        <TabsContent value="presencas">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Data</TableHead>
-                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {presencas.filter(p => p.presente).map(p => (
+                <TableRow key={p.data_chamada}>
+                  <TableCell>{format(new Date(p.data_chamada), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TabsContent>
+        <TabsContent value="faltas">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {presencas.filter(p => !p.presente && !p.justificativa && !p.atestado_url).map(p => (
+                <TableRow key={p.data_chamada}>
+                  <TableCell>{format(new Date(p.data_chamada), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TabsContent>
+        <TabsContent value="justificadas">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
                 <TableHead>Justificativa</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {presencas.filter(p => !p.presente && p.justificativa && !p.atestado_url).map(p => (
+                <TableRow key={p.data_chamada}>
+                  <TableCell>{format(new Date(p.data_chamada), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                  <TableCell>{p.justificativa}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TabsContent>
+        <TabsContent value="atestados">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
                 <TableHead>Atestado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {presencas.map((presenca) => (
-                <TableRow key={presenca.data_chamada}>
+              {presencas.filter(p => p.atestado_url).map(p => (
+                <TableRow key={p.data_chamada}>
+                  <TableCell>{format(new Date(p.data_chamada), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
                   <TableCell>
-                    {format(new Date(presenca.data_chamada), "dd/MM/yyyy", {
-                      locale: ptBR,
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    {presenca.presente ? (
-                      <div className="flex items-center text-green-600">
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Presente
-                      </div>
-                    ) : (
-                      <div className="flex items-center text-red-600">
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Ausente
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>{presenca.justificativa || "-"}</TableCell>
-                  <TableCell>
-                    {presenca.atestado_url ? (
-                      <a
-                        href={presenca.atestado_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center text-blue-600 hover:underline"
-                      >
-                        <FileText className="w-4 h-4 mr-2" />
-                        Ver atestado
-                      </a>
-                    ) : (
-                      "-"
-                    )}
+                    <a href={p.atestado_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Ver atestado</a>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

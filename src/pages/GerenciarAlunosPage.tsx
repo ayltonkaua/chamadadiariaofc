@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +37,8 @@ const GerenciarAlunosPage: React.FC = () => {
     loading,
     refreshAlunos
   } = useAlunosTurma(turmaId);
+
+  const navigate = useNavigate();
 
   const handleEditar = (id: string) => {
     const aluno = alunos.find((a) => a.id === id);
@@ -93,7 +95,7 @@ const GerenciarAlunosPage: React.FC = () => {
   };
 
   const voltar = () => {
-    window.history.back();
+    navigate("/dashboard");
   };
 
   return (
