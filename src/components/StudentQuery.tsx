@@ -67,90 +67,43 @@ const StudentQuery: React.FC = () => {
         return;
       }
 
-      // Buscar todas as datas de chamada para a turma do aluno
-      const { data: datasChamada } = await supabase
-        .from("presencas")
-        .select("data_chamada")
-        .eq("turma_id", aluno.turma_id);
-        
-      // Obter datas únicas de chamada
-      const datasUnicas = new Set(datasChamada?.map(p => p.data_chamada) || []);
-      const totalChamadas = datasUnicas.size;
-
-      // Buscar faltas do aluno
-      const { count: totalFaltas } = await supabase
-        .from("presencas")
-        .select("id", { count: "exact", head: true })
-        .eq("aluno_id", aluno.id)
-        .eq("presente", false);
-
-      const faltas = totalFaltas || 0;
-      const total = totalChamadas || 0;
-      const frequencia = total > 0 ? Math.round(((total - faltas) / total) * 100) : 100;
-
       // Buscar todas as presenças do aluno
       const { data: presencasData } = await supabase
         .from("presencas")
-        .select("data_chamada, presente")
+        .select("data_chamada, presente, falta_justificada")
         .eq("aluno_id", aluno.id)
         .order("data_chamada", { ascending: true });
-      const presenceDates = presencasData?.filter(p => p.presente).map(p => p.data_chamada) || [];
-      const absenceDates = presencasData?.filter(p => !p.presente).map(p => p.data_chamada) || [];
 
-      // Buscar faltas justificadas (datas e motivos)
-      const { data: justificadas, count: totalFaltasJustificadas } = await supabase
-        .from("justificativas_faltas")
-        .select("motivo, data", { count: "exact" })
-        .eq("aluno_id", aluno.id);
-      const faltasJustificadas = totalFaltasJustificadas || 0;
-      const motivos = justificadas?.map(j => j.motivo) || [];
-      const datasFaltasJustificadas = justificadas?.map(j => j.data) || [];
+      const totalChamadas = presencasData?.length || 0;
+      const presencas = presencasData?.filter(p => p.presente).length || 0;
+      const faltasJustificadas = presencasData?.filter(p => !p.presente && p.falta_justificada).length || 0;
+      const faltas = presencasData?.filter(p => !p.presente && !p.falta_justificada).length || 0;
 
       // Montar lista detalhada (presenças, faltas, faltas justificadas)
-      const detalhado: StudentAttendanceResult["detailed"] = [];
-      if (presencasData) {
-        for (const p of presencasData) {
-          const isJustificada = datasFaltasJustificadas.includes(p.data_chamada);
-          detalhado.push({
-            data: p.data_chamada,
-            status: p.presente
-              ? "Presente"
-              : isJustificada
-              ? "Falta Justificada"
-              : "Falta",
-            motivo: isJustificada
-              ? (justificadas?.find(j => j.data === p.data_chamada)?.motivo || "-")
-              : undefined,
-          });
-        }
-      }
-      // Adicionar faltas justificadas que não estão em presenças (caso existam)
-      if (justificadas) {
-        for (const j of justificadas) {
-          if (!presencasData?.some(p => p.data_chamada === j.data)) {
-            detalhado.push({
-              data: j.data,
-              status: "Falta Justificada",
-              motivo: j.motivo,
-            });
-          }
-        }
-      }
+      const detalhado: StudentAttendanceResult["detailed"] = presencasData?.map(p => ({
+        data: p.data_chamada,
+        status: p.presente
+          ? "Presente"
+          : p.falta_justificada
+          ? "Falta Justificada"
+          : "Falta",
+        motivo: p.falta_justificada ? "Justificada pelo sistema" : undefined,
+      })) || [];
       detalhado.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
       setResult({
         name: aluno.nome,
         enrollment: aluno.matricula,
         className: (aluno.turmas as { nome: string }).nome,
-        totalClasses: total,
+        totalClasses: totalChamadas,
         absences: faltas,
         justifiedAbsences: faltasJustificadas,
-        justifiedReasons: motivos,
-        justifiedDates: datasFaltasJustificadas,
-        absenceDates: absenceDates,
-        presenceDates: presenceDates,
+        justifiedReasons: [],
+        justifiedDates: presencasData?.filter(p => !p.presente && p.falta_justificada).map(p => p.data_chamada) || [],
+        absenceDates: presencasData?.filter(p => !p.presente && !p.falta_justificada).map(p => p.data_chamada) || [],
+        presenceDates: presencasData?.filter(p => p.presente).map(p => p.data_chamada) || [],
         detailed: detalhado,
-        percentagePresent: frequencia
+        percentagePresent: totalChamadas > 0 ? Math.round((presencas / totalChamadas) * 100) : 100
       });
       
     } catch (err) {
