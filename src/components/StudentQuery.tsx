@@ -14,6 +14,7 @@ interface StudentAttendanceResult {
   totalClasses: number;
   absences: number;
   justifiedAbsences: number;
+  justifiedReasons: string[];
   percentagePresent: number;
 }
 
@@ -75,11 +76,12 @@ const StudentQuery: React.FC = () => {
       const frequencia = total > 0 ? Math.round(((total - faltas) / total) * 100) : 100;
 
       // Buscar faltas justificadas do aluno
-      const { count: totalFaltasJustificadas } = await supabase
+      const { data: justificadas, count: totalFaltasJustificadas } = await supabase
         .from("justificativa_faltas")
-        .select("id", { count: "exact", head: true })
+        .select("motivo", { count: "exact" })
         .eq("aluno_id", aluno.id);
       const faltasJustificadas = totalFaltasJustificadas || 0;
+      const motivos = justificadas?.map(j => j.motivo) || [];
 
       setResult({
         name: aluno.nome,
@@ -88,6 +90,7 @@ const StudentQuery: React.FC = () => {
         totalClasses: total,
         absences: faltas,
         justifiedAbsences: faltasJustificadas,
+        justifiedReasons: motivos,
         percentagePresent: frequencia
       });
       
@@ -193,6 +196,16 @@ const StudentQuery: React.FC = () => {
                     <span className="text-gray-500">Faltas Justificadas:</span>
                     <span className="font-medium text-blue-600">{result.justifiedAbsences}</span>
                   </div>
+                  {result.justifiedAbsences > 0 && (
+                    <div className="mt-2">
+                      <span className="text-gray-500 block mb-1">Motivos das Faltas Justificadas:</span>
+                      <ul className="list-disc list-inside text-sm text-gray-700">
+                        {result.justifiedReasons.map((motivo, idx) => (
+                          <li key={idx}>{motivo}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Frequência:</span>
                     <span className="font-medium text-green-600">
