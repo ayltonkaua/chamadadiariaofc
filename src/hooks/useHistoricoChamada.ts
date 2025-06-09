@@ -11,6 +11,7 @@ interface ChamadaHistorico {
   presencas: Array<{
     aluno_id: string;
     presente: boolean;
+    falta_justificada?: boolean;
   }>;
 }
 
@@ -119,7 +120,7 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
     }
   };
 
-  const editarChamada = async (data: string, novasPresencas: Array<{ aluno_id: string; presente: boolean }>) => {
+  const editarChamada = async (data: string, novasPresencas: Array<{ aluno_id: string; presente: boolean; falta_justificada?: boolean }>) => {
     try {
       // Primeiro, deletar todas as presenças da data
       const { error: deleteError } = await supabase
@@ -135,6 +136,7 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
         aluno_id: presenca.aluno_id,
         turma_id: turmaId,
         presente: presenca.presente,
+        falta_justificada: presenca.falta_justificada || false,
         data_chamada: data
       }));
 

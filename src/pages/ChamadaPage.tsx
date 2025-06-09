@@ -75,14 +75,8 @@ const ChamadaPage: React.FC = () => {
       });
 
       // Inserir presenças e justificativas
-      for (const presenca of presencasParaInserir) {
-        await supabase.from("presencas").insert({
-          aluno_id: presenca.aluno_id,
-          turma_id: presenca.turma_id,
-          presente: presenca.presente,
-          falta_justificada: presenca.falta_justificada,
-          data_chamada: presenca.data_chamada,
-        });
+      if (presencasParaInserir.length > 0) {
+        await supabase.from("presencas").insert(presencasParaInserir);
       }
 
       toast({

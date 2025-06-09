@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Table,
@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Save, Check, X } from "lucide-react";
+import { Pencil, Trash2, Save, Check, X, FileText } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +34,7 @@ interface ChamadaHistorico {
   presencas: Array<{
     aluno_id: string;
     presente: boolean;
+    falta_justificada?: boolean;
   }>;
 }
 
@@ -51,7 +52,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
   const { turmaId } = useParams<{ turmaId: string }>();
   const [chamadaParaEditar, setChamadaParaEditar] = useState<ChamadaHistorico | null>(null);
   const [chamadaParaExcluir, setChamadaParaExcluir] = useState<ChamadaHistorico | null>(null);
-  const [presencasEditadas, setPresencasEditadas] = useState<Array<{ aluno_id: string; presente: boolean }>>([]);
+  const [presencasEditadas, setPresencasEditadas] = useState<Array<{ aluno_id: string; presente: boolean; falta_justificada?: boolean }>>([]);
   const [salvando, setSalvando] = useState(false);
   const { alunos, loading: loadingAlunos } = useAlunosTurma(turmaId);
   const isMobile = useIsMobile();
@@ -62,7 +63,8 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
         const presencaExistente = chamadaParaEditar.presencas.find(p => p.aluno_id === aluno.id);
         return {
           aluno_id: aluno.id,
-          presente: presencaExistente ? presencaExistente.presente : false
+          presente: presencaExistente ? presencaExistente.presente : false,
+          falta_justificada: presencaExistente ? presencaExistente.falta_justificada || false : false
         };
       });
       setPresencasEditadas(presencasIniciais);
@@ -75,7 +77,15 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
 
   const handleEditarPresenca = (alunoId: string, presente: boolean) => {
     setPresencasEditadas(prev => 
-      prev.map(p => p.aluno_id === alunoId ? { ...p, presente } : p)
+      prev.map(p => p.aluno_id === alunoId ? { ...p, presente, falta_justificada: false } : p)
+    );
+  };
+
+  const handleJustificarFalta = (alunoId: string) => {
+    setPresencasEditadas(prev =>
+      prev.map(p =>
+        p.aluno_id === alunoId ? { ...p, presente: false, falta_justificada: !p.falta_justificada } : p
+      )
     );
   };
 
@@ -128,8 +138,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
         </TableHeader>
         <TableBody>
           {historico.map((chamada) => {
-            const dataLocal = new Date(chamada.data + 'T00:00:00');
-            const dataFormatada = format(dataLocal, "dd/MM/yyyy");
+            const dataFormatada = format(parseISO(chamada.data), "dd/MM/yyyy");
             const frequencia = chamada.total > 0
               ? Math.round((chamada.presentes / chamada.total) * 100)
               : 0;
@@ -216,13 +225,22 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
                         Presente
                       </Button>
                       <Button
-                        variant={!presenca?.presente ? "default" : "outline"}
+                        variant={!presenca?.presente && !presenca?.falta_justificada ? "default" : "outline"}
                         size="sm"
                         onClick={() => handleEditarPresenca(aluno.id, false)}
-                        className={!presenca?.presente ? "bg-red-600 hover:bg-red-700" : ""}
+                        className={!presenca?.presente && !presenca?.falta_justificada ? "bg-red-600 hover:bg-red-700" : ""}
                       >
                         <X className="h-4 w-4 mr-1" />
                         Falta
+                      </Button>
+                      <Button
+                        variant={presenca?.falta_justificada ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handleJustificarFalta(aluno.id)}
+                        className={presenca?.falta_justificada ? "bg-blue-600 hover:bg-blue-700" : ""}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Justificar
                       </Button>
                     </div>
                   </div>
