@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useNavigate } from "react-router-dom";
 
 interface HistoricoAlunoProps {
   alunoId: string;
@@ -35,6 +36,7 @@ interface ResumoFrequencia {
 
 const HistoricoAluno = ({ alunoId, turmaId }: HistoricoAlunoProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [presencas, setPresencas] = useState<Presenca[]>([]);
   const [resumo, setResumo] = useState<ResumoFrequencia>({
     total: 0,
@@ -127,6 +129,14 @@ const HistoricoAluno = ({ alunoId, turmaId }: HistoricoAlunoProps) => {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end mb-2">
+        <button
+          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
+          onClick={() => navigate("/dashboard")}
+        >
+          Voltar ao Dashboard
+        </button>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Resumo de Frequência</CardTitle>

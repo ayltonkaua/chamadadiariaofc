@@ -146,7 +146,7 @@ const ChamadaPage: React.FC = () => {
           <h3 className="font-semibold text-gray-700">Alunos</h3>
         </div>
         <div className="flex flex-col gap-2">
-          {alunos.map((aluno) => (
+          {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => (
             <div key={aluno.id} className="flex items-center justify-between border rounded-md p-2 gap-2 bg-gray-50">
               <div>
                 <span className="font-medium">{aluno.nome}</span>{" "}
