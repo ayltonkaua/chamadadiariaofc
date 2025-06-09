@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CheckCircle2, XCircle } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface StudentAttendanceResult {
   name: string;
@@ -18,6 +22,11 @@ interface StudentAttendanceResult {
   justifiedDates: string[];
   absenceDates: string[];
   presenceDates: string[];
+  detailed: Array<{
+    data: string;
+    status: "Presente" | "Falta" | "Falta Justificada";
+    motivo?: string;
+  }>;
   percentagePresent: number;
 }
 
@@ -78,15 +87,6 @@ const StudentQuery: React.FC = () => {
       const total = totalChamadas || 0;
       const frequencia = total > 0 ? Math.round(((total - faltas) / total) * 100) : 100;
 
-      // Buscar faltas justificadas do aluno
-      const { data: justificadas, count: totalFaltasJustificadas } = await supabase
-        .from("justificativa_faltas")
-        .select("motivo, data", { count: "exact" })
-        .eq("aluno_id", aluno.id);
-      const faltasJustificadas = totalFaltasJustificadas || 0;
-      const motivos = justificadas?.map(j => j.motivo) || [];
-      const datasFaltasJustificadas = justificadas?.map(j => j.data) || [];
-
       // Buscar todas as presenças do aluno
       const { data: presencasData } = await supabase
         .from("presencas")
@@ -95,6 +95,47 @@ const StudentQuery: React.FC = () => {
         .order("data_chamada", { ascending: true });
       const presenceDates = presencasData?.filter(p => p.presente).map(p => p.data_chamada) || [];
       const absenceDates = presencasData?.filter(p => !p.presente).map(p => p.data_chamada) || [];
+
+      // Buscar faltas justificadas (datas e motivos)
+      const { data: justificadas, count: totalFaltasJustificadas } = await supabase
+        .from("justificativa_faltas")
+        .select("motivo, data", { count: "exact" })
+        .eq("aluno_id", aluno.id);
+      const faltasJustificadas = totalFaltasJustificadas || 0;
+      const motivos = justificadas?.map(j => j.motivo) || [];
+      const datasFaltasJustificadas = justificadas?.map(j => j.data) || [];
+
+      // Montar lista detalhada (presenças, faltas, faltas justificadas)
+      const detalhado: StudentAttendanceResult["detailed"] = [];
+      if (presencasData) {
+        for (const p of presencasData) {
+          const isJustificada = datasFaltasJustificadas.includes(p.data_chamada);
+          detalhado.push({
+            data: p.data_chamada,
+            status: p.presente
+              ? "Presente"
+              : isJustificada
+              ? "Falta Justificada"
+              : "Falta",
+            motivo: isJustificada
+              ? (justificadas?.find(j => j.data === p.data_chamada)?.motivo || "-")
+              : undefined,
+          });
+        }
+      }
+      // Adicionar faltas justificadas que não estão em presenças (caso existam)
+      if (justificadas) {
+        for (const j of justificadas) {
+          if (!presencasData?.some(p => p.data_chamada === j.data)) {
+            detalhado.push({
+              data: j.data,
+              status: "Falta Justificada",
+              motivo: j.motivo,
+            });
+          }
+        }
+      }
+      detalhado.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
       setResult({
         name: aluno.nome,
@@ -107,6 +148,7 @@ const StudentQuery: React.FC = () => {
         justifiedDates: datasFaltasJustificadas,
         absenceDates: absenceDates,
         presenceDates: presenceDates,
+        detailed: detalhado,
         percentagePresent: frequencia
       });
       
@@ -191,69 +233,64 @@ const StudentQuery: React.FC = () => {
             <CardContent className="pt-6">
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="font-bold text-lg text-purple-700 mb-2">{result.name}</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Matrícula:</span>
-                    <span className="font-medium">{result.enrollment}</span>
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg">
+                    <span className="text-2xl font-bold">{result.totalClasses}</span>
+                    <span className="text-sm text-gray-500">Total de Aulas</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Turma:</span>
-                    <span className="font-medium">{result.className}</span>
+                  <div className="flex flex-col items-center p-4 bg-green-50 rounded-lg">
+                    <span className="text-2xl font-bold text-green-600">{result.presenceDates.length}</span>
+                    <span className="text-sm text-gray-500">Presenças</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Total de chamadas:</span>
-                    <span className="font-medium">{result.totalClasses}</span>
+                  <div className="flex flex-col items-center p-4 bg-red-50 rounded-lg">
+                    <span className="text-2xl font-bold text-red-600">{result.absenceDates.length}</span>
+                    <span className="text-sm text-gray-500">Faltas</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Faltas:</span>
-                    <span className="font-medium text-red-600">{result.absences}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Faltas Justificadas:</span>
-                    <span className="font-medium text-blue-600">{result.justifiedAbsences}</span>
-                  </div>
-                  {result.justifiedAbsences > 0 && (
-                    <div className="mt-2">
-                      <span className="text-gray-500 block mb-1">Motivos das Faltas Justificadas:</span>
-                      <ul className="list-disc list-inside text-sm text-gray-700">
-                        {result.justifiedReasons.map((motivo, idx) => (
-                          <li key={idx}>{motivo}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Frequência:</span>
-                    <span className="font-medium text-green-600">
-                      {result.percentagePresent}%
-                    </span>
+                  <div className="flex flex-col items-center p-4 bg-blue-50 rounded-lg">
+                    <span className="text-2xl font-bold text-blue-600">{result.justifiedAbsences}</span>
+                    <span className="text-sm text-gray-500">Faltas Justificadas</span>
                   </div>
                 </div>
-              </div>
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <span className="font-semibold text-purple-700 block mb-1">Dias de Presença</span>
-                  <ul className="list-disc list-inside text-sm text-green-700">
-                    {result.presenceDates.length > 0 ? result.presenceDates.map((date, idx) => (
-                      <li key={idx}>{date}</li>
-                    )) : <li>Nenhum registro</li>}
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-semibold text-red-700 block mb-1">Dias de Falta</span>
-                  <ul className="list-disc list-inside text-sm text-red-700">
-                    {result.absenceDates.length > 0 ? result.absenceDates.map((date, idx) => (
-                      <li key={idx}>{date}</li>
-                    )) : <li>Nenhum registro</li>}
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-semibold text-blue-700 block mb-1">Dias de Falta Justificada</span>
-                  <ul className="list-disc list-inside text-sm text-blue-700">
-                    {result.justifiedDates.length > 0 ? result.justifiedDates.map((date, idx) => (
-                      <li key={idx}>{date}</li>
-                    )) : <li>Nenhum registro</li>}
-                  </ul>
+                <div className="mt-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Histórico Detalhado</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Justificativa</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {result.detailed.map((item, idx) => (
+                            <TableRow key={item.data + idx}>
+                              <TableCell>{format(new Date(item.data), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                              <TableCell>
+                                {item.status === "Presente" ? (
+                                  <div className="flex items-center text-green-600">
+                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Presente
+                                  </div>
+                                ) : item.status === "Falta Justificada" ? (
+                                  <div className="flex items-center text-blue-600">
+                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Justificada
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center text-red-600">
+                                    <XCircle className="w-4 h-4 mr-2" /> Ausente
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>{item.motivo || "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
             </CardContent>
