@@ -99,27 +99,27 @@ const GerenciarAlunosPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center mb-6">
-          <Button variant="ghost" className="mr-2" onClick={voltar}>
-            <ArrowLeft size={18} />
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4">
+        <div className="flex flex-col sm:flex-row items-center mb-4 sm:mb-6 gap-2 sm:gap-0">
+          <Button variant="ghost" className="mr-0 sm:mr-2 w-10 h-10 flex items-center justify-center" onClick={voltar}>
+            <ArrowLeft size={22} />
           </Button>
-          <h1 className="text-2xl font-bold text-gray-800">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 text-center sm:text-left w-full">
             Gerenciar Alunos{turmaInfo ? ` - ${turmaInfo.nome}` : ""}
           </h1>
         </div>
 
         {turmaInfo && <TurmaStatsCards turmaInfo={turmaInfo} />}
 
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800">Lista de Alunos</h2>
+        <div className="bg-white rounded-xl shadow-md p-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-2 sm:gap-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Lista de Alunos</h2>
             <Button 
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
               onClick={handleAddAluno}
             >
-              <UserPlus size={18} /> Adicionar Aluno
+              <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Aluno</span>
             </Button>
           </div>
           

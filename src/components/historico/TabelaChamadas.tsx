@@ -25,6 +25,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useAlunosTurma } from "@/hooks/useAlunosTurma";
 import { useParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Input } from "@/components/ui/input";
+import { Loader2 } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
 interface ChamadaHistorico {
   data: string;
@@ -56,6 +59,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
   const [salvando, setSalvando] = useState(false);
   const { alunos, loading: loadingAlunos } = useAlunosTurma(turmaId);
   const isMobile = useIsMobile();
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (chamadaParaEditar) {
@@ -97,8 +101,17 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
       const presencasParaSalvar = presencasEditadas.filter(p => p.presente !== null);
       await onEditarChamada(chamadaParaEditar.data, presencasParaSalvar);
       setChamadaParaEditar(null);
+      toast({
+        title: "Sucesso",
+        description: "Chamada editada com sucesso!",
+      });
     } catch (error) {
       console.error("Erro ao salvar edição:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar edição da chamada.",
+        variant: "destructive",
+      });
     } finally {
       setSalvando(false);
     }
@@ -202,10 +215,20 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
             <DialogTitle>Editar Chamada</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <Input
+              type="text"
+              placeholder="Buscar aluno por nome ou matrícula..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="mb-2 w-full"
+            />
             {loadingAlunos ? (
               <div className="text-center py-4">Carregando alunos...</div>
             ) : (
-              alunos.map((aluno) => {
+              alunos.filter(aluno =>
+                aluno.nome.toLowerCase().includes(search.toLowerCase()) ||
+                aluno.matricula.toLowerCase().includes(search.toLowerCase())
+              ).map((aluno) => {
                 const presenca = presencasEditadas.find(p => p.aluno_id === aluno.id);
                 return (
                   <div key={aluno.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded-lg bg-gray-50">
@@ -269,10 +292,17 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
             <Button 
               onClick={handleSalvarEdicao}
               disabled={salvando || loadingAlunos}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto flex items-center justify-center"
             >
-              <Save className="mr-2 h-4 w-4" />
-              {salvando ? "Salvando..." : "Salvar Edição"}
+              {salvando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" /> Salvar Edição
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

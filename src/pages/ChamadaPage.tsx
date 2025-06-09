@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Check, X, FileText, Save, ArrowLeft } from "lucide-react";
+import { Check, X, FileText, Save, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -158,11 +158,19 @@ const ChamadaPage: React.FC = () => {
           ))}
         </div>
         <Button 
-          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2" 
+          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center" 
           onClick={handleSalvar}
           disabled={isSaving}
         >
-          <Save size={20}/> {isSaving ? "Salvando..." : "Salvar Chamada"}
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Salvando...
+            </>
+          ) : (
+            <>
+              <Save size={20}/> Salvar Chamada
+            </>
+          )}
         </Button>
       </div>
       <Dialog open={!!showJustificarFalta} onOpenChange={() => setShowJustificarFalta(null)}>
