@@ -1,6 +1,10 @@
-import { Home, Users, FileText, AlertTriangle, Clock } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Sidebar, SidebarProvider, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { Home, Users, FileText, AlertTriangle, Clock, LogOut } from "lucide-react";
+import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import React from "react";
 
 const menuItems = [
   {
@@ -30,39 +34,43 @@ const menuItems = [
   },
 ];
 
-export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const DefaultLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white border-r border-gray-200 min-h-screen">
+    <SidebarProvider>
+      <div className="min-h-screen bg-gray-50 flex">
+        <Sidebar>
           <div className="p-4">
             <h1 className="text-xl font-bold text-gray-800">Chamada Diária</h1>
           </div>
-          <nav className="mt-4">
+          <SidebarMenu>
             {menuItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100",
-                  location.pathname === item.href && "bg-gray-100"
-                )}
-              >
-                {item.icon}
-                <span className="ml-2">{item.title}</span>
-              </Link>
+              <SidebarMenuItem key={item.href}>
+                <Link to={item.href} className={cn("flex items-center w-full", location.pathname === item.href && "font-bold text-primary") }>
+                  {item.icon}
+                  <span className="ml-2">{item.title}</span>
+                </Link>
+              </SidebarMenuItem>
             ))}
-          </nav>
-        </div>
-
-        {/* Main content */}
-        <div className="flex-1 p-6">
-          {children}
-        </div>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout} variant="default" className="w-full flex items-center">
+                <LogOut className="h-5 w-5 mr-2" /> Sair
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </Sidebar>
+        <main className="flex-1 p-4 md:p-6">{children ? children : <Outlet />}</main>
       </div>
-    </div>
+    </SidebarProvider>
   );
-}; 
+};
+
+export default DefaultLayout; 
