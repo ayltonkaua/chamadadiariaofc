@@ -166,7 +166,7 @@ export type Database = {
           }
         ];
       },
-      justificativa_faltas: {
+      justificativas_faltas: {
         Row: {
           id: string;
           aluno_id: string;
@@ -190,7 +190,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "justificativa_faltas_aluno_id_fkey",
+            foreignKeyName: "justificativas_faltas_aluno_id_fkey",
             columns: ["aluno_id"],
             isOneToOne: false,
             referencedRelation: "alunos",

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Tables } from "@/integrations/supabase/types";
 
 interface StudentAttendanceResult {
   name: string;
@@ -98,7 +99,7 @@ const StudentQuery: React.FC = () => {
 
       // Buscar faltas justificadas (datas e motivos)
       const { data: justificadas, count: totalFaltasJustificadas } = await supabase
-        .from("justificativa_faltas")
+        .from("justificativas_faltas")
         .select("motivo, data", { count: "exact" })
         .eq("aluno_id", aluno.id);
       const faltasJustificadas = totalFaltasJustificadas || 0;
@@ -236,7 +237,7 @@ const StudentQuery: React.FC = () => {
                 <div className="grid grid-cols-4 gap-4 mb-6">
                   <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg">
                     <span className="text-2xl font-bold">{result.totalClasses}</span>
-                    <span className="text-sm text-gray-500">Total de Aulas</span>
+                    <span className="text-sm text-gray-500">Total de Chamadas</span>
                   </div>
                   <div className="flex flex-col items-center p-4 bg-green-50 rounded-lg">
                     <span className="text-2xl font-bold text-green-600">{result.presenceDates.length}</span>
