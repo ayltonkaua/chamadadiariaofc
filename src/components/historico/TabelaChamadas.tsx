@@ -52,7 +52,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
   const { turmaId } = useParams<{ turmaId: string }>();
   const [chamadaParaEditar, setChamadaParaEditar] = useState<ChamadaHistorico | null>(null);
   const [chamadaParaExcluir, setChamadaParaExcluir] = useState<ChamadaHistorico | null>(null);
-  const [presencasEditadas, setPresencasEditadas] = useState<Array<{ aluno_id: string; presente: boolean; falta_justificada?: boolean }>>([]);
+  const [presencasEditadas, setPresencasEditadas] = useState<Array<{ aluno_id: string; presente: boolean | null; falta_justificada?: boolean }>>([]);
   const [salvando, setSalvando] = useState(false);
   const { alunos, loading: loadingAlunos } = useAlunosTurma(turmaId);
   const isMobile = useIsMobile();
@@ -63,7 +63,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
         const presencaExistente = chamadaParaEditar.presencas.find(p => p.aluno_id === aluno.id);
         return {
           aluno_id: aluno.id,
-          presente: presencaExistente ? presencaExistente.presente : false,
+          presente: presencaExistente ? presencaExistente.presente : null,
           falta_justificada: presencaExistente ? presencaExistente.falta_justificada || false : false
         };
       });
@@ -75,7 +75,7 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
     setChamadaParaEditar(chamada);
   };
 
-  const handleEditarPresenca = (alunoId: string, presente: boolean) => {
+  const handleEditarPresenca = (alunoId: string, presente: boolean | null) => {
     setPresencasEditadas(prev => 
       prev.map(p => p.aluno_id === alunoId ? { ...p, presente, falta_justificada: false } : p)
     );
@@ -91,10 +91,11 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
 
   const handleSalvarEdicao = async () => {
     if (!chamadaParaEditar) return;
-    
     setSalvando(true);
     try {
-      await onEditarChamada(chamadaParaEditar.data, presencasEditadas);
+      // Remove alunos com presente === null (sem registro)
+      const presencasParaSalvar = presencasEditadas.filter(p => p.presente !== null);
+      await onEditarChamada(chamadaParaEditar.data, presencasParaSalvar);
       setChamadaParaEditar(null);
     } catch (error) {
       console.error("Erro ao salvar edição:", error);
@@ -216,19 +217,19 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        variant={presenca?.presente ? "default" : "outline"}
+                        variant={presenca?.presente === true ? "default" : "outline"}
                         size="sm"
                         onClick={() => handleEditarPresenca(aluno.id, true)}
-                        className={presenca?.presente ? "bg-green-600 hover:bg-green-700" : ""}
+                        className={presenca?.presente === true ? "bg-green-600 hover:bg-green-700" : ""}
                       >
                         <Check className="h-4 w-4 mr-1" />
                         Presente
                       </Button>
                       <Button
-                        variant={!presenca?.presente && !presenca?.falta_justificada ? "default" : "outline"}
+                        variant={presenca?.presente === false && !presenca?.falta_justificada ? "default" : "outline"}
                         size="sm"
                         onClick={() => handleEditarPresenca(aluno.id, false)}
-                        className={!presenca?.presente && !presenca?.falta_justificada ? "bg-red-600 hover:bg-red-700" : ""}
+                        className={presenca?.presente === false && !presenca?.falta_justificada ? "bg-red-600 hover:bg-red-700" : ""}
                       >
                         <X className="h-4 w-4 mr-1" />
                         Falta
@@ -241,6 +242,14 @@ export const TabelaChamadas: React.FC<TabelaChamadasProps> = ({
                       >
                         <FileText className="h-4 w-4 mr-1" />
                         Justificar
+                      </Button>
+                      <Button
+                        variant={presenca?.presente === null ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handleEditarPresenca(aluno.id, null)}
+                        className={presenca?.presente === null ? "bg-gray-400 hover:bg-gray-500 text-white" : ""}
+                      >
+                        Sem Registro
                       </Button>
                     </div>
                   </div>
