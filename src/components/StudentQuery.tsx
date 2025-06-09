@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CheckCircle2, XCircle } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tables } from "@/integrations/supabase/types";
 
@@ -222,7 +222,7 @@ const StudentQuery: React.FC = () => {
                         <TableBody>
                           {result.detailed.map((item, idx) => (
                             <TableRow key={item.data + idx}>
-                              <TableCell>{format(new Date(item.data), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                              <TableCell>{format(parseISO(item.data), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
                               <TableCell>
                                 {item.status === "Presente" ? (
                                   <div className="flex items-center text-green-600">

@@ -50,13 +50,18 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
       // Query attendance data for the class
       const { data: presencas, error } = await supabase
         .from("presencas")
-        .select("data_chamada, presente, aluno_id")
+        .select("data_chamada, presente, aluno_id, falta_justificada")
         .eq("turma_id", turmaId)
         .order("data_chamada", { ascending: false });
       
-      if (error) {
-        console.error("Error fetching attendance:", error);
-        throw error;
+      if (error && error.message.includes("falta_justificada")) {
+        toast({
+          title: "Erro de banco de dados",
+          description: "A coluna 'falta_justificada' não existe na tabela 'presencas'. Adicione essa coluna para usar justificativas.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
       }
 
       if (presencas && presencas.length > 0) {
@@ -64,7 +69,7 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
         const chamadas = presencas.reduce((acc: Record<string, { 
           presentes: number; 
           faltosos: number;
-          presencas: Array<{ aluno_id: string; presente: boolean }>;
+          presencas: Array<{ aluno_id: string; presente: boolean; falta_justificada?: boolean }>;
         }>, curr) => {
           const dataFormatada = curr.data_chamada;
           
@@ -84,7 +89,8 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
 
           acc[dataFormatada].presencas.push({
             aluno_id: curr.aluno_id,
-            presente: curr.presente
+            presente: curr.presente,
+            falta_justificada: curr.falta_justificada || false
           });
           
           return acc;
