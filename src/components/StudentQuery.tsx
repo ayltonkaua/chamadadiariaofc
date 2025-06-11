@@ -39,6 +39,16 @@ const StudentQuery: React.FC = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  // Função para normalizar texto (remover acentos e padronizar espaços)
+  const normalizeText = (text: string): string => {
+    return text
+      .toLowerCase()
+      .normalize('NFD') // Normaliza para forma de decomposição Unicode
+      .replace(/[\u0300-\u036f]/g, '') // Remove caracteres diacríticos (acentos)
+      .replace(/\s+/g, ' ') // Substitui múltiplos espaços por um único espaço
+      .trim(); // Remove espaços do início e fim
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -56,13 +66,17 @@ const StudentQuery: React.FC = () => {
       return;
     }
 
+    // Normalizar o nome para a consulta
+    const normalizedName = normalizeText(trimmedName);
+
     try {
-      // Buscar o aluno pelo nome e matrícula
+      // Buscar o aluno pelo nome (normalizado) e matrícula
+      // Usaremos o nome normalizado na consulta ilike
       const { data: aluno, error: alunoError } = await supabase
         .from("alunos")
         .select("id, nome, matricula, turma_id, turmas(nome)")
-        .ilike("nome", `%${trimmedName}%`) // Usar o nome tratado
-        .eq("matricula", trimmedEnrollment) // Usar a matrícula tratada
+        .ilike("nome", `%${normalizedName}%`) // Usar o nome normalizado na consulta
+        .eq("matricula", trimmedEnrollment)
         .single();
 
       if (alunoError || !aluno) {
