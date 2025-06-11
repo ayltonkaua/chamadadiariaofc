@@ -45,8 +45,12 @@ const StudentQuery: React.FC = () => {
     setResult(null);
     setLoading(true);
 
+    // Remover espaços em branco do início e fim das strings
+    const trimmedName = name.trim();
+    const trimmedEnrollment = enrollment.trim();
+
     // Validação básica
-    if (!name.trim() || !enrollment.trim()) {
+    if (!trimmedName || !trimmedEnrollment) {
       setError("Por favor, preencha todos os campos.");
       setLoading(false);
       return;
@@ -57,8 +61,8 @@ const StudentQuery: React.FC = () => {
       const { data: aluno, error: alunoError } = await supabase
         .from("alunos")
         .select("id, nome, matricula, turma_id, turmas(nome)")
-        .ilike("nome", `%${name}%`)
-        .eq("matricula", enrollment)
+        .ilike("nome", `%${trimmedName}%`) // Usar o nome tratado
+        .eq("matricula", trimmedEnrollment) // Usar a matrícula tratada
         .single();
 
       if (alunoError || !aluno) {
