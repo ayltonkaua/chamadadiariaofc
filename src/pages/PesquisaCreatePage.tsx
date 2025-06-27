@@ -134,11 +134,59 @@ const PesquisaCreatePage: React.FC = () => {
     }
 
     try {
-      // Simular criação da pesquisa (sem as tabelas específicas)
+      // Criar a pesquisa
+      const { data: pData, error: pError } = await supabaseGeneric
+        .from('pesquisas')
+        .insert({ 
+          user_id: user!.id, 
+          titulo, 
+          descricao, 
+          status: 'ativa' 
+        })
+        .select()
+        .single();
+
+      if (pError || !pData) {
+        throw pError || new Error("Falha ao criar pesquisa.");
+      }
+
+      // Salvar as perguntas
+      const perguntasParaSalvar = perguntas.map((p, i) => ({ 
+        pesquisa_id: pData.id, 
+        texto_pergunta: p.texto_pergunta, 
+        tipo_pergunta: 'multipla_escolha', 
+        opcoes: p.opcoes, 
+        ordem: i 
+      }));
+      
+      const { error: perguntasError } = await supabaseGeneric
+        .from('pesquisa_perguntas')
+        .insert(perguntasParaSalvar);
+      
+      if (perguntasError) throw perguntasError;
+
+      // Salvar os destinatários
+      const destinatarios = Array.from(alunosSelecionados).map(alunoId => ({ 
+        pesquisa_id: pData.id, 
+        aluno_id: alunoId,
+        status_resposta: 'pendente'
+      }));
+      
+      const { error: destinatariosError } = await supabaseGeneric
+        .from('pesquisa_destinatarios')
+        .insert(destinatarios);
+      
+      if (destinatariosError) throw destinatariosError;
+
       toast({ title: "Pesquisa publicada com sucesso!" });
       navigate('/pesquisas');
     } catch (error) {
-      toast({ title: "Erro ao salvar pesquisa", description: (error as Error).message, variant: "destructive" });
+      console.error('Erro ao salvar pesquisa:', error);
+      toast({ 
+        title: "Erro ao salvar pesquisa", 
+        description: (error as Error).message, 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
