@@ -155,12 +155,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 isActive(item.href)
                   ? "bg-purple-100 text-purple-700"
-                  : "text-gray-700 hover:bg-gray-100"
+                  : "text-purple-700 hover:bg-purple-50"
               )}
               onClick={() => setIsOpen(false)}
             >
               <item.icon className="h-5 w-5" />
-              <span className="hidden lg:block">{item.title}</span>
+              <span>{item.title}</span>
             </Link>
             
             {/* Sub-items */}
@@ -173,13 +173,13 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors",
                       isActive(subItem.href)
-                        ? "bg-purple-50 text-purple-600"
-                        : "text-gray-600 hover:bg-gray-50"
+                        ? "bg-purple-50 text-purple-700"
+                        : "text-purple-700 hover:bg-purple-50"
                     )}
                     onClick={() => setIsOpen(false)}
                   >
                     <subItem.icon className="h-4 w-4" />
-                    <span className="hidden lg:block">{subItem.title}</span>
+                    <span>{subItem.title}</span>
                   </Link>
                 ))}
               </div>
@@ -231,20 +231,11 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
         <div className="md:hidden bg-white border-b border-gray-200 p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                <Home className="h-5 w-5 text-white" />
-              </div>
-              <h1 className="font-bold text-lg text-gray-900">Chamada Diária</h1>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+              <Home className="h-5 w-5 text-white" />
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsOpen(true)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
+            <h1 className="font-bold text-lg text-gray-900">Chamada Diária</h1>
           </div>
         </div>
 
