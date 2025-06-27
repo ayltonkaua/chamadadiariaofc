@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -22,6 +22,9 @@ import { Clock, ArrowLeft, Search, FileText, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Tables } from "@/integrations/supabase/types";
 import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
+import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, CheckCircle, XCircle } from 'lucide-react';
 
 interface Aluno {
   id: string;
