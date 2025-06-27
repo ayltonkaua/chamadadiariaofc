@@ -40,25 +40,26 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         atualizado_em: new Date().toISOString()
       };
 
+      // Se não há usuário logado, usar configuração padrão
+      if (!user) {
+        setConfig(defaultConfig);
+        return;
+      }
+
+      // Se o usuário não tem escola_id, usar configuração padrão
+      if (!user.escola_id) {
+        console.log('Usuário não tem escola_id, usando configuração padrão');
+        setConfig(defaultConfig);
+        return;
+      }
+
       try {
-        let data, error;
-        
-        if (user?.escola_id) {
-          // Busca configuração da escola pelo id do usuário
-          ({ data, error } = await supabase
-            .from('escola_configuracao')
-            .select('*')
-            .eq('id', user.escola_id)
-            .single());
-        } else {
-          // Busca a primeira configuração do banco (configuração padrão)
-          ({ data, error } = await supabase
-            .from('escola_configuracao')
-            .select('*')
-            .order('criado_em', { ascending: true })
-            .limit(1)
-            .single());
-        }
+        // Buscar configuração específica da escola do usuário
+        const { data, error } = await supabase
+          .from('escola_configuracao')
+          .select('*')
+          .eq('id', user.escola_id)
+          .single();
         
         if (error) {
           console.warn('Erro ao buscar configuração da escola:', error);
@@ -68,8 +69,10 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         }
         
         if (data) {
+          console.log('Configuração carregada para escola:', data.nome);
           setConfig(data);
         } else {
+          console.log('Nenhuma configuração encontrada para escola_id:', user.escola_id);
           setConfig(defaultConfig);
         }
       } catch (err) {
@@ -90,11 +93,25 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
     try {
       setError(null);
       
+      // Se não há usuário logado ou não tem escola_id, não permitir atualização
+      if (!user || !user.escola_id) {
+        console.warn('Usuário não tem permissão para atualizar configurações');
+        setError('Você não tem permissão para atualizar as configurações da escola');
+        return false;
+      }
+
       // Se não há configuração válida, apenas atualizar o estado local
       if (!config?.id || config.id === 'default') {
         const newConfig = { ...config, ...updates, atualizado_em: new Date().toISOString() };
         setConfig(newConfig as EscolaConfig);
         return true;
+      }
+
+      // Verificar se o usuário tem permissão para atualizar esta escola
+      if (config.id !== user.escola_id) {
+        console.warn('Usuário tentando atualizar configuração de escola diferente');
+        setError('Você não tem permissão para atualizar as configurações desta escola');
+        return false;
       }
 
       // Tentar atualizar no banco
@@ -105,16 +122,14 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
             ...updates,
             atualizado_em: new Date().toISOString()
           })
-          .eq('id', config.id)
+          .eq('id', user.escola_id)
           .select()
           .single();
           
         if (error) {
           console.warn('Erro ao atualizar no banco:', error);
-          // Atualizar apenas localmente
-          const newConfig = { ...config, ...updates, atualizado_em: new Date().toISOString() };
-          setConfig(newConfig);
-          return true;
+          setError('Erro ao atualizar configurações no banco de dados');
+          return false;
         }
         
         if (data) {
@@ -123,10 +138,8 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         }
       } catch (err) {
         console.warn('Erro ao acessar banco para atualização:', err);
-        // Atualizar apenas localmente
-        const newConfig = { ...config, ...updates, atualizado_em: new Date().toISOString() };
-        setConfig(newConfig);
-        return true;
+        setError('Erro ao conectar com o banco de dados');
+        return false;
       }
       
       return true;
@@ -144,7 +157,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
   useEffect(() => {
     fetchConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.escola_id]);
+  }, [user?.id, user?.escola_id]);
 
   return (
     <EscolaConfigContext.Provider value={{
