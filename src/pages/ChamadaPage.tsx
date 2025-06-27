@@ -99,32 +99,45 @@ const ChamadaPage: React.FC = () => {
 
   // Carregar dados iniciais e sessão salva
   useEffect(() => {
+    let cancelado = false;
     const carregarDados = async () => {
       if (!turmaId) return;
-      
       setIsLoading(true);
-      
       try {
         // Carregar alunos
         const { data: alunosData, error: alunosError } = await supabase
           .from("alunos")
           .select("id, nome, matricula, turma_id")
           .eq("turma_id", turmaId);
-        
         if (alunosError) throw alunosError;
-        if (alunosData) setAlunos(alunosData);
-
+        // Tentar carregar sessão salva
+        const sessaoSalva = await getSessaoChamada();
+        let presencasRestauradas = {};
+        let dataRestaurada = date;
+        if (sessaoSalva && sessaoSalva.turmaId === turmaId) {
+          dataRestaurada = new Date(sessaoSalva.date);
+          presencasRestauradas = sessaoSalva.presencas;
+        }
+        if (!cancelado) {
+          if (alunosData) setAlunos(alunosData);
+          setDate(dataRestaurada);
+          setPresencas(presencasRestauradas);
+          if (Object.keys(presencasRestauradas).length > 0) {
+            toast({
+              title: "Sessão restaurada",
+              description: "Seus dados foram restaurados da sessão anterior.",
+            });
+          }
+        }
         // Carregar atestados aprovados para a data selecionada
-        const dataFormatada = format(date, "yyyy-MM-dd");
+        const dataFormatada = format(dataRestaurada, "yyyy-MM-dd");
         const { data: atestadosData, error: atestadosError } = await supabase
           .from("atestados")
           .select("id, aluno_id, data_inicio, data_fim, status")
           .eq("status", "aprovado")
           .lte("data_inicio", dataFormatada)
           .gte("data_fim", dataFormatada);
-
         if (atestadosError) throw atestadosError;
-        
         // Organizar atestados por aluno
         const atestadosPorAluno: Record<string, Atestado[]> = {};
         if (atestadosData) {
@@ -135,18 +148,7 @@ const ChamadaPage: React.FC = () => {
             atestadosPorAluno[atestado.aluno_id].push(atestado);
           });
         }
-        setAtestados(atestadosPorAluno);
-
-        // Tentar carregar sessão salva
-        const sessaoSalva = await getSessaoChamada();
-        if (sessaoSalva && sessaoSalva.turmaId === turmaId) {
-          setDate(new Date(sessaoSalva.date));
-          setPresencas(sessaoSalva.presencas);
-          toast({
-            title: "Sessão restaurada",
-            description: "Seus dados foram restaurados da sessão anterior.",
-          });
-        }
+        if (!cancelado) setAtestados(atestadosPorAluno);
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
         toast({
@@ -155,12 +157,12 @@ const ChamadaPage: React.FC = () => {
           variant: "destructive",
         });
       } finally {
-        setIsLoading(false);
+        if (!cancelado) setIsLoading(false);
       }
     };
-
     carregarDados();
-  }, [turmaId, date]);
+    return () => { cancelado = true; };
+  }, [turmaId]);
 
   // Salvar sessão sempre que houver mudanças
   useEffect(() => {
@@ -400,72 +402,62 @@ const ChamadaPage: React.FC = () => {
           <h3 className="font-semibold text-gray-700 text-sm sm:text-base">Alunos</h3>
         </div>
         
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
             const semRegistro = tentouSalvar && !presencas[aluno.id];
             const temAtestado = temAtestadoAprovado(aluno.id);
             return (
               <div
                 key={aluno.id}
-                className={`flex flex-col sm:flex-row sm:items-center sm:justify-between border rounded-md p-3 gap-3 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
+                className={`flex flex-row items-center border rounded p-2 gap-2 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
               >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                    <span className="font-medium text-sm sm:text-base">{aluno.nome}</span>
-                    <span className="text-xs sm:text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-sm">{aluno.nome}</span>
+                  <span className="text-xs text-gray-500 ml-2">({aluno.matricula})</span>
                   {temAtestado && (
-                    <div className="flex items-center gap-1 text-blue-600" title="Aluno com atestado aprovado para esta data">
-                      <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="text-xs font-medium">Atestado</span>
-                    </div>
+                    <span className="ml-2 text-xs text-blue-600 font-semibold">Atestado</span>
                   )}
                 </div>
-                
-                <div className="flex flex-wrap gap-1 sm:gap-2">
+                <div className="flex flex-row gap-1">
                   <Button
                     variant={presencas[aluno.id] === "presente" ? "default" : "outline"}
                     size="sm"
-                    className={`${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
+                    className={`h-8 px-2 ${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "presente")}
                     title="Presente"
                   >
-                    <Check size={16} className="sm:hidden" />
-                    <span className="hidden sm:inline">Presente</span>
+                    <Check size={14} />
                   </Button>
                   <Button
                     variant={presencas[aluno.id] === "falta" ? "default" : "outline"}
                     size="sm"
-                    className={`${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
+                    className={`h-8 px-2 ${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "falta")}
                     title="Falta"
                   >
-                    <X size={16} className="sm:hidden" />
-                    <span className="hidden sm:inline">Falta</span>
+                    <X size={14} />
                   </Button>
                   <Button
                     variant={presencas[aluno.id] === "atestado" ? "default" : "outline"}
                     size="sm"
-                    className={`${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
+                    className={`h-8 px-2 ${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "atestado")}
                     title="Atestado"
                   >
-                    <FileText size={16} className="sm:hidden" />
-                    <span className="hidden sm:inline">Atestado</span>
+                    <FileText size={14} />
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })}
                     title="Adicionar Observação"
-                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 min-w-[40px] sm:min-w-[50px]"
+                    className="h-8 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                   >
-                    <MessageSquare size={16}/>
+                    <MessageSquare size={14}/>
                   </Button>
                 </div>
-                
                 {semRegistro && (
-                  <span className="text-xs text-red-600 font-semibold sm:ml-2">Obrigatório registrar presença</span>
+                  <span className="text-xs text-red-600 font-semibold ml-2">Obrigatório</span>
                 )}
               </div>
             );
