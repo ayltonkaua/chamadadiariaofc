@@ -2,18 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft, Loader2, PieChart, Users, FileText, BarChart3, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-
-// Cliente Supabase genérico
-const supabaseGeneric = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from '@/integrations/supabase/client';
 
 // Tipos para estruturar os dados
 interface Resposta { 
@@ -49,7 +43,7 @@ const PesquisaResultadosPage: React.FC = () => {
       }
       try {
         // Buscar a pesquisa com perguntas
-        const { data: pesquisaData, error: pesquisaError } = await supabaseGeneric
+        const { data: pesquisaData, error: pesquisaError } = await supabase
           .from('pesquisas')
           .select(`
             id,
@@ -70,7 +64,7 @@ const PesquisaResultadosPage: React.FC = () => {
         // Buscar as respostas para cada pergunta
         const perguntasComRespostas = await Promise.all(
           pesquisaData.pesquisa_perguntas.map(async (pergunta: any) => {
-            const { data: respostasData, error: respostasError } = await supabaseGeneric
+            const { data: respostasData, error: respostasError } = await supabase
               .from('pesquisa_respostas')
               .select(`
                 resposta,

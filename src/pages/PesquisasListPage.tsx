@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Pesquisa {
   id: string;
@@ -26,12 +26,6 @@ interface Pesquisa {
   status: string;
   created_at: string;
 }
-
-// Cliente Supabase genérico para contornar problemas de tipo
-const supabaseGeneric = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 const PesquisasListPage: React.FC = () => {
   const [pesquisas, setPesquisas] = useState<Pesquisa[]>([]);
@@ -46,7 +40,7 @@ const PesquisasListPage: React.FC = () => {
       
       setLoading(true);
       try {
-        const { data, error } = await supabaseGeneric
+        const { data, error } = await supabase
           .from('pesquisas')
           .select('*')
           .eq('user_id', user.id)
@@ -67,7 +61,7 @@ const PesquisasListPage: React.FC = () => {
   const handleDeletePesquisa = async (pesquisaId: string) => {
     setDeletingId(pesquisaId);
     try {
-      const { error } = await supabaseGeneric
+      const { error } = await supabase
         .from('pesquisas')
         .delete()
         .eq('id', pesquisaId);

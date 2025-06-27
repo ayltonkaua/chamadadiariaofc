@@ -190,9 +190,15 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    fetchConfig();
+    // Só busca se user existir (autenticado)
+    if (user) {
+      fetchConfig();
+    } else {
+      // Se deslogar, limpa o config
+      setConfig(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.escola_id]);
+  }, [user]);
 
   return (
     <EscolaConfigContext.Provider value={{
