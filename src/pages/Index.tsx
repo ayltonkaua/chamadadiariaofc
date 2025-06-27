@@ -1,8 +1,11 @@
+// src/pages/Index.tsx
+
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { FileText, Calendar, ClipboardList } from "lucide-react";
+// Adicione o ícone ListChecks
+import { FileText, Calendar, ClipboardList, ListChecks } from "lucide-react";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
 import {
   Dialog,
@@ -29,12 +32,10 @@ const Index: React.FC = () => {
       <header className="py-8 px-4 sm:px-12 flex items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-purple-700 drop-shadow">Chamada Diária</h1>
         {user ? (
-          <div className="space-y-4">
-            <div className="flex justify-center gap-4">
-              <Link to="/dashboard">
-                <Button>Ir para o Dashboard</Button>
-              </Link>
-            </div>
+          <div className="flex justify-center gap-4">
+            <Link to="/dashboard">
+              <Button>Ir para o Dashboard</Button>
+            </Link>
           </div>
         ) : (
           <Link to="/login">
@@ -45,47 +46,44 @@ const Index: React.FC = () => {
 
       {/* MAIN SECTION */}
       <main className="flex-1 flex flex-col items-center justify-center px-4">
-        <div className="max-w-2xl w-full bg-white bg-opacity-90 rounded-3xl shadow-xl p-6 sm:p-8 flex flex-col items-center">
+        <div className="max-w-3xl w-full bg-white bg-opacity-90 rounded-3xl shadow-xl p-6 sm:p-8 flex flex-col items-center">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-center text-gray-900 mb-3">
-            Controle sua presença de forma simples e segura
+            Controle sua presença e participe da vida escolar
           </h2>
           <p className="text-gray-600 text-center mb-6 text-base sm:text-lg">
-            O aplicativo Chamada Diária facilita o registro de presenças e permite que alunos consultem suas faltas com facilidade.
+            Ferramentas para professores, administradores e alunos.
           </p>
-          {/* Vantagens */}
-          <ul className="list-none space-y-3 mb-8 w-full">
-            {advantages.map((item, idx) => (
-              <li
-                key={idx}
-                className="flex items-center text-gray-800 text-sm sm:text-base"
-              >
-                <span className="rounded-full bg-purple-100 mr-3 p-1">
-                  <FileText className="text-purple-600" size={20} />
-                </span>
-                {item}
-              </li>
-            ))}
-          </ul>
-
+          
           {/* Ações */}
-          <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full justify-center">
             <Button
               size="lg"
-              className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-base sm:text-lg py-5 font-semibold"
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-base sm:text-lg py-5 font-semibold"
               onClick={() => navigate("/login")}
             >
               <Calendar className="mr-2" />
-              Fazer chamada
+              Área do Professor
             </Button>
 
             <Button
               variant="outline"
               size="lg"
-              className="w-full sm:w-auto border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-base sm:text-lg py-5 font-semibold"
-              onClick={() => navigate("/student-query")}
+              className="w-full border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-base sm:text-lg py-5 font-semibold"
+              onClick={() => navigate("/consultar-faltas")}
             >
               <ClipboardList className="mr-2" />
-              Consultar faltas
+              Consultar Faltas
+            </Button>
+            
+            {/* NOVO BOTÃO PARA CONSULTAR PESQUISAS */}
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full border-green-600 text-green-700 hover:bg-green-100 hover:border-green-700 text-base sm:text-lg py-5 font-semibold"
+              onClick={() => navigate("/responder-pesquisa")}
+            >
+              <ListChecks className="mr-2" />
+              Responder Pesquisa
             </Button>
 
             <Dialog open={showForm} onOpenChange={setShowForm}>
@@ -93,7 +91,7 @@ const Index: React.FC = () => {
                 <Button
                   variant="outline"
                   size="lg"
-                  className="w-full sm:w-auto border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-base sm:text-lg py-5 font-semibold"
+                  className="w-full border-orange-600 text-orange-700 hover:bg-orange-100 hover:border-orange-700 text-base sm:text-lg py-5 font-semibold"
                 >
                   <FileText className="mr-2" />
                   Justificar falta
