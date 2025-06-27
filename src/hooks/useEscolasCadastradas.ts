@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
-import { useAuth } from '@/contexts/AuthContext';
 
 export type Escola = Tables<'escola_configuracao'>;
 
 export function useEscolasCadastradas() {
-  const { user } = useAuth();
   const [escolas, setEscolas] = useState<Escola[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,15 +14,8 @@ export function useEscolasCadastradas() {
       setLoading(true);
       setError(null);
       
-      // Se não há usuário logado, retornar lista vazia
-      if (!user) {
-        setEscolas([]);
-        setLoading(false);
-        return;
-      }
-
       try {
-        // Buscar TODAS as escolas cadastradas no sistema
+        // Busca TODAS as escolas cadastradas, agora permitido pela nova política RLS.
         const { data, error } = await supabase
           .from('escola_configuracao')
           .select('*')
@@ -35,7 +26,6 @@ export function useEscolasCadastradas() {
           setError(error.message);
           setEscolas([]);
         } else {
-          console.log('Escolas carregadas:', data?.length || 0);
           setEscolas(data || []);
         }
       } catch (err) {
@@ -48,7 +38,7 @@ export function useEscolasCadastradas() {
     }
     
     fetchEscolas();
-  }, [user?.id]);
+  }, []); // Removida a dependência do user.id para funcionar publicamente
 
   return { escolas, loading, error };
-} 
+}

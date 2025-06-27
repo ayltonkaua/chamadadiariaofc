@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -40,8 +41,7 @@ const Login: React.FC = () => {
         <CardHeader className="space-y-1 text-center bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-t-lg">
           <CardTitle className="text-2xl font-bold">Chamada Diária</CardTitle>
           <CardDescription className="text-gray-100">
-            Acesso para monitores da busca ativa e professores,
-            entre em contato: @ayltonkauaw para ter seu login
+            Acesso para monitores da busca ativa e professores.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -74,10 +74,19 @@ const Login: React.FC = () => {
               </div>
             )}
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate("/")}
+              className="w-full sm:w-auto"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao Início
+            </Button>
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              className="w-full sm:flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
               disabled={isLoading}
             >
               {isLoading ? "Entrando..." : "Entrar"}

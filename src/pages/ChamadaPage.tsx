@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff, Shield, MessageSquare, Plus } from "lucide-react";
+import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff, MessageSquare, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,17 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
-  salvarChamadaOffline, 
   getSessaoChamada, 
   salvarSessaoChamada, 
   limparSessaoChamada,
   sincronizarChamadasOffline
 } from '@/lib/offlineChamada';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
-import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface Aluno {
   id: string;
@@ -44,8 +39,6 @@ type Presenca = "presente" | "falta" | "atestado" | null;
 const ChamadaPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
   const { user } = useAuth();
-  const { config: escolaConfig } = useEscolaConfig();
-  const { escolas } = useEscolasCadastradas();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [presencas, setPresencas] = useState<Record<string, Presenca | null>>({});
   const [atestados, setAtestados] = useState<Record<string, Atestado[]>>({});
@@ -56,20 +49,14 @@ const ChamadaPage: React.FC = () => {
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoading, setIsLoading] = useState(true);
-  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
-  const [turmas, setTurmas] = useState<any[]>([]);
-  const [turmaSelecionada, setTurmaSelecionada] = useState<string>("");
   
-  // Estados para observação
   const [tituloObservacao, setTituloObservacao] = useState('');
   const [descricaoObservacao, setDescricaoObservacao] = useState('');
   const [salvandoObservacao, setSalvandoObservacao] = useState(false);
 
-  // Monitorar status da conexão
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Tentar sincronizar quando voltar a conexão
       sincronizarChamadasOffline().then(result => {
         if (result.success && result.count > 0) {
           toast({
@@ -97,27 +84,28 @@ const ChamadaPage: React.FC = () => {
     };
   }, []);
 
-  // Carregar dados iniciais e sessão salva
   useEffect(() => {
     let cancelado = false;
     const carregarDados = async () => {
       if (!turmaId) return;
       setIsLoading(true);
       try {
-        // Carregar alunos
         const { data: alunosData, error: alunosError } = await supabase
           .from("alunos")
           .select("id, nome, matricula, turma_id")
           .eq("turma_id", turmaId);
         if (alunosError) throw alunosError;
-        // Tentar carregar sessão salva
+
         const sessaoSalva = await getSessaoChamada();
         let presencasRestauradas = {};
-        let dataRestaurada = date;
+        let dataRestaurada = new Date();
+
         if (sessaoSalva && sessaoSalva.turmaId === turmaId) {
-          dataRestaurada = new Date(sessaoSalva.date);
+          const [year, month, day] = sessaoSalva.date.split('-').map(Number);
+          dataRestaurada = new Date(year, month - 1, day);
           presencasRestauradas = sessaoSalva.presencas;
         }
+
         if (!cancelado) {
           if (alunosData) setAlunos(alunosData);
           setDate(dataRestaurada);
@@ -125,11 +113,10 @@ const ChamadaPage: React.FC = () => {
           if (Object.keys(presencasRestauradas).length > 0) {
             toast({
               title: "Sessão restaurada",
-              description: "Seus dados foram restaurados da sessão anterior.",
+              description: "Sua chamada não finalizada foi recuperada.",
             });
           }
         }
-        // Carregar atestados aprovados para a data selecionada
         const dataFormatada = format(dataRestaurada, "yyyy-MM-dd");
         const { data: atestadosData, error: atestadosError } = await supabase
           .from("atestados")
@@ -138,7 +125,7 @@ const ChamadaPage: React.FC = () => {
           .lte("data_inicio", dataFormatada)
           .gte("data_fim", dataFormatada);
         if (atestadosError) throw atestadosError;
-        // Organizar atestados por aluno
+        
         const atestadosPorAluno: Record<string, Atestado[]> = {};
         if (atestadosData) {
           atestadosData.forEach(atestado => {
@@ -164,7 +151,6 @@ const ChamadaPage: React.FC = () => {
     return () => { cancelado = true; };
   }, [turmaId]);
 
-  // Salvar sessão sempre que houver mudanças
   useEffect(() => {
     if (turmaId && Object.keys(presencas).length > 0) {
       const salvarSessao = async () => {
@@ -175,7 +161,6 @@ const ChamadaPage: React.FC = () => {
         });
       };
       
-      // Debounce para não salvar a cada mudança
       const timeoutId = setTimeout(salvarSessao, 1000);
       return () => clearTimeout(timeoutId);
     }
@@ -187,12 +172,11 @@ const ChamadaPage: React.FC = () => {
 
   const handleSalvar = async () => {
     setTentouSalvar(true);
-    // Validação: todos os alunos devem ter status definido
     const alunosSemRegistro = alunos.filter(aluno => !presencas[aluno.id]);
     if (alunosSemRegistro.length > 0) {
       toast({
-        title: "Erro",
-        description: "Todos os alunos devem ter presença, falta ou atestado registrados.",
+        title: "Chamada incompleta",
+        description: "Todos os alunos devem ter um status (presente, falta ou atestado) registrado.",
         variant: "destructive",
       });
       return;
@@ -200,8 +184,8 @@ const ChamadaPage: React.FC = () => {
     
     if (!user?.escola_id) {
       toast({
-        title: "Erro",
-        description: "Usuário não tem escola configurada. Configure o perfil da escola primeiro.",
+        title: "Erro de Configuração",
+        description: "Seu usuário não está vinculado a uma escola. Contate o suporte.",
         variant: "destructive",
       });
       return;
@@ -211,15 +195,13 @@ const ChamadaPage: React.FC = () => {
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
       const presencasParaInserir = Object.entries(presencas)
+        .filter(([, status]) => status !== null)
         .map(([alunoId, status]) => {
           let presente = false;
           let falta_justificada = false;
           if (status === "presente") presente = true;
-          else if (status === "falta") presente = false;
-          else if (status === "atestado") {
-            presente = false;
-            falta_justificada = true;
-          }
+          if (status === "atestado") falta_justificada = true;
+          
           return {
             aluno_id: alunoId,
             turma_id: turmaId,
@@ -243,17 +225,20 @@ const ChamadaPage: React.FC = () => {
         } else {
           throw new Error("Falha ao salvar offline");
         }
+        setIsSaving(false);
         return;
       }
 
       if (presencasParaInserir.length > 0) {
+        await supabase.from("presencas").delete().eq("turma_id", turmaId).eq("data_chamada", dataChamada);
+        
         const { error } = await supabase.from("presencas").insert(presencasParaInserir);
         if (error) throw error;
       }
       
       toast({
         title: "Chamada salva",
-        description: "A chamada foi registrada com sucesso.",
+        description: "O registro de presença foi salvo com sucesso.",
       });
       setPresencas({});
       setTentouSalvar(false);
@@ -262,7 +247,7 @@ const ChamadaPage: React.FC = () => {
       console.error("Erro ao salvar chamada:", error);
       toast({
         title: "Erro ao salvar",
-        description: "Ocorreu um erro ao salvar a chamada.",
+        description: "Não foi possível salvar a chamada. Verifique sua conexão e tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -270,26 +255,14 @@ const ChamadaPage: React.FC = () => {
     }
   };
 
-  // Função para verificar se aluno tem atestado aprovado para a data
-  const temAtestadoAprovado = (alunoId: string): boolean => {
-    const atestadosAluno = atestados[alunoId] || [];
-    return atestadosAluno.length > 0;
-  };
-
-  // Função para salvar observação
   const handleSalvarObservacao = async () => {
     if (!showObservacao || !tituloObservacao.trim() || !descricaoObservacao.trim()) {
-      toast({
-        title: "Erro",
-        description: "Título e descrição são obrigatórios.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: "Título e descrição são obrigatórios.", variant: "destructive" });
       return;
     }
-
     setSalvandoObservacao(true);
     try {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("observacoes_alunos")
         .insert({
           aluno_id: showObservacao.alunoId,
@@ -301,26 +274,21 @@ const ChamadaPage: React.FC = () => {
         });
 
       if (error) throw error;
-
-      toast({
-        title: "Observação salva",
-        description: "A observação foi registrada com sucesso.",
-      });
-
-      // Limpar formulário e fechar modal
+      toast({ title: "Observação salva", description: "A observação foi registrada com sucesso." });
       setTituloObservacao('');
       setDescricaoObservacao('');
       setShowObservacao(null);
     } catch (error) {
       console.error("Erro ao salvar observação:", error);
-      toast({
-        title: "Erro ao salvar observação",
-        description: "Ocorreu um erro ao salvar a observação.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar observação", description: "Ocorreu um erro.", variant: "destructive" });
     } finally {
       setSalvandoObservacao(false);
     }
+  };
+  
+  const temAtestadoAprovado = (alunoId: string): boolean => {
+    const atestadosAluno = atestados[alunoId] || [];
+    return atestadosAluno.length > 0;
   };
 
   if (isLoading) {
@@ -336,7 +304,6 @@ const ChamadaPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 px-2 sm:py-6 sm:px-4 max-w-4xl mx-auto">
-      {/* Status da conexão */}
       {!isOnline && (
         <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-3 py-2 sm:px-4 sm:py-3 rounded mb-4 flex items-center text-sm">
           <WifiOff className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -349,15 +316,9 @@ const ChamadaPage: React.FC = () => {
           <h2 className="text-xl sm:text-2xl font-bold text-purple-700">Chamada</h2>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             {isOnline ? (
-              <div className="flex items-center text-green-600 text-sm">
-                <Wifi className="h-4 w-4 mr-1" />
-                Online
-              </div>
+              <div className="flex items-center text-green-600 text-sm"><Wifi className="h-4 w-4 mr-1" />Online</div>
             ) : (
-              <div className="flex items-center text-yellow-600 text-sm">
-                <WifiOff className="h-4 w-4 mr-1" />
-                Offline
-              </div>
+              <div className="flex items-center text-yellow-600 text-sm"><WifiOff className="h-4 w-4 mr-1" />Offline</div>
             )}
             <Link to="/dashboard">
               <Button variant="outline" className="flex gap-2 w-full sm:w-auto">
@@ -372,9 +333,7 @@ const ChamadaPage: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
             <span className="font-medium text-sm sm:text-base">Data selecionada:</span>{" "}
-            <span className="text-gray-800 text-sm sm:text-base">
-              {format(date, "dd/MM/yyyy")}
-            </span>
+            <span className="text-gray-800 text-sm sm:text-base">{format(date, "dd/MM/yyyy")}</span>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button
@@ -382,17 +341,18 @@ const ChamadaPage: React.FC = () => {
               onClick={() => {
                 setPresencas({});
                 setTentouSalvar(false);
+                setDate(new Date());
               }}
               className="text-red-600 hover:text-red-700 hover:bg-red-50"
             >
               Limpar Seleção
             </Button>
-            <div>
+            <div className="self-center">
               <Calendar 
                 mode="single"
                 selected={date}
-                onSelect={(date) => date && setDate(date)}
-                className="p-3 pointer-events-auto"
+                onSelect={(d) => d && setDate(d)}
+                className="p-3 pointer-events-auto border rounded-md"
               />
             </div>
           </div>
@@ -409,81 +369,71 @@ const ChamadaPage: React.FC = () => {
             return (
               <div
                 key={aluno.id}
-                className={`flex flex-row items-center border rounded p-2 gap-2 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
+                className={`flex flex-col sm:flex-row items-center border rounded-lg p-3 gap-3 transition-all ${semRegistro ? "border-2 border-red-500 bg-red-50" : "border-gray-200"}`}
               >
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 text-center sm:text-left">
                   <span className="font-medium text-sm">{aluno.nome}</span>
-                  <span className="text-xs text-gray-500 ml-2">({aluno.matricula})</span>
+                  <span className="text-xs text-gray-500 ml-2 hidden sm:inline">({aluno.matricula})</span>
                   {temAtestado && (
-                    <span className="ml-2 text-xs text-blue-600 font-semibold">Atestado</span>
+                    <span className="ml-2 text-xs text-blue-600 font-semibold">(Com Atestado)</span>
                   )}
                 </div>
-                <div className="flex flex-row gap-1">
+                <div className="flex flex-row gap-2">
                   <Button
                     variant={presencas[aluno.id] === "presente" ? "default" : "outline"}
                     size="sm"
-                    className={`h-8 px-2 ${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}`}
+                    className={`h-9 px-3 ${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "presente")}
                     title="Presente"
                   >
-                    <Check size={14} />
+                    <Check size={16} /> <span className="hidden sm:inline ml-1">Presente</span>
                   </Button>
                   <Button
                     variant={presencas[aluno.id] === "falta" ? "default" : "outline"}
                     size="sm"
-                    className={`h-8 px-2 ${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}`}
+                    className={`h-9 px-3 ${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "falta")}
                     title="Falta"
                   >
-                    <X size={14} />
+                    <X size={16} /> <span className="hidden sm:inline ml-1">Falta</span>
                   </Button>
                   <Button
                     variant={presencas[aluno.id] === "atestado" ? "default" : "outline"}
                     size="sm"
-                    className={`h-8 px-2 ${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}`}
+                    className={`h-9 px-3 ${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}`}
                     onClick={() => handlePresenca(aluno.id, "atestado")}
                     title="Atestado"
                   >
-                    <FileText size={14} />
+                    <FileText size={16} /> <span className="hidden sm:inline ml-1">Atestado</span>
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
                     onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })}
                     title="Adicionar Observação"
-                    className="h-8 px-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                    className="h-9 w-9 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                   >
-                    <MessageSquare size={14}/>
+                    <MessageSquare size={16}/>
                   </Button>
                 </div>
-                {semRegistro && (
-                  <span className="text-xs text-red-600 font-semibold ml-2">Obrigatório</span>
-                )}
               </div>
             );
           })}
         </div>
         
         <Button 
-          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center h-12" 
+          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center h-12 text-base" 
           onClick={handleSalvar}
           disabled={isSaving || alunos.some(aluno => !presencas[aluno.id])}
         >
           {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 
-              <span className="hidden sm:inline">Salvando...</span>
-              <span className="sm:hidden">Salvando</span>
-            </>
+            <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Salvando...</>
           ) : (
-            <>
-              <Save size={20}/> 
-              <span className="hidden sm:inline">Salvar Chamada</span>
-              <span className="sm:hidden">Salvar</span>
-            </>
+            <><Save size={20}/> Salvar Chamada</>
           )}
         </Button>
       </div>
+      
       <Dialog open={!!showJustificarFalta} onOpenChange={() => setShowJustificarFalta(null)}>
         <DialogContent>
           {showJustificarFalta && (
@@ -495,76 +445,25 @@ const ChamadaPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Observação */}
       <Dialog open={!!showObservacao} onOpenChange={() => setShowObservacao(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-purple-600" />
-              Adicionar Observação
-            </DialogTitle>
-          </DialogHeader>
-          
+          <DialogHeader><DialogTitle>Adicionar Observação</DialogTitle></DialogHeader>
           {showObservacao && (
-            <div className="space-y-4">
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Aluno:</span> {showObservacao.alunoNome}
-                </p>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium">Data:</span> {format(date, "dd/MM/yyyy")}
-                </p>
-              </div>
-              
+            <div className="space-y-4 pt-4">
+              <p className="text-sm text-gray-600">Aluno: <span className="font-medium">{showObservacao.alunoNome}</span></p>
               <div className="space-y-2">
-                <Label htmlFor="titulo">Título da Observação *</Label>
-                <Input
-                  id="titulo"
-                  value={tituloObservacao}
-                  onChange={(e) => setTituloObservacao(e.target.value)}
-                  placeholder="Ex: Comportamento, Participação, etc."
-                />
+                <Label htmlFor="titulo">Título</Label>
+                <Input id="titulo" value={tituloObservacao} onChange={(e) => setTituloObservacao(e.target.value)} />
               </div>
-              
               <div className="space-y-2">
-                <Label htmlFor="descricao">Descrição *</Label>
-                <Textarea
-                  id="descricao"
-                  value={descricaoObservacao}
-                  onChange={(e) => setDescricaoObservacao(e.target.value)}
-                  placeholder="Descreva a observação..."
-                  rows={4}
-                />
+                <Label htmlFor="descricao">Descrição</Label>
+                <Textarea id="descricao" value={descricaoObservacao} onChange={(e) => setDescricaoObservacao(e.target.value)} />
               </div>
-              
-              <div className="flex gap-2 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowObservacao(null);
-                    setTituloObservacao('');
-                    setDescricaoObservacao('');
-                  }}
-                  className="flex-1"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleSalvarObservacao}
-                  disabled={salvandoObservacao || !tituloObservacao.trim() || !descricaoObservacao.trim()}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
-                >
-                  {salvandoObservacao ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Salvar Observação
-                    </>
-                  )}
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowObservacao(null)} className="flex-1">Cancelar</Button>
+                <Button onClick={handleSalvarObservacao} disabled={salvandoObservacao} className="flex-1">
+                  {salvandoObservacao && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar
                 </Button>
               </div>
             </div>

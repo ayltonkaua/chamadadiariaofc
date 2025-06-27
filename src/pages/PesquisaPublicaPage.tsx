@@ -1,6 +1,6 @@
 // src/pages/PesquisaPublicaPage.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 interface Aluno { 
   id: string; 
@@ -42,8 +43,9 @@ const PesquisaPublicaPage: React.FC = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const { escolas, loading: escolasLoading } = useEscolasCadastradas();
     const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
+    const navigate = useNavigate();
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (escolas.length > 0 && !escolaSelecionada) {
             setEscolaSelecionada(escolas[0].id);
         }
@@ -59,23 +61,21 @@ const PesquisaPublicaPage: React.FC = () => {
         try {
             const { data: alunoData, error: alunoError } = await supabase
                 .from('alunos')
-                .select('id, nome, matricula, escola_id')
+                .select('id, nome, matricula, turmas(escola_id)')
                 .eq('matricula', matricula.trim())
                 .ilike('nome', nome.trim())
-                .eq('escola_id', escolaSelecionada)
                 .single();
             
-            if (alunoError || !alunoData) {
+            if (alunoError || !alunoData || (alunoData.turmas as any)?.escola_id !== escolaSelecionada) {
                 toast({ 
                     title: "Aluno não encontrado", 
-                    description: "Verifique o nome completo e a matrícula.", 
+                    description: "Verifique o nome, a matrícula e se a escola selecionada está correta.", 
                     variant: "destructive" 
                 });
                 return;
             }
             setAluno(alunoData);
 
-            // Buscar pesquisas pendentes do aluno
             const { data: pendentesData, error: pendentesError } = await supabase
                 .from('pesquisa_destinatarios')
                 .select(`
@@ -128,7 +128,7 @@ const PesquisaPublicaPage: React.FC = () => {
     };
 
     const handleAnswerSubmit = async () => {
-        if (!pesquisaAtiva) return;
+        if (!pesquisaAtiva || !aluno) return;
         
         const totalPerguntas = pesquisaAtiva.pesquisa_perguntas.length;
         const respostasRespondidas = Object.keys(respostas).length;
@@ -144,11 +144,10 @@ const PesquisaPublicaPage: React.FC = () => {
         
         setLoading(true);
         try {
-            // Salvar as respostas
             const respostasParaInserir = Object.entries(respostas).map(([perguntaId, resposta]) => ({
                 pesquisa_id: pesquisaAtiva.id,
                 pergunta_id: perguntaId,
-                aluno_id: aluno!.id,
+                aluno_id: aluno.id,
                 resposta,
             }));
             
@@ -158,11 +157,10 @@ const PesquisaPublicaPage: React.FC = () => {
             
             if (respostasError) throw respostasError;
             
-            // Atualizar status do destinatário
             const { error: updateError } = await supabase
                 .from('pesquisa_destinatarios')
                 .update({ status_resposta: 'concluida' })
-                .eq('aluno_id', aluno!.id)
+                .eq('aluno_id', aluno.id)
                 .eq('pesquisa_id', pesquisaAtiva.id);
 
             if (updateError) throw updateError;
@@ -172,7 +170,6 @@ const PesquisaPublicaPage: React.FC = () => {
                 description: "Obrigado por participar da pesquisa." 
             });
             
-            // Voltar para a lista e remover a pesquisa respondida
             setPesquisasPendentes(prev => prev.filter(p => p.id !== pesquisaAtiva.id));
             setStep('list');
             setPesquisaAtiva(null);
@@ -202,6 +199,12 @@ const PesquisaPublicaPage: React.FC = () => {
             case 'login':
                 return (
                     <div className="max-w-md mx-auto">
+                         <div className="flex justify-start mb-4">
+                            <Button variant="ghost" onClick={() => navigate('/')}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Voltar ao Início
+                            </Button>
+                        </div>
                         <div className="text-center mb-8">
                             <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Search className="h-8 w-8 text-purple-600" />
@@ -220,6 +223,7 @@ const PesquisaPublicaPage: React.FC = () => {
                                     disabled={escolasLoading}
                                     required
                                 >
+                                    <option value="" disabled>Selecione uma escola</option>
                                     {escolas.map(escola => (
                                         <option key={escola.id} value={escola.id}>{escola.nome}</option>
                                     ))}
@@ -253,21 +257,16 @@ const PesquisaPublicaPage: React.FC = () => {
                                 className="w-full h-12 bg-purple-600 hover:bg-purple-700"
                             >
                                 {searchLoading ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Buscando...
-                                    </>
+                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando...</>
                                 ) : (
-                                    <>
-                                        <Search className="mr-2 h-4 w-4" />
-                                        Buscar Pesquisas
-                                    </>
+                                    <><Search className="mr-2 h-4 w-4" /> Buscar Pesquisas</>
                                 )}
                             </Button>
                         </form>
                     </div>
                 );
-                
+            
+            // ... (O restante dos seus cases 'list' e 'form' permanecem os mesmos)
             case 'list':
                 return (
                     <div className="max-w-2xl mx-auto">
@@ -419,15 +418,9 @@ const PesquisaPublicaPage: React.FC = () => {
                                     className="bg-purple-600 hover:bg-purple-700"
                                 >
                                     {loading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Enviando...
-                                        </>
+                                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...</>
                                     ) : (
-                                        <>
-                                            <Send className="mr-2 h-4 w-4" />
-                                            Enviar Respostas
-                                        </>
+                                        <><Send className="mr-2 h-4 w-4" /> Enviar Respostas</>
                                     )}
                                 </Button>
                             </div>
