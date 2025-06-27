@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AttendanceProvider } from "@/contexts/AttendanceContext";
+import Layout from "@/components/layout/Layout";
 import LoginPage from "@/pages/LoginPage";
 import Dashboard from "@/pages/Dashboard";
 import StudentQueryPage from "@/pages/StudentQueryPage";
@@ -56,31 +57,34 @@ const App = () => {
             <Sonner />
             <Router>
               <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
-                <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
-                <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
-                <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-                <Route path="/atestados" element={<AtestadosPage />} />
-                <Route path="/alertas" element={<AlertasPage />} />
-                <Route path="/student-query" element={<StudentQueryPage />} />
-                <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
-                <Route path="/notificacoes" element={<NotificacoesPage />} />
-                <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
-                <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
-                <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
-                <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
+                {/* Páginas públicas (sem sidebar) */}
+                <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
+                <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
+                <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
+                <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
                 
-                {/* NOVAS ROTAS PARA O MÓDULO DE PESQUISA */}
-                <Route path="/pesquisas" element={<PesquisasListPage />} />
-                <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
-                <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
-                <Route path="/responder-pesquisa" element={<PesquisaPublicaPage />} />
+                {/* Páginas autenticadas (com sidebar) */}
+                <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+                <Route path="/chamadas/:turmaId" element={<Layout><ChamadaPage /></Layout>} />
+                <Route path="/gerenciar-alunos/:turmaId" element={<Layout><GerenciarAlunosPage /></Layout>} />
+                <Route path="/historico-chamada/:turmaId" element={<Layout><HistoricoChamadaPage /></Layout>} />
+                <Route path="/configuracoes" element={<Layout><ConfiguracoesPage /></Layout>} />
+                <Route path="/atestados" element={<Layout><AtestadosPage /></Layout>} />
+                <Route path="/alertas" element={<Layout><AlertasPage /></Layout>} />
+                <Route path="/student-query" element={<Layout><StudentQueryPage /></Layout>} />
+                <Route path="/registro-atrasos" element={<Layout><RegistroAtrasosPage /></Layout>} />
+                <Route path="/notificacoes" element={<Layout><NotificacoesPage /></Layout>} />
+                <Route path="/turmas/:turmaId/alunos" element={<Layout><GerenciarAlunosPage /></Layout>} />
+                <Route path="/turmas/:turmaId/alunos/:alunoId" element={<Layout><AlunoPage /></Layout>} />
+                <Route path="/turmas/:turmaId/chamada" element={<Layout><ChamadaPage /></Layout>} />
+                <Route path="/consultar-faltas" element={<Layout><ConsultarFaltasPage /></Layout>} />
+                
+                {/* Rotas do módulo de pesquisa */}
+                <Route path="/pesquisas" element={<Layout><PesquisasListPage /></Layout>} />
+                <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />
+                <Route path="/pesquisas/:pesquisaId/resultados" element={<Layout><PesquisaResultadosPage /></Layout>} />
 
-                <Route path="*" element={<NotFound />} />
+                <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
               </Routes>
             </Router>
           </TooltipProvider>

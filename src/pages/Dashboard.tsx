@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import TurmasCards from "@/components/TurmasCards";
 import { useAuth } from "@/contexts/AuthContext";
-import { LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FrequenciaGeralChart from "@/components/dashboard/FrequenciaGeralChart";
 import ComparativoTurmasChart from "@/components/dashboard/ComparativoTurmasChart";
@@ -12,7 +10,7 @@ import { DashboardMenu } from "@/components/dashboard/DashboardMenu";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard: React.FC = () => {
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState("graficos");
   const [loading, setLoading] = useState(true);
@@ -38,14 +36,9 @@ const Dashboard: React.FC = () => {
     initializeDashboard();
   }, [user, navigate]);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-gray-600">Carregando dados do dashboard...</p>
         </div>
@@ -55,7 +48,7 @@ const Dashboard: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-red-600">{error}</p>
         </div>
@@ -64,59 +57,44 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-gradient-to-r from-purple-500 to-blue-500 shadow-md">
-        <div className="max-w-7xl mx-auto p-2 sm:p-4 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
-          <h1 className="text-white text-lg sm:text-xl font-bold text-center w-full sm:w-auto">
-            Chamada Diária
-          </h1>
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
-            <DashboardMenu />
-            <Button
-              onClick={handleLogout}
-              variant="ghost"
-              className="flex items-center gap-2 text-white hover:bg-white/10 py-2 px-4 rounded-lg transition-colors w-full sm:w-auto"
-              title="Sair"
-            >
-              <LogOut size={22} /> <span className="hidden sm:inline">Sair</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-      
-      <main className="max-w-7xl mx-auto p-4 mt-6">
-        {/* Cards Informativos */}
-        <div className="mb-8">
-          <InfoCards />
-        </div>
+    <div className="p-6">
+      {/* Header da página */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+        <p className="text-gray-600">Visão geral do sistema de chamadas</p>
+      </div>
 
-        <div className="mb-8">
-          <Tabs defaultValue="graficos" value={tabValue} onValueChange={setTabValue}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="graficos">Gráficos</TabsTrigger>
-              <TabsTrigger value="turmas">Turmas</TabsTrigger>
-            </TabsList>
-            <TabsContent value="graficos">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <FrequenciaGeralChart />
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <ComparativoTurmasChart />
-                </div>
+      {/* Cards Informativos */}
+      <div className="mb-8">
+        <InfoCards />
+      </div>
+
+      <div className="mb-8">
+        <Tabs defaultValue="graficos" value={tabValue} onValueChange={setTabValue}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="graficos">Gráficos</TabsTrigger>
+            <TabsTrigger value="turmas">Turmas</TabsTrigger>
+          </TabsList>
+          <TabsContent value="graficos">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <FrequenciaGeralChart />
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <EvolucaoAlunoChart />
+              <div className="bg-white p-6 rounded-lg shadow-sm border">
+                <ComparativoTurmasChart />
               </div>
-            </TabsContent>
-            <TabsContent value="turmas">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <TurmasCards />
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <EvolucaoAlunoChart />
+            </div>
+          </TabsContent>
+          <TabsContent value="turmas">
+            <div className="bg-white p-6 rounded-lg shadow-sm border">
+              <TurmasCards />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 };
