@@ -1,5 +1,3 @@
-// src/App.tsx
-
 import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -24,12 +22,10 @@ import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
 import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
-
-// Importe as novas páginas de pesquisa que você irá criar
-import PesquisasListPage from "./pages/PesquisasListPage";
-import PesquisaCreatePage from "./pages/PesquisaCreatePage";
-import PesquisaResultadosPage from "./pages/PesquisaResultadosPage";
-import PesquisaPublicaPage from "./pages/PesquisaPublicaPage";
+import PesquisasListPage from "@/pages/PesquisasListPage";
+import PesquisaCreatePage from "@/pages/PesquisaCreatePage";
+import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
+import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
 
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
