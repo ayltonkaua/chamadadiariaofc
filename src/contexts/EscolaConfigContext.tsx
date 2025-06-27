@@ -10,9 +10,9 @@ type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "criado_em" | "at
 const defaultConfig: EscolaConfig = {
   nome: "",
   endereco: null,
-  email: null,
+  email: "",
   telefone: null,
-  url_logo: null, 
+  url_logo: null,
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
 };
@@ -37,7 +37,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -45,7 +45,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria")
         .eq("id", user.escola_id)
         .single();
-      
+
       if (error) throw error;
       if (data) setConfig(data);
     } catch (error) {
@@ -75,7 +75,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
           .from("escola_configuracao")
           .update(newConfig)
           .eq("id", user.escola_id);
-          
+
         if (error) throw error;
         toast({ title: "Sucesso!", description: "Configurações da escola atualizadas." });
 
@@ -85,11 +85,11 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         });
 
         if (error) throw error;
-        
+
         toast({ title: "Escola Criada!", description: "O perfil da sua escola foi criado com sucesso." });
         await refreshUserData();
       }
-      
+
       await fetchConfig();
 
     } catch (error: any) {

@@ -96,10 +96,10 @@ const EscolaConfigForm: React.FC = () => {
                     <div>
                         <Label>Pré-visualização</Label>
                         <div className="mt-2 w-32 h-32 flex items-center justify-center border rounded-md overflow-hidden bg-slate-50">
-                            <img 
-                                src={formData.url_logo} 
-                                alt="Preview do logo" 
-                                className="object-contain max-w-full max-h-full" 
+                            <img
+                                src={formData.url_logo}
+                                alt="Preview do logo"
+                                className="object-contain max-w-full max-h-full"
                                 onError={(e) => e.currentTarget.style.display = 'none'}
                                 onLoad={(e) => e.currentTarget.style.display = 'block'}
                             />
@@ -107,7 +107,7 @@ const EscolaConfigForm: React.FC = () => {
                     </div>
                 )}
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <Label htmlFor="cor_primaria">Cor Primária</Label>
