@@ -19,17 +19,17 @@ import {
   limparSessaoChamada,
   sincronizarChamadasOffline
 } from '@/lib/offlineChamada';
-
-// Cliente Supabase genérico para contornar problemas de tipo
-const supabaseGeneric = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface Aluno {
   id: string;
   nome: string;
   matricula: string;
+  turma_id: string;
 }
 
 interface Atestado {
@@ -44,6 +44,9 @@ type Presenca = "presente" | "falta" | "atestado" | null;
 
 const ChamadaPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
+  const { user } = useAuth();
+  const { config: escolaConfig } = useEscolaConfig();
+  const { escolas } = useEscolasCadastradas();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [presencas, setPresencas] = useState<Record<string, Presenca | null>>({});
   const [atestados, setAtestados] = useState<Record<string, Atestado[]>>({});
@@ -54,6 +57,9 @@ const ChamadaPage: React.FC = () => {
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoading, setIsLoading] = useState(true);
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [turmaSelecionada, setTurmaSelecionada] = useState<string>("");
   
   // Estados para observação
   const [tituloObservacao, setTituloObservacao] = useState('');
@@ -103,7 +109,7 @@ const ChamadaPage: React.FC = () => {
         // Carregar alunos
         const { data: alunosData, error: alunosError } = await supabase
           .from("alunos")
-          .select("id, nome, matricula")
+          .select("id, nome, matricula, turma_id")
           .eq("turma_id", turmaId);
         
         if (alunosError) throw alunosError;
@@ -272,7 +278,7 @@ const ChamadaPage: React.FC = () => {
 
     setSalvandoObservacao(true);
     try {
-      const { error } = await (supabaseGeneric as any)
+      const { error } = await (supabase as any)
         .from("observacoes_alunos")
         .insert({
           aluno_id: showObservacao.alunoId,
@@ -280,7 +286,7 @@ const ChamadaPage: React.FC = () => {
           titulo: tituloObservacao.trim(),
           descricao: descricaoObservacao.trim(),
           data_observacao: format(date, "yyyy-MM-dd"),
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user?.id,
         });
 
       if (error) throw error;

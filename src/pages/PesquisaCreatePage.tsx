@@ -1,407 +1,455 @@
 // src/pages/PesquisaCreatePage.tsx
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, ArrowLeft, Loader2, FileText, Users, Settings } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Save, Loader2, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
-// Tipos
 interface Pergunta {
-  texto_pergunta: string;
+  id: string;
+  texto: string;
   opcoes: string[];
 }
-interface Turma { id: string; nome: string; }
-interface Aluno { id: string; nome: string; }
-
-// Cliente Supabase genérico
-const supabaseGeneric = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 const PesquisaCreatePage: React.FC = () => {
+  const { user } = useAuth();
+  const { config: escolaConfig } = useEscolaConfig();
+  const { escolas } = useEscolasCadastradas();
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [perguntas, setPerguntas] = useState<Pergunta[]>([{ texto_pergunta: '', opcoes: ['', ''] }]);
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [turmaIdSelecionada, setTurmaIdSelecionada] = useState<string>('');
-  const [alunosDaTurma, setAlunosDaTurma] = useState<Aluno[]>([]);
-  const [alunosSelecionados, setAlunosSelecionados] = useState<Set<string>>(new Set());
+  const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [turmasSelecionadas, setTurmasSelecionadas] = useState<string[]>([]);
 
   useEffect(() => {
-    const fetchTurmas = async () => {
-      if (!user) return;
-      setIsLoadingData(true);
-      try {
-        const { data } = await supabaseGeneric.from('turmas').select('id, nome').eq('user_id', user.id);
-        setTurmas(data || []);
-      } catch (error) {
-        toast({ title: 'Erro ao carregar turmas', variant: 'destructive' });
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-    fetchTurmas();
-  }, [user]);
+    if (escolas.length > 0 && !escolaSelecionada) {
+      setEscolaSelecionada(escolas[0].id);
+    }
+  }, [escolas]);
 
   useEffect(() => {
-    const fetchAlunos = async () => {
-      if (!turmaIdSelecionada) {
-        setAlunosDaTurma([]);
-        setAlunosSelecionados(new Set());
-        return;
-      }
-      try {
-        const { data } = await supabaseGeneric.from('alunos').select('id, nome').eq('turma_id', turmaIdSelecionada).order('nome');
-        setAlunosDaTurma(data || []);
-      } catch (error) {
-        toast({ title: 'Erro ao carregar alunos', variant: 'destructive' });
-      }
-    };
-    fetchAlunos();
-  }, [turmaIdSelecionada]);
-
-  const handleAddPergunta = () => {
-    setPerguntas([...perguntas, { texto_pergunta: '', opcoes: ['', ''] }]);
-  };
-
-  const handleRemovePergunta = (index: number) => {
-    if (perguntas.length > 1) {
-      setPerguntas(perguntas.filter((_, i) => i !== index));
-    } else {
-      toast({ title: 'Erro', description: 'A pesquisa deve ter pelo menos uma pergunta.', variant: 'destructive' });
+    if (escolaSelecionada) {
+      carregarTurmas();
     }
-  };
+  }, [escolaSelecionada]);
 
-  const handlePerguntaChange = (index: number, value: string) => {
-    const novasPerguntas = [...perguntas];
-    novasPerguntas[index].texto_pergunta = value;
-    setPerguntas(novasPerguntas);
-  };
-
-  const handleOpcaoChange = (pIndex: number, oIndex: number, value: string) => {
-    const novasPerguntas = [...perguntas];
-    novasPerguntas[pIndex].opcoes[oIndex] = value;
-    setPerguntas(novasPerguntas);
-  };
-
-  const handleAddOpcao = (pIndex: number) => {
-    const novasPerguntas = [...perguntas];
-    novasPerguntas[pIndex].opcoes.push('');
-    setPerguntas(novasPerguntas);
-  };
-  
-  const handleRemoveOpcao = (pIndex: number, oIndex: number) => {
-    const novasPerguntas = [...perguntas];
-    if (novasPerguntas[pIndex].opcoes.length > 2) {
-      novasPerguntas[pIndex].opcoes.splice(oIndex, 1);
-      setPerguntas(novasPerguntas);
-    } else {
-      toast({ title: 'Erro', description: 'Cada pergunta deve ter pelo menos 2 opções.', variant: 'destructive' });
-    }
-  };
-  
-  const handleAlunoToggle = (alunoId: string) => {
-      const novosSelecionados = new Set(alunosSelecionados);
-      if (novosSelecionados.has(alunoId)) {
-          novosSelecionados.delete(alunoId);
-      } else {
-          novosSelecionados.add(alunoId);
-      }
-      setAlunosSelecionados(novosSelecionados);
-  };
-
-  const handleSalvar = async () => {
-    setLoading(true);
-    if (!titulo || perguntas.length === 0 || alunosSelecionados.size === 0) {
-      toast({ title: "Erro de Validação", description: "Título, ao menos uma pergunta, e ao menos um aluno devem ser selecionados.", variant: "destructive" });
-      setLoading(false);
-      return;
-    }
-
+  const carregarTurmas = async () => {
     try {
-      // Criar a pesquisa
-      const { data: pData, error: pError } = await supabaseGeneric
+      const { data, error } = await supabase
+        .from('turmas')
+        .select('*')
+        .eq('escola_id', escolaSelecionada)
+        .order('nome');
+
+      if (error) throw error;
+      setTurmas(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar turmas:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as turmas.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const adicionarPergunta = () => {
+    const novaPergunta: Pergunta = {
+      id: Date.now().toString(),
+      texto: '',
+      opcoes: ['', '']
+    };
+    setPerguntas([...perguntas, novaPergunta]);
+  };
+
+  const removerPergunta = (id: string) => {
+    setPerguntas(perguntas.filter(p => p.id !== id));
+  };
+
+  const atualizarPergunta = (id: string, campo: 'texto' | 'opcoes', valor: string | string[]) => {
+    setPerguntas(perguntas.map(p => 
+      p.id === id ? { ...p, [campo]: valor } : p
+    ));
+  };
+
+  const adicionarOpcao = (perguntaId: string) => {
+    setPerguntas(perguntas.map(p => 
+      p.id === perguntaId 
+        ? { ...p, opcoes: [...p.opcoes, ''] }
+        : p
+    ));
+  };
+
+  const removerOpcao = (perguntaId: string, index: number) => {
+    setPerguntas(perguntas.map(p => 
+      p.id === perguntaId 
+        ? { ...p, opcoes: p.opcoes.filter((_, i) => i !== index) }
+        : p
+    ));
+  };
+
+  const atualizarOpcao = (perguntaId: string, index: number, valor: string) => {
+    setPerguntas(perguntas.map(p => 
+      p.id === perguntaId 
+        ? { ...p, opcoes: p.opcoes.map((opcao, i) => i === index ? valor : opcao) }
+        : p
+    ));
+  };
+
+  const validarFormulario = () => {
+    if (!titulo.trim()) {
+      toast({
+        title: "Título obrigatório",
+        description: "Digite um título para a pesquisa.",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    if (perguntas.length === 0) {
+      toast({
+        title: "Perguntas obrigatórias",
+        description: "Adicione pelo menos uma pergunta.",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    for (const pergunta of perguntas) {
+      if (!pergunta.texto.trim()) {
+        toast({
+          title: "Pergunta inválida",
+          description: "Todas as perguntas devem ter um texto.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      if (pergunta.opcoes.length < 2) {
+        toast({
+          title: "Opções insuficientes",
+          description: "Cada pergunta deve ter pelo menos 2 opções.",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      for (const opcao of pergunta.opcoes) {
+        if (!opcao.trim()) {
+          toast({
+            title: "Opção inválida",
+            description: "Todas as opções devem ter um texto.",
+            variant: "destructive"
+          });
+          return false;
+        }
+      }
+    }
+
+    if (turmasSelecionadas.length === 0) {
+      toast({
+        title: "Turmas obrigatórias",
+        description: "Selecione pelo menos uma turma.",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const criarPesquisa = async () => {
+    if (!validarFormulario() || !user) return;
+
+    setLoading(true);
+    try {
+      // 1. Criar a pesquisa
+      const { data: pesquisaData, error: pesquisaError } = await supabase
         .from('pesquisas')
-        .insert({ 
-          user_id: user!.id, 
-          titulo, 
-          descricao, 
-          status: 'ativa' 
+        .insert({
+          titulo: titulo.trim(),
+          descricao: descricao.trim() || null,
+          status: 'ativa',
+          escola_id: escolaSelecionada
         })
         .select()
         .single();
 
-      if (pError || !pData) {
-        throw pError || new Error("Falha ao criar pesquisa.");
-      }
+      if (pesquisaError) throw pesquisaError;
 
-      // Salvar as perguntas
-      const perguntasParaSalvar = perguntas.map((p, i) => ({ 
-        pesquisa_id: pData.id, 
-        texto_pergunta: p.texto_pergunta, 
-        tipo_pergunta: 'multipla_escolha', 
-        opcoes: p.opcoes, 
-        ordem: i 
+      // 2. Criar as perguntas
+      const perguntasParaInserir = perguntas.map(pergunta => ({
+        pesquisa_id: pesquisaData.id,
+        texto_pergunta: pergunta.texto.trim(),
+        opcoes: pergunta.opcoes.map(opcao => opcao.trim())
       }));
-      
-      const { error: perguntasError } = await supabaseGeneric
+
+      const { error: perguntasError } = await supabase
         .from('pesquisa_perguntas')
-        .insert(perguntasParaSalvar);
-      
+        .insert(perguntasParaInserir);
+
       if (perguntasError) throw perguntasError;
 
-      // Salvar os destinatários
-      const destinatarios = Array.from(alunosSelecionados).map(alunoId => ({ 
-        pesquisa_id: pData.id, 
-        aluno_id: alunoId,
-        status_resposta: 'pendente'
-      }));
-      
-      const { error: destinatariosError } = await supabaseGeneric
-        .from('pesquisa_destinatarios')
-        .insert(destinatarios);
-      
-      if (destinatariosError) throw destinatariosError;
+      // 3. Buscar alunos das turmas selecionadas
+      const { data: alunosData, error: alunosError } = await supabase
+        .from('alunos')
+        .select('id')
+        .in('turma_id', turmasSelecionadas);
 
-      toast({ title: "Pesquisa publicada com sucesso!" });
-      navigate('/pesquisas');
+      if (alunosError) throw alunosError;
+
+      // 4. Criar destinatários
+      if (alunosData && alunosData.length > 0) {
+        const destinatariosParaInserir = alunosData.map(aluno => ({
+          pesquisa_id: pesquisaData.id,
+          aluno_id: aluno.id,
+          status_resposta: 'pendente'
+        }));
+
+        const { error: destinatariosError } = await supabase
+          .from('pesquisa_destinatarios')
+          .insert(destinatariosParaInserir);
+
+        if (destinatariosError) throw destinatariosError;
+      }
+
+      toast({
+        title: "Pesquisa criada com sucesso!",
+        description: `A pesquisa foi enviada para ${alunosData?.length || 0} alunos.`,
+      });
+
+      // Limpar formulário
+      setTitulo('');
+      setDescricao('');
+      setPerguntas([]);
+      setTurmasSelecionadas([]);
+
     } catch (error) {
-      console.error('Erro ao salvar pesquisa:', error);
-      toast({ 
-        title: "Erro ao salvar pesquisa", 
-        description: (error as Error).message, 
-        variant: "destructive" 
+      console.error('Erro ao criar pesquisa:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível criar a pesquisa. Tente novamente.",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
 
-  if (isLoadingData) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-purple-600" />
-          <p className="text-gray-600">Carregando dados...</p>
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center gap-4">
+        <Button
+          variant="ghost"
+          onClick={() => window.history.back()}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold" style={{ color: escolaConfig?.cor_primaria }}>
+            Criar Nova Pesquisa
+          </h1>
+          <p className="text-gray-600 mt-2">Crie uma pesquisa para coletar feedback dos alunos</p>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto p-4 max-w-6xl">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Nova Pesquisa</h1>
-              <p className="text-gray-600 mt-1">Crie uma nova pesquisa para coletar dados dos alunos</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button variant="outline" onClick={() => navigate('/pesquisas')} className="w-full sm:w-auto">
-                <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-              </Button>
-            </div>
+      {/* Seletor de Escola */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Selecionar Escola</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <select
+            className="w-full p-2 border rounded-md"
+            value={escolaSelecionada}
+            onChange={(e) => setEscolaSelecionada(e.target.value)}
+          >
+            <option value="">Selecione uma escola</option>
+            {escolas.map(escola => (
+              <option key={escola.id} value={escola.id}>{escola.nome}</option>
+            ))}
+          </select>
+        </CardContent>
+      </Card>
+
+      {/* Informações da Pesquisa */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Informações da Pesquisa</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="titulo">Título *</Label>
+            <Input
+              id="titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Digite o título da pesquisa"
+              className="mt-1"
+            />
           </div>
-        </div>
+          
+          <div>
+            <Label htmlFor="descricao">Descrição (opcional)</Label>
+            <Textarea
+              id="descricao"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Digite uma descrição para a pesquisa"
+              className="mt-1"
+              rows={3}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Formulário Principal */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Informações Básicas */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Informações da Pesquisa
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="titulo">Título da Pesquisa *</Label>
-                  <Input 
-                    id="titulo" 
-                    value={titulo} 
-                    onChange={e => setTitulo(e.target.value)}
-                    placeholder="Ex: Avaliação do curso de Matemática"
+      {/* Seleção de Turmas */}
+      {escolaSelecionada && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Selecionar Turmas *</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {turmas.map(turma => (
+                <label key={turma.id} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={turmasSelecionadas.includes(turma.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setTurmasSelecionadas([...turmasSelecionadas, turma.id]);
+                      } else {
+                        setTurmasSelecionadas(turmasSelecionadas.filter(id => id !== turma.id));
+                      }
+                    }}
+                    className="rounded"
                   />
+                  <span>{turma.nome}</span>
+                </label>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Perguntas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Perguntas da Pesquisa</span>
+            <Button
+              onClick={adicionarPergunta}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar Pergunta
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {perguntas.map((pergunta, index) => (
+            <div key={pergunta.id} className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium">Pergunta {index + 1}</h4>
+                <Button
+                  onClick={() => removerPergunta(pergunta.id)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div>
+                <Label>Texto da Pergunta *</Label>
+                <Input
+                  value={pergunta.texto}
+                  onChange={(e) => atualizarPergunta(pergunta.id, 'texto', e.target.value)}
+                  placeholder="Digite a pergunta"
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Opções de Resposta *</Label>
+                  <Button
+                    onClick={() => adicionarOpcao(pergunta.id)}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Adicionar Opção
+                  </Button>
                 </div>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="descricao">Descrição (Opcional)</Label>
-                  <Textarea 
-                    id="descricao" 
-                    value={descricao} 
-                    onChange={e => setDescricao(e.target.value)}
-                    placeholder="Descreva o objetivo da pesquisa..."
-                    rows={3}
-                  />
+                  {pergunta.opcoes.map((opcao, opcaoIndex) => (
+                    <div key={opcaoIndex} className="flex items-center gap-2">
+                      <Input
+                        value={opcao}
+                        onChange={(e) => atualizarOpcao(pergunta.id, opcaoIndex, e.target.value)}
+                        placeholder={`Opção ${opcaoIndex + 1}`}
+                        className="flex-1"
+                      />
+                      {pergunta.opcoes.length > 2 && (
+                        <Button
+                          onClick={() => removerOpcao(pergunta.id, opcaoIndex)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+          ))}
+          
+          {perguntas.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <p>Nenhuma pergunta adicionada</p>
+              <p className="text-sm">Clique em "Adicionar Pergunta" para começar</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-            {/* Perguntas */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Perguntas da Pesquisa
-                  <Badge variant="secondary">{perguntas.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {perguntas.map((pergunta, pIndex) => (
-                  <Card key={pIndex} className="p-4 bg-gray-50/50 border-2">
-                    <div className="flex justify-between items-center mb-4">
-                      <Label className="font-semibold text-gray-700">Pergunta {pIndex + 1}</Label>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleRemovePergunta(pIndex)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Textarea 
-                      placeholder="Digite sua pergunta aqui..." 
-                      value={pergunta.texto_pergunta} 
-                      onChange={e => handlePerguntaChange(pIndex, e.target.value)}
-                      className="mb-4"
-                    />
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Opções de Resposta</Label>
-                      {pergunta.opcoes.map((opcao, oIndex) => (
-                        <div key={oIndex} className="flex items-center gap-2">
-                          <div className="w-4 h-4 rounded-full bg-purple-200 flex items-center justify-center text-xs font-bold text-purple-700">
-                            {String.fromCharCode(65 + oIndex)}
-                          </div>
-                          <Input 
-                            placeholder={`Opção ${oIndex + 1}`} 
-                            value={opcao} 
-                            onChange={e => handleOpcaoChange(pIndex, oIndex, e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleRemoveOpcao(pIndex, oIndex)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleAddOpcao(pIndex)}
-                        className="w-full"
-                      >
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Adicionar Opção
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-                <Button 
-                  variant="outline" 
-                  onClick={handleAddPergunta}
-                  className="w-full"
-                >
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  Adicionar Pergunta
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar - Destinatários */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Destinatários
-                  <Badge variant="secondary">{alunosSelecionados.size}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="turma">Selecione a Turma</Label>
-                  <Select value={turmaIdSelecionada} onValueChange={setTurmaIdSelecionada}>
-                    <SelectTrigger className="mt-2">
-                      <SelectValue placeholder="Escolha uma turma..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {turmas.map(turma => (
-                        <SelectItem key={turma.id} value={turma.id}>
-                          {turma.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {alunosDaTurma.length > 0 && (
-                  <div>
-                    <Label>Selecione os Alunos</Label>
-                    <div className="max-h-60 overflow-y-auto border rounded-md p-3 mt-2 space-y-2 bg-gray-50">
-                      {alunosDaTurma.map(aluno => (
-                        <div key={aluno.id} className="flex items-center space-x-2">
-                          <Checkbox 
-                            id={`aluno-${aluno.id}`} 
-                            checked={alunosSelecionados.has(aluno.id)} 
-                            onCheckedChange={() => handleAlunoToggle(aluno.id)} 
-                          />
-                          <Label 
-                            htmlFor={`aluno-${aluno.id}`}
-                            className="text-sm cursor-pointer hover:text-purple-600"
-                          >
-                            {aluno.nome}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <Button 
-                  onClick={handleSalvar} 
-                  disabled={loading || !titulo || perguntas.length === 0 || alunosSelecionados.size === 0}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Publicando...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="mr-2 h-4 w-4" />
-                      Publicar Pesquisa
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+      {/* Botão de Salvar */}
+      <div className="flex justify-end">
+        <Button
+          onClick={criarPesquisa}
+          disabled={loading}
+          style={{ backgroundColor: escolaConfig?.cor_primaria }}
+          className="flex items-center gap-2"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          {loading ? 'Criando...' : 'Criar Pesquisa'}
+        </Button>
       </div>
     </div>
   );

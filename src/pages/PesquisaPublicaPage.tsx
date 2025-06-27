@@ -1,7 +1,6 @@
 // src/pages/PesquisaPublicaPage.tsx
 
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +10,7 @@ import { Loader2, Send, User, FileText, CheckCircle, AlertCircle, ArrowLeft, Sea
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Aluno { 
   id: string; 
@@ -29,12 +29,6 @@ interface PesquisaPendente {
       opcoes: string[] 
     }[];
 }
-
-// Cliente Supabase genérico para contornar problemas de tipo
-const supabaseGeneric = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 const PesquisaPublicaPage: React.FC = () => {
     const [step, setStep] = useState<'login' | 'list' | 'form'>('login');
@@ -63,7 +57,7 @@ const PesquisaPublicaPage: React.FC = () => {
         }
         setSearchLoading(true);
         try {
-            const { data: alunoData, error: alunoError } = await supabaseGeneric
+            const { data: alunoData, error: alunoError } = await supabase
                 .from('alunos')
                 .select('id, nome, matricula, escola_id')
                 .eq('matricula', matricula.trim())
@@ -82,7 +76,7 @@ const PesquisaPublicaPage: React.FC = () => {
             setAluno(alunoData);
 
             // Buscar pesquisas pendentes do aluno
-            const { data: pendentesData, error: pendentesError } = await supabaseGeneric
+            const { data: pendentesData, error: pendentesError } = await supabase
                 .from('pesquisa_destinatarios')
                 .select(`
                     status_resposta,
@@ -158,14 +152,14 @@ const PesquisaPublicaPage: React.FC = () => {
                 resposta,
             }));
             
-            const { error: respostasError } = await supabaseGeneric
+            const { error: respostasError } = await supabase
                 .from('pesquisa_respostas')
                 .insert(respostasParaInserir);
             
             if (respostasError) throw respostasError;
             
             // Atualizar status do destinatário
-            const { error: updateError } = await supabaseGeneric
+            const { error: updateError } = await supabase
                 .from('pesquisa_destinatarios')
                 .update({ status_resposta: 'concluida' })
                 .eq('aluno_id', aluno!.id)
@@ -215,7 +209,6 @@ const PesquisaPublicaPage: React.FC = () => {
                             <h2 className="text-2xl font-bold text-gray-900 mb-2">Consultar Pesquisas</h2>
                             <p className="text-gray-600">Identifique-se para ver suas pesquisas pendentes</p>
                         </div>
-                        
                         <form onSubmit={handleLogin} className="space-y-6">
                             <div className="space-y-2">
                                 <Label htmlFor="escola-select" className="text-sm font-medium">Escola</Label>
@@ -441,28 +434,16 @@ const PesquisaPublicaPage: React.FC = () => {
                         </div>
                     </div>
                 );
+                
+            default:
+                return null;
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
-            <div className="container mx-auto px-4 py-8">
-                <div className="max-w-4xl mx-auto">
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
-                            Sistema de Pesquisas
-                        </h1>
-                        <p className="text-gray-600 text-lg">
-                            Participe das pesquisas da sua instituição
-                        </p>
-                    </div>
-                    
-                    <Card className="shadow-xl border-0">
-                        <CardContent className="p-8">
-                            {renderStep()}
-                        </CardContent>
-                    </Card>
-                </div>
+        <div className="min-h-screen bg-gray-50 py-8">
+            <div className="container mx-auto px-4">
+                {renderStep()}
             </div>
         </div>
     );

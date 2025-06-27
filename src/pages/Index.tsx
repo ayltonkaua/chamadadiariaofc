@@ -8,6 +8,7 @@ import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm"
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 
@@ -110,6 +111,7 @@ const Index: React.FC = () => {
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-md sm:max-w-lg">
+                <DialogTitle>Justificar Falta</DialogTitle>
                 <JustificarFaltaForm onClose={() => setShowForm(false)} />
               </DialogContent>
             </Dialog>
