@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
 
 // Tipos
 interface User {
@@ -24,6 +25,34 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Função para buscar dados do usuário da tabela user_roles
+  const fetchUserData = async (userId: string): Promise<{ escola_id?: string; role?: string }> => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('escola_id, role')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.warn('Erro ao buscar dados do usuário:', error);
+        return {};
+      }
+
+      if (data) {
+        return {
+          escola_id: data.escola_id,
+          role: data.role
+        };
+      }
+
+      return {};
+    } catch (err) {
+      console.warn('Erro ao acessar tabela user_roles:', err);
+      return {};
+    }
+  };
 
   // Cadastro
   const register = async (username: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -56,15 +85,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return false;
     }
 
-    // Extrai username e escola_id dos metadados do usuário
+    // Extrai username dos metadados do usuário
     const username = sessionData.user.user_metadata?.username || "";
-    const escola_id = sessionData.user.user_metadata?.escola_id || undefined;
+    
+    // Busca escola_id e role da tabela user_roles
+    const userData = await fetchUserData(sessionData.user.id);
 
     setUser({
       id: sessionData.user.id,
       username,
       email: sessionData.user.email || "",
-      escola_id,
+      escola_id: userData.escola_id,
+      role: userData.role,
     });
     setIsAuthenticated(true);
     return true;
@@ -81,11 +113,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const getSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Extrai username dos metadados do usuário
+        const username = user.user_metadata?.username || "";
+        
+        // Busca escola_id e role da tabela user_roles
+        const userData = await fetchUserData(user.id);
+
         setUser({
           id: user.id,
-          username: user.user_metadata?.username || "",
+          username,
           email: user.email || "",
-          escola_id: user.user_metadata?.escola_id || undefined,
+          escola_id: userData.escola_id,
+          role: userData.role,
         });
         setIsAuthenticated(true);
       } else {

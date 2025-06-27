@@ -237,6 +237,48 @@ export type Database = {
         };
         Relationships: [];
       },
+      user_roles: {
+        Row: {
+          id: string;
+          user_id: string;
+          escola_id: string;
+          role: 'admin' | 'diretor' | 'coordenador' | 'professor' | 'secretario';
+          criado_em: string | null;
+          atualizado_em: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          escola_id: string;
+          role: 'admin' | 'diretor' | 'coordenador' | 'professor' | 'secretario';
+          criado_em?: string | null;
+          atualizado_em?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          escola_id?: string;
+          role?: 'admin' | 'diretor' | 'coordenador' | 'professor' | 'secretario';
+          criado_em?: string | null;
+          atualizado_em?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_escola_id_fkey",
+            columns: ["escola_id"],
+            isOneToOne: false,
+            referencedRelation: "escola_configuracao",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_user_id_fkey",
+            columns: ["user_id"],
+            isOneToOne: false,
+            referencedRelation: "users",
+            referencedColumns: ["id"]
+          }
+        ];
+      },
     }
     Views: {
       alunos_faltosos: {
