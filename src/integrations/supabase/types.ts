@@ -198,6 +198,45 @@ export type Database = {
           }
         ];
       },
+      escola_configuracao: {
+        Row: {
+          id: string;
+          nome: string;
+          endereco: string;
+          telefone: string;
+          email: string;
+          criado_em: string;
+          atualizado_em: string;
+          cor_primaria: string;
+          cor_secundaria: string;
+          url_logo: string | null;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          endereco: string;
+          telefone: string;
+          email: string;
+          criado_em?: string;
+          atualizado_em?: string;
+          cor_primaria: string;
+          cor_secundaria: string;
+          url_logo?: string | null;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          endereco?: string;
+          telefone?: string;
+          email?: string;
+          criado_em?: string;
+          atualizado_em?: string;
+          cor_primaria?: string;
+          cor_secundaria?: string;
+          url_logo?: string | null;
+        };
+        Relationships: [];
+      },
     }
     Views: {
       alunos_faltosos: {

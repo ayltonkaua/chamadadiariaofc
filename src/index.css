@@ -1,7 +1,253 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Variáveis CSS para o tema da escola */
+:root {
+  --escola-primary: #7c3aed;
+  --escola-secondary: #f3f4f6;
+  --escola-primary-light: #7c3aed20;
+  --escola-primary-lighter: #7c3aed10;
+  --escola-primary-dark: #7c3aeddd;
+  --escola-primary-darker: #7c3aedbb;
+}
+
+/* Classes utilitárias para o tema da escola */
+.escola-primary {
+  color: var(--escola-primary);
+}
+
+.escola-primary-bg {
+  background-color: var(--escola-primary);
+}
+
+.escola-secondary-bg {
+  background-color: var(--escola-secondary);
+}
+
+.escola-primary-border {
+  border-color: var(--escola-primary);
+}
+
+.escola-primary-light-bg {
+  background-color: var(--escola-primary-light);
+}
+
+.escola-primary-lighter-bg {
+  background-color: var(--escola-primary-lighter);
+}
+
+/* Hover states */
+.hover\:escola-primary-light:hover {
+  background-color: var(--escola-primary-light);
+}
+
+.hover\:escola-primary-lighter:hover {
+  background-color: var(--escola-primary-lighter);
+}
+
+/* Focus states */
+.focus\:escola-primary:focus {
+  border-color: var(--escola-primary);
+  box-shadow: 0 0 0 2px var(--escola-primary-light);
+}
+
+/* Botões com tema da escola */
+.btn-escola-primary {
+  background-color: var(--escola-primary);
+  color: white;
+  border: 1px solid var(--escola-primary);
+}
+
+.btn-escola-primary:hover {
+  background-color: var(--escola-primary-dark);
+  border-color: var(--escola-primary-dark);
+}
+
+.btn-escola-secondary {
+  background-color: transparent;
+  color: var(--escola-primary);
+  border: 1px solid var(--escola-primary);
+}
+
+.btn-escola-secondary:hover {
+  background-color: var(--escola-primary-lighter);
+}
+
+/* Cards com tema da escola */
+.card-escola {
+  border: 1px solid var(--escola-primary-light);
+  background-color: var(--escola-secondary);
+}
+
+/* Links com tema da escola */
+.link-escola {
+  color: var(--escola-primary);
+}
+
+.link-escola:hover {
+  color: var(--escola-primary-dark);
+  background-color: var(--escola-primary-lighter);
+}
+
+.link-escola-active {
+  background-color: var(--escola-primary-light);
+  color: var(--escola-primary);
+}
+
+/* Badges com tema da escola */
+.badge-escola {
+  background-color: var(--escola-primary-light);
+  color: var(--escola-primary);
+}
+
+/* Inputs com tema da escola */
+.input-escola:focus {
+  border-color: var(--escola-primary);
+  box-shadow: 0 0 0 2px var(--escola-primary-light);
+}
+
+/* Transições suaves para mudanças de tema */
+* {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Scrollbar personalizada com tema da escola */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--escola-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--escola-primary-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--escola-primary);
+}
+
+/* Seleção de texto com tema da escola */
+::selection {
+  background-color: var(--escola-primary-light);
+  color: var(--escola-primary);
+}
+
+/* Placeholder com tema da escola */
+::placeholder {
+  color: var(--escola-primary-light);
+}
+
+/* Loading spinner com tema da escola */
+.spinner-escola {
+  border: 2px solid var(--escola-primary-light);
+  border-top: 2px solid var(--escola-primary);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Progress bar com tema da escola */
+.progress-escola {
+  background-color: var(--escola-primary-light);
+}
+
+.progress-escola::-webkit-progress-value {
+  background-color: var(--escola-primary);
+}
+
+.progress-escola::-moz-progress-bar {
+  background-color: var(--escola-primary);
+}
+
+/* Tooltip com tema da escola */
+.tooltip-escola {
+  background-color: var(--escola-primary);
+  color: white;
+}
+
+.tooltip-escola::before {
+  border-top-color: var(--escola-primary);
+}
+
+/* Modal com tema da escola */
+.modal-escola .modal-header {
+  background-color: var(--escola-primary);
+  color: white;
+}
+
+.modal-escola .modal-footer {
+  border-top: 1px solid var(--escola-primary-light);
+}
+
+/* Tabela com tema da escola */
+.table-escola th {
+  background-color: var(--escola-primary-light);
+  color: var(--escola-primary);
+}
+
+.table-escola tr:hover {
+  background-color: var(--escola-primary-lighter);
+}
+
+/* Paginação com tema da escola */
+.pagination-escola .page-item.active .page-link {
+  background-color: var(--escola-primary);
+  border-color: var(--escola-primary);
+}
+
+.pagination-escola .page-link {
+  color: var(--escola-primary);
+}
+
+.pagination-escola .page-link:hover {
+  background-color: var(--escola-primary-lighter);
+  color: var(--escola-primary);
+}
+
+/* Dropdown com tema da escola */
+.dropdown-escola .dropdown-item:hover {
+  background-color: var(--escola-primary-lighter);
+}
+
+.dropdown-escola .dropdown-item.active {
+  background-color: var(--escola-primary);
+  color: white;
+}
+
+/* Alertas com tema da escola */
+.alert-escola-info {
+  background-color: var(--escola-primary-lighter);
+  border-color: var(--escola-primary-light);
+  color: var(--escola-primary);
+}
+
+.alert-escola-success {
+  background-color: #dcfce7;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.alert-escola-warning {
+  background-color: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.alert-escola-error {
+  background-color: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
 
 @layer base {
   :root {

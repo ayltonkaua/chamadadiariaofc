@@ -1,0 +1,124 @@
+import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
+
+type EscolaConfig = Tables<"escola_configuracao">;
+
+interface EscolaConfigContextType {
+  config: EscolaConfig | null;
+  loading: boolean;
+  error: string | null;
+  updateConfig: (config: Partial<EscolaConfig>) => Promise<boolean>;
+  refreshConfig: () => Promise<void>;
+}
+
+const EscolaConfigContext = createContext<EscolaConfigContextType | undefined>(undefined);
+
+export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [config, setConfig] = useState<EscolaConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchConfig = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase
+        .from('escola_configuracao')
+        .select('*')
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Nenhuma configuração encontrada, criar uma padrão
+          const defaultConfig = {
+            nome: 'Minha Escola',
+            endereco: 'Endereço da escola',
+            telefone: '(11) 1234-5678',
+            email: 'contato@escola.com',
+            cor_primaria: '#7c3aed', // Purple
+            cor_secundaria: '#f3f4f6', // Gray
+            url_logo: null
+          };
+
+          const { data: newConfig, error: insertError } = await supabase
+            .from('escola_configuracao')
+            .insert(defaultConfig)
+            .select()
+            .single();
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          setConfig(newConfig);
+        } else {
+          throw error;
+        }
+      } else {
+        setConfig(data);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar configurações');
+      console.error('Erro ao buscar configurações da escola:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateConfig = async (updates: Partial<EscolaConfig>): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const { data, error } = await supabase
+        .from('escola_configuracao')
+        .update({
+          ...updates,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', config?.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setConfig(data);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao atualizar configurações');
+      console.error('Erro ao atualizar configurações da escola:', err);
+      return false;
+    }
+  };
+
+  const refreshConfig = async () => {
+    await fetchConfig();
+  };
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  return (
+    <EscolaConfigContext.Provider value={{
+      config,
+      loading,
+      error,
+      updateConfig,
+      refreshConfig
+    }}>
+      {children}
+    </EscolaConfigContext.Provider>
+  );
+};
+
+export const useEscolaConfig = (): EscolaConfigContextType => {
+  const context = useContext(EscolaConfigContext);
+  if (context === undefined) {
+    throw new Error("useEscolaConfig deve ser usado dentro de um EscolaConfigProvider");
+  }
+  return context;
+}; 

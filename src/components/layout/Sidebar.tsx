@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
 import { Button } from '@/components/ui/button';
 import { 
   Home, 
@@ -28,6 +29,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   const { user, logout } = useAuth();
+  const { config } = useEscolaConfig();
   const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -115,16 +117,56 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     return location.pathname === href || location.pathname.startsWith(href + '/');
   };
 
+  // Função para gerar classes CSS dinâmicas baseadas nas cores da escola
+  const getDynamicClasses = (isActive: boolean) => {
+    const primaryColor = config?.cor_primaria || '#7c3aed';
+    const secondaryColor = config?.cor_secundaria || '#f3f4f6';
+    
+    if (isActive) {
+      return {
+        backgroundColor: `${primaryColor}20`, // 20% de opacidade
+        color: primaryColor,
+        borderColor: primaryColor
+      };
+    }
+    
+    return {
+      color: primaryColor,
+      '&:hover': {
+        backgroundColor: `${primaryColor}10` // 10% de opacidade
+      }
+    };
+  };
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b">
+      <div 
+        className="p-4 border-b"
+        style={{ backgroundColor: config?.cor_secundaria || '#f3f4f6' }}
+      >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-            <Home className="h-5 w-5 text-white" />
+          <div 
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: config?.cor_primaria || '#7c3aed' }}
+          >
+            {config?.url_logo ? (
+              <img
+                src={config.url_logo}
+                alt="Logo da escola"
+                className="h-5 w-5 object-contain"
+              />
+            ) : (
+              <Home className="h-5 w-5 text-white" />
+            )}
           </div>
           <div>
-            <h1 className="font-bold text-lg text-gray-900">Chamada Diária</h1>
+            <h1 
+              className="font-bold text-lg"
+              style={{ color: config?.cor_primaria || '#7c3aed' }}
+            >
+              {config?.nome || 'Chamada Diária'}
+            </h1>
             <p className="text-xs text-gray-500">Sistema de Gestão</p>
           </div>
         </div>
@@ -133,8 +175,14 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       {/* User Info */}
       <div className="p-4 border-b bg-gray-50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-            <Users className="h-5 w-5 text-purple-600" />
+          <div 
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: `${config?.cor_primaria || '#7c3aed'}20` }}
+          >
+            <Users 
+              className="h-5 w-5" 
+              style={{ color: config?.cor_primaria || '#7c3aed' }}
+            />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
@@ -152,11 +200,9 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             <Link
               to={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive(item.href)
-                  ? "bg-purple-100 text-purple-700"
-                  : "text-purple-700 hover:bg-purple-50"
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               )}
+              style={getDynamicClasses(isActive(item.href))}
               onClick={() => setIsOpen(false)}
             >
               <item.icon className="h-5 w-5" />
@@ -171,11 +217,9 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
                     key={subItem.title}
                     to={subItem.href}
                     className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors",
-                      isActive(subItem.href)
-                        ? "bg-purple-50 text-purple-700"
-                        : "text-purple-700 hover:bg-purple-50"
+                      "flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors"
                     )}
+                    style={getDynamicClasses(isActive(subItem.href))}
                     onClick={() => setIsOpen(false)}
                   >
                     <subItem.icon className="h-4 w-4" />
