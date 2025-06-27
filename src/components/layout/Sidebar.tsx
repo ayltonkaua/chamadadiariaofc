@@ -104,10 +104,10 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       description: 'Central de notificações'
     },
     {
-      title: 'Configurações',
+      title: 'Perfil da Escola',
       icon: Settings,
-      href: '/configuracoes',
-      description: 'Configurações do sistema'
+      href: '/perfil-escola',
+      description: 'Informações da escola'
     },
   ];
 
@@ -217,12 +217,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden fixed top-4 left-4 z-50 bg-white shadow-md border"
+            className="md:hidden fixed top-4 left-4 z-50 bg-white"
           >
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-80 p-0">
+        <SheetContent side="left" className="w-80 p-0 bg-white">
           <SidebarContent />
         </SheetContent>
       </Sheet>
@@ -230,12 +230,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
-        <div className="md:hidden bg-white border-b border-gray-200 p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-              <Home className="h-5 w-5 text-white" />
+        <div className="md:hidden bg-white border-b border-gray-200 p-4">
+          <div className="flex items-center justify-center gap-3">
+            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Home className="h-5 w-5 text-purple-700" />
             </div>
-            <h1 className="font-bold text-lg text-gray-900">Chamada Diária</h1>
+            <h1 className="font-bold text-lg text-purple-700 text-center">Chamada Diária</h1>
           </div>
         </div>
 

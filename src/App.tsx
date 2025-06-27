@@ -16,7 +16,6 @@ import RegisterPage from "@/pages/RegisterPage";
 import ChamadaPage from "@/pages/ChamadaPage";
 import GerenciarAlunosPage from "@/pages/GerenciarAlunosPage";
 import HistoricoChamadaPage from "@/pages/HistoricoChamadaPage";
-import ConfiguracoesPage from "@/pages/ConfiguracoesPage";
 import AtestadosPage from "@/pages/AtestadosPage";
 import AlertasPage from "@/pages/AlertasPage";
 import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
@@ -27,6 +26,7 @@ import PesquisasListPage from "@/pages/PesquisasListPage";
 import PesquisaCreatePage from "@/pages/PesquisaCreatePage";
 import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
 import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
+import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,7 +68,6 @@ const App = () => {
                 <Route path="/chamadas/:turmaId" element={<Layout><ChamadaPage /></Layout>} />
                 <Route path="/gerenciar-alunos/:turmaId" element={<Layout><GerenciarAlunosPage /></Layout>} />
                 <Route path="/historico-chamada/:turmaId" element={<Layout><HistoricoChamadaPage /></Layout>} />
-                <Route path="/configuracoes" element={<Layout><ConfiguracoesPage /></Layout>} />
                 <Route path="/atestados" element={<Layout><AtestadosPage /></Layout>} />
                 <Route path="/alertas" element={<Layout><AlertasPage /></Layout>} />
                 <Route path="/student-query" element={<Layout><StudentQueryPage /></Layout>} />
@@ -83,6 +82,8 @@ const App = () => {
                 <Route path="/pesquisas" element={<Layout><PesquisasListPage /></Layout>} />
                 <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />
                 <Route path="/pesquisas/:pesquisaId/resultados" element={<Layout><PesquisaResultadosPage /></Layout>} />
+
+                <Route path="/perfil-escola" element={<Layout><PerfilEscolaPage /></Layout>} />
 
                 <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
               </Routes>
