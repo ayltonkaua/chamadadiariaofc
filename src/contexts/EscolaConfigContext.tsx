@@ -1,213 +1,110 @@
-import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "./AuthContext";
+import { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { toast } from "@/hooks/use-toast";
 
-type EscolaConfig = Tables<"escola_configuracao">;
+type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "created_at">;
+
+const defaultConfig: EscolaConfig = {
+  nome: "",
+  endereco: null,
+  email: null,
+  telefone: null,
+  logo_url: null,
+  cor_primaria: "#6D28D9",
+  cor_secundaria: "#2563EB",
+};
 
 interface EscolaConfigContextType {
-  config: EscolaConfig | null;
+  config: EscolaConfig;
   loading: boolean;
-  error: string | null;
-  updateConfig: (config: Partial<EscolaConfig>) => Promise<boolean>;
+  saveConfig: (newConfig: EscolaConfig) => Promise<void>;
   refreshConfig: () => Promise<void>;
 }
 
 const EscolaConfigContext = createContext<EscolaConfigContextType | undefined>(undefined);
 
 export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user, refreshUserData } = useAuth();
-  const [config, setConfig] = useState<EscolaConfig | null>(null);
+  const [config, setConfig] = useState<EscolaConfig>(defaultConfig);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, refreshUserData, loadingUser } = useAuth();
 
-  const fetchConfig = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Configuração padrão caso não consiga buscar do banco
-      const defaultConfig: EscolaConfig = {
-        id: 'default',
-        nome: 'Minha Escola',
-        endereco: 'Endereço da escola',
-        telefone: '(11) 1234-5678',
-        email: 'contato@escola.com',
-        cor_primaria: '#7c3aed',
-        cor_secundaria: '#f3f4f6',
-        url_logo: null,
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString()
-      };
-
-      // Se não há usuário logado, usar configuração padrão
-      if (!user) {
-        setConfig(defaultConfig);
-        return;
-      }
-
-      // Se o usuário tem escola_id, tentar buscar a configuração
-      if (user.escola_id) {
-        try {
-          // Buscar configuração específica da escola do usuário
-          const { data, error } = await supabase
-            .from('escola_configuracao')
-            .select('*')
-            .eq('id', user.escola_id)
-            .single();
-          
-          if (error) {
-            console.warn('Erro ao buscar configuração da escola:', error);
-            // Usar configuração padrão em caso de erro
-            setConfig(defaultConfig);
-            return;
-          }
-          
-          if (data) {
-            console.log('Configuração carregada para escola:', data.nome);
-            setConfig(data);
-            return;
-          }
-        } catch (err) {
-          console.warn('Erro ao acessar banco de dados:', err);
-        }
-      }
-
-      // Se chegou até aqui, usar configuração padrão
-      console.log('Usando configuração padrão para usuário:', user.email);
+  const fetchConfig = useCallback(async () => {
+    if (!user?.escola_id) {
       setConfig(defaultConfig);
-    } catch (err) {
-      console.error('Erro geral ao carregar configurações:', err);
-      setError('Erro ao carregar configurações da escola');
-      setConfig(null);
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("escola_configuracao")
+        .select("*")
+        .eq("id", user.escola_id)
+        .single();
+      
+      if (error) throw error;
+      if (data) setConfig(data);
+    } catch (error) {
+      console.error("Erro ao buscar configuração da escola:", error);
+      setConfig(defaultConfig);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.escola_id]);
+
+  useEffect(() => {
+    if (!loadingUser) {
+        fetchConfig();
+    }
+  }, [user?.escola_id, loadingUser, fetchConfig]);
+
+  const saveConfig = async (newConfig: EscolaConfig) => {
+    if (!user) {
+      toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+
+    try {
+      if (user.escola_id) {
+        // LÓGICA DE ATUALIZAÇÃO SIMPLIFICADA:
+        // Apenas atualiza os dados de texto, incluindo a nova logo_url.
+        const { error } = await supabase
+          .from("escola_configuracao")
+          .update(newConfig)
+          .eq("id", user.escola_id);
+          
+        if (error) throw error;
+        toast({ title: "Sucesso!", description: "Configurações da escola atualizadas." });
+
+      } else {
+        // LÓGICA DE CRIAÇÃO SIMPLIFICADA:
+        // A função RPC já lida com a inserção dos dados de texto.
+        const { error } = await supabase.rpc('criar_escola_e_associar_admin', {
+            config_data: newConfig as unknown as TablesInsert<'escola_configuracao'>
+        });
+
+        if (error) throw error;
+        
+        toast({ title: "Escola Criada!", description: "O perfil da sua escola foi criado com sucesso." });
+        await refreshUserData();
+      }
+      
+      await fetchConfig();
+
+    } catch (error: any) {
+      console.error("Erro ao salvar configuração:", error);
+      toast({ title: "Erro", description: error.message || "Não foi possível salvar as configurações.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const updateConfig = async (updates: Partial<EscolaConfig>): Promise<boolean> => {
-    try {
-      setError(null);
-      
-      // Se não há usuário logado, não permitir atualização
-      if (!user) {
-        console.warn('Usuário não logado, não pode atualizar configurações');
-        setError('Você precisa estar logado para atualizar as configurações');
-        return false;
-      }
-
-      // Se o usuário não tem escola_id, criar uma nova escola usando a função RPC
-      if (!user.escola_id) {
-        try {
-          // Chama a função RPC 'criar_escola_e_associar_admin' no Supabase
-          const { data: newSchoolId, error } = await supabase.rpc('criar_escola_e_associar_admin', {
-            nome_escola: updates.nome || 'Nova Escola',
-            endereco_escola: updates.endereco || 'Endereço da escola',
-            telefone_escola: updates.telefone || '(11) 1234-5678',
-            email_escola: updates.email || 'contato@escola.com',
-            url_logo_escola: updates.url_logo || null,
-            cor_primaria_escola: updates.cor_primaria || '#7c3aed',
-            cor_secundaria_escola: updates.cor_secundaria || '#f3f4f6'
-          });
-
-          if (error) {
-            console.error('Erro ao chamar a função RPC:', error);
-            setError(`Ocorreu um erro ao criar a escola: ${error.message}`);
-            return false;
-          }
-
-          // Buscar os dados completos da escola criada para atualizar o contexto imediatamente
-          const { data: escolaData, error: fetchError } = await supabase
-            .from('escola_configuracao')
-            .select('*')
-            .eq('id', newSchoolId)
-            .single();
-
-          if (fetchError) {
-            console.warn('Erro ao buscar dados da escola criada:', fetchError);
-            setError('Escola criada, mas erro ao carregar dados. Recarregue a página.');
-            return false;
-          }
-
-          if (escolaData) {
-            setConfig(escolaData);
-            console.log('Nova escola criada e configurada:', escolaData.nome);
-          }
-
-          // Agora sim, atualize o usuário para refletir o novo escola_id
-          await refreshUserData();
-          // E por fim, garanta que o contexto está sincronizado
-          await refreshConfig();
-
-          return true;
-        } catch (err) {
-          console.error('Exceção na criação da escola:', err);
-          setError('Ocorreu um erro inesperado. Por favor, contate o suporte.');
-          return false;
-        }
-      } else {
-        // Usuário já tem escola_id, atualizar a escola existente
-        try {
-          const { data, error } = await supabase
-            .from('escola_configuracao')
-            .update({
-              ...updates,
-              atualizado_em: new Date().toISOString()
-            })
-            .eq('id', user.escola_id)
-            .select()
-            .single();
-            
-          if (error) {
-            console.warn('Erro ao atualizar no banco:', error);
-            setError('Erro ao atualizar configurações no banco de dados');
-            return false;
-          }
-          
-          if (data) {
-            setConfig(data);
-            console.log('Escola atualizada:', data.nome);
-            await refreshConfig();
-            return true;
-          }
-        } catch (err) {
-          console.warn('Erro ao acessar banco para atualização:', err);
-          setError('Erro ao conectar com o banco de dados');
-          return false;
-        }
-      }
-      
-      return true;
-    } catch (err) {
-      console.error('Erro ao atualizar configurações:', err);
-      setError('Erro ao atualizar configurações');
-      return false;
-    }
-  };
-
-  const refreshConfig = async () => {
-    await fetchConfig();
-  };
-
-  useEffect(() => {
-    // Só busca se user existir (autenticado)
-    if (user) {
-      fetchConfig();
-    } else {
-      // Se deslogar, limpa o config
-      setConfig(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
   return (
-    <EscolaConfigContext.Provider value={{
-      config,
-      loading,
-      error,
-      updateConfig,
-      refreshConfig
-    }}>
+    <EscolaConfigContext.Provider value={{ config, loading, saveConfig, refreshConfig: fetchConfig }}>
       {children}
     </EscolaConfigContext.Provider>
   );
@@ -215,8 +112,8 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
 
 export const useEscolaConfig = (): EscolaConfigContextType => {
   const context = useContext(EscolaConfigContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useEscolaConfig deve ser usado dentro de um EscolaConfigProvider");
   }
   return context;
-}; 
+};
