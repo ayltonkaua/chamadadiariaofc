@@ -75,29 +75,29 @@ const EscolaConfigForm: React.FC = () => {
               </div>
             </div>
 
-            {/* --- SEÇÃO DO LOGO MODIFICADA --- */}
             <div className="space-y-4 border-t pt-6">
                 <h3 className="text-lg font-medium text-gray-700">Identidade Visual</h3>
                 <div className="space-y-2">
-                    <Label htmlFor="logo_url">URL do Logo</Label>
+                    {/* CORREÇÃO: Alterado de 'logo_url' para 'url_logo' */}
+                    <Label htmlFor="url_logo">URL do Logo</Label>
                     <Input
-                        id="logo_url"
-                        name="logo_url"
+                        id="url_logo"
+                        name="url_logo"
                         type="url"
                         placeholder="https://exemplo.com/logo.png"
-                        value={formData.logo_url || ""}
+                        value={formData.url_logo || ""}
                         onChange={handleInputChange}
                     />
                     <p className="text-xs text-gray-500">Cole a URL completa da imagem do logo da sua escola.</p>
                 </div>
 
-                {/* Pré-visualização do logo a partir da URL */}
-                {formData.logo_url && (
+                {/* CORREÇÃO: Alterado de 'logo_url' para 'url_logo' */}
+                {formData.url_logo && (
                     <div>
                         <Label>Pré-visualização</Label>
                         <div className="mt-2 w-32 h-32 flex items-center justify-center border rounded-md overflow-hidden bg-slate-50">
                             <img 
-                                src={formData.logo_url} 
+                                src={formData.url_logo} 
                                 alt="Preview do logo" 
                                 className="object-contain max-w-full max-h-full" 
                                 onError={(e) => e.currentTarget.style.display = 'none'}

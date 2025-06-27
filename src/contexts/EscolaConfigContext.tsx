@@ -4,14 +4,15 @@ import { useAuth } from "./AuthContext";
 import { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "@/hooks/use-toast";
 
-type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "created_at">;
+type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "criado_em" | "atualizado_em">;
 
+// CORREÇÃO: Alterado de 'logo_url' para 'url_logo' para corresponder ao DB
 const defaultConfig: EscolaConfig = {
   nome: "",
   endereco: null,
   email: null,
   telefone: null,
-  logo_url: null,
+  url_logo: null, 
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
 };
@@ -41,7 +42,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
     try {
       const { data, error } = await supabase
         .from("escola_configuracao")
-        .select("*")
+        .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria")
         .eq("id", user.escola_id)
         .single();
       
@@ -70,8 +71,6 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     try {
       if (user.escola_id) {
-        // LÓGICA DE ATUALIZAÇÃO SIMPLIFICADA:
-        // Apenas atualiza os dados de texto, incluindo a nova logo_url.
         const { error } = await supabase
           .from("escola_configuracao")
           .update(newConfig)
@@ -81,8 +80,6 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
         toast({ title: "Sucesso!", description: "Configurações da escola atualizadas." });
 
       } else {
-        // LÓGICA DE CRIAÇÃO SIMPLIFICADA:
-        // A função RPC já lida com a inserção dos dados de texto.
         const { error } = await supabase.rpc('criar_escola_e_associar_admin', {
             config_data: newConfig as unknown as TablesInsert<'escola_configuracao'>
         });
