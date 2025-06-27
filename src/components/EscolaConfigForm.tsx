@@ -207,29 +207,49 @@ const EscolaConfigForm: React.FC = () => {
                     />
                   </div>
                 )}
-                <div className="flex-1">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    disabled={uploadingLogo}
-                    className="hidden"
-                    id="logo-upload"
-                  />
-                  <Label
-                    htmlFor="logo-upload"
-                    className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    {uploadingLogo ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    {uploadingLogo ? 'Fazendo upload...' : 'Selecionar Logo'}
-                  </Label>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Formatos aceitos: JPG, PNG, GIF. Máximo 5MB.
-                  </p>
+                <div className="flex-1 space-y-3">
+                  {/* URL Externa */}
+                  <div className="space-y-2">
+                    <Label htmlFor="url_logo">URL do Logo (opcional)</Label>
+                    <Input
+                      id="url_logo"
+                      type="url"
+                      value={formData.url_logo}
+                      onChange={(e) => handleInputChange('url_logo', e.target.value)}
+                      placeholder="https://exemplo.com/logo.png"
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Cole aqui a URL de uma imagem externa para usar como logo
+                    </p>
+                  </div>
+                  
+                  {/* Upload de Arquivo */}
+                  <div className="space-y-2">
+                    <Label>Ou faça upload de um arquivo</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      disabled={uploadingLogo}
+                      className="hidden"
+                      id="logo-upload"
+                    />
+                    <Label
+                      htmlFor="logo-upload"
+                      className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      {uploadingLogo ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      {uploadingLogo ? 'Fazendo upload...' : 'Selecionar Logo'}
+                    </Label>
+                    <p className="text-sm text-gray-500">
+                      Formatos aceitos: JPG, PNG, GIF. Máximo 5MB.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

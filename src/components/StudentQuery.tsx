@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tables } from "@/integrations/supabase/types";
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface StudentAttendanceResult {
   name: string;
@@ -38,6 +39,14 @@ const StudentQuery: React.FC = () => {
   const [result, setResult] = useState<StudentAttendanceResult | null>(null);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { escolas, loading: escolasLoading } = useEscolasCadastradas();
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
+
+  useEffect(() => {
+    if (escolas.length > 0 && !escolaSelecionada) {
+      setEscolaSelecionada(escolas[0].id);
+    }
+  }, [escolas]);
 
   // Função para normalizar texto (remover acentos e padronizar espaços)
   const normalizeText = (text: string): string => {
@@ -55,6 +64,12 @@ const StudentQuery: React.FC = () => {
     setResult(null);
     setLoading(true);
 
+    if (!escolaSelecionada) {
+      setError("Por favor, selecione uma escola.");
+      setLoading(false);
+      return;
+    }
+
     // Remover espaços em branco do início e fim das strings
     const trimmedName = name.trim();
     const trimmedEnrollment = enrollment.trim();
@@ -70,17 +85,17 @@ const StudentQuery: React.FC = () => {
     const normalizedName = normalizeText(trimmedName);
 
     try {
-      // Buscar o aluno pelo nome (normalizado) e matrícula
-      // Usaremos o nome normalizado na consulta ilike
+      // Buscar o aluno pelo nome (normalizado) e matrícula na escola selecionada
       const { data: aluno, error: alunoError } = await supabase
         .from("alunos")
-        .select("id, nome, matricula, turma_id, turmas(nome)")
-        .ilike("nome", `%${normalizedName}%`) // Usar o nome normalizado na consulta
+        .select("id, nome, matricula, turma_id, escola_id, turmas(nome)")
+        .ilike("nome", `%${normalizedName}%`)
         .eq("matricula", trimmedEnrollment)
+        .eq("escola_id", escolaSelecionada)
         .single();
 
       if (alunoError || !aluno) {
-        setError("Aluno não encontrado. Verifique o nome e matrícula.");
+        setError("Aluno não encontrado. Verifique o nome, matrícula e escola.");
         setLoading(false);
         return;
       }
@@ -151,6 +166,21 @@ const StudentQuery: React.FC = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4 pt-6">
               <div className="space-y-2">
+                <Label htmlFor="escola-select">Escola</Label>
+                <select
+                  id="escola-select"
+                  className="border rounded px-2 py-2 w-full"
+                  value={escolaSelecionada}
+                  onChange={e => setEscolaSelecionada(e.target.value)}
+                  disabled={escolasLoading}
+                  required
+                >
+                  {escolas.map(escola => (
+                    <option key={escola.id} value={escola.id}>{escola.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="name">Nome Completo</Label>
                 <Input
                   id="name"
@@ -186,7 +216,7 @@ const StudentQuery: React.FC = () => {
               </Button>
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !escolaSelecionada}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
               >
                 {loading ? (

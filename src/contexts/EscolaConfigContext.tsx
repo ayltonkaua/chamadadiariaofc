@@ -26,15 +26,16 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
       setLoading(true);
       setError(null);
       let data, error;
+      
       if (user?.escola_id) {
-        // Busca configuração da escola pelo id
+        // Busca configuração da escola pelo id do usuário
         ({ data, error } = await supabase
           .from('escola_configuracao')
           .select('*')
           .eq('id', user.escola_id)
           .single());
       } else {
-        // Busca configuração padrão (primeira do banco)
+        // Busca a primeira configuração do banco (configuração padrão)
         ({ data, error } = await supabase
           .from('escola_configuracao')
           .select('*')
@@ -42,9 +43,37 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
           .limit(1)
           .single());
       }
+      
       if (error) {
-        throw error;
+        if (error.code === 'PGRST116') {
+          // Nenhuma configuração encontrada, criar uma padrão
+          const defaultConfig = {
+            nome: 'Minha Escola',
+            endereco: 'Endereço da escola',
+            telefone: '(11) 1234-5678',
+            email: 'contato@escola.com',
+            cor_primaria: '#7c3aed',
+            cor_secundaria: '#f3f4f6',
+            url_logo: null
+          };
+
+          const { data: newConfig, error: insertError } = await supabase
+            .from('escola_configuracao')
+            .insert(defaultConfig)
+            .select()
+            .single();
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          setConfig(newConfig);
+          return;
+        } else {
+          throw error;
+        }
       }
+      
       setConfig(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar configurações');

@@ -172,26 +172,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         </div>
       </div>
 
-      {/* User Info */}
-      <div className="p-4 border-b bg-gray-50">
-        <div className="flex items-center gap-3">
-          <div 
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: `${config?.cor_primaria || '#7c3aed'}20` }}
-          >
-            <Users 
-              className="h-5 w-5" 
-              style={{ color: config?.cor_primaria || '#7c3aed' }}
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.email || 'Usuário'}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {menuItems.map((item) => (
