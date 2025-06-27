@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { createClient } from '@supabase/supabase-js';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff } from "lucide-react";
+import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff, Shield, MessageSquare, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   salvarChamadaOffline, 
   getSessaoChamada, 
@@ -16,10 +20,24 @@ import {
   sincronizarChamadasOffline
 } from '@/lib/offlineChamada';
 
+// Cliente Supabase genérico para contornar problemas de tipo
+const supabaseGeneric = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
 interface Aluno {
   id: string;
   nome: string;
   matricula: string;
+}
+
+interface Atestado {
+  id: string;
+  aluno_id: string;
+  data_inicio: string;
+  data_fim: string;
+  status: string;
 }
 
 type Presenca = "presente" | "falta" | "atestado" | null;
@@ -28,12 +46,19 @@ const ChamadaPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [presencas, setPresencas] = useState<Record<string, Presenca | null>>({});
+  const [atestados, setAtestados] = useState<Record<string, Atestado[]>>({});
   const [date, setDate] = useState<Date>(new Date());
   const [isSaving, setIsSaving] = useState(false);
   const [showJustificarFalta, setShowJustificarFalta] = useState<{ alunoId: string } | null>(null);
+  const [showObservacao, setShowObservacao] = useState<{ alunoId: string; alunoNome: string } | null>(null);
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Estados para observação
+  const [tituloObservacao, setTituloObservacao] = useState('');
+  const [descricaoObservacao, setDescricaoObservacao] = useState('');
+  const [salvandoObservacao, setSalvandoObservacao] = useState(false);
 
   // Monitorar status da conexão
   useEffect(() => {
@@ -84,6 +109,29 @@ const ChamadaPage: React.FC = () => {
         if (alunosError) throw alunosError;
         if (alunosData) setAlunos(alunosData);
 
+        // Carregar atestados aprovados para a data selecionada
+        const dataFormatada = format(date, "yyyy-MM-dd");
+        const { data: atestadosData, error: atestadosError } = await supabase
+          .from("atestados")
+          .select("id, aluno_id, data_inicio, data_fim, status")
+          .eq("status", "aprovado")
+          .lte("data_inicio", dataFormatada)
+          .gte("data_fim", dataFormatada);
+
+        if (atestadosError) throw atestadosError;
+        
+        // Organizar atestados por aluno
+        const atestadosPorAluno: Record<string, Atestado[]> = {};
+        if (atestadosData) {
+          atestadosData.forEach(atestado => {
+            if (!atestadosPorAluno[atestado.aluno_id]) {
+              atestadosPorAluno[atestado.aluno_id] = [];
+            }
+            atestadosPorAluno[atestado.aluno_id].push(atestado);
+          });
+        }
+        setAtestados(atestadosPorAluno);
+
         // Tentar carregar sessão salva
         const sessaoSalva = await getSessaoChamada();
         if (sessaoSalva && sessaoSalva.turmaId === turmaId) {
@@ -107,7 +155,7 @@ const ChamadaPage: React.FC = () => {
     };
 
     carregarDados();
-  }, [turmaId]);
+  }, [turmaId, date]);
 
   // Salvar sessão sempre que houver mudanças
   useEffect(() => {
@@ -205,6 +253,59 @@ const ChamadaPage: React.FC = () => {
     }
   };
 
+  // Função para verificar se aluno tem atestado aprovado para a data
+  const temAtestadoAprovado = (alunoId: string): boolean => {
+    const atestadosAluno = atestados[alunoId] || [];
+    return atestadosAluno.length > 0;
+  };
+
+  // Função para salvar observação
+  const handleSalvarObservacao = async () => {
+    if (!showObservacao || !tituloObservacao.trim() || !descricaoObservacao.trim()) {
+      toast({
+        title: "Erro",
+        description: "Título e descrição são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSalvandoObservacao(true);
+    try {
+      const { error } = await (supabaseGeneric as any)
+        .from("observacoes_alunos")
+        .insert({
+          aluno_id: showObservacao.alunoId,
+          turma_id: turmaId,
+          titulo: tituloObservacao.trim(),
+          descricao: descricaoObservacao.trim(),
+          data_observacao: format(date, "yyyy-MM-dd"),
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Observação salva",
+        description: "A observação foi registrada com sucesso.",
+      });
+
+      // Limpar formulário e fechar modal
+      setTituloObservacao('');
+      setDescricaoObservacao('');
+      setShowObservacao(null);
+    } catch (error) {
+      console.error("Erro ao salvar observação:", error);
+      toast({
+        title: "Erro ao salvar observação",
+        description: "Ocorreu um erro ao salvar a observação.",
+        variant: "destructive",
+      });
+    } finally {
+      setSalvandoObservacao(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -271,14 +372,21 @@ const ChamadaPage: React.FC = () => {
         <div className="flex flex-col gap-2">
           {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
             const semRegistro = tentouSalvar && !presencas[aluno.id];
+            const temAtestado = temAtestadoAprovado(aluno.id);
             return (
               <div
                 key={aluno.id}
                 className={`flex items-center justify-between border rounded-md p-2 gap-2 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
               >
-                <div>
-                  <span className="font-medium">{aluno.nome}</span>{" "}
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{aluno.nome}</span>
                   <span className="text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
+                  {temAtestado && (
+                    <div className="flex items-center gap-1 text-blue-600" title="Aluno com atestado aprovado para esta data">
+                      <Shield className="h-4 w-4" />
+                      <span className="text-xs font-medium">Atestado</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -299,6 +407,15 @@ const ChamadaPage: React.FC = () => {
                     onClick={() => handlePresenca(aluno.id, "atestado")}
                     title="Atestado"
                   ><FileText size={18}/></Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })}
+                    title="Adicionar Observação"
+                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                  >
+                    <MessageSquare size={16}/>
+                  </Button>
                 </div>
                 {semRegistro && (
                   <span className="text-xs text-red-600 font-semibold ml-2">Obrigatório registrar presença</span>
@@ -330,6 +447,83 @@ const ChamadaPage: React.FC = () => {
               alunoId={showJustificarFalta.alunoId} 
               onClose={() => setShowJustificarFalta(null)} 
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Observação */}
+      <Dialog open={!!showObservacao} onOpenChange={() => setShowObservacao(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-purple-600" />
+              Adicionar Observação
+            </DialogTitle>
+          </DialogHeader>
+          
+          {showObservacao && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Aluno:</span> {showObservacao.alunoNome}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Data:</span> {format(date, "dd/MM/yyyy")}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="titulo">Título da Observação *</Label>
+                <Input
+                  id="titulo"
+                  value={tituloObservacao}
+                  onChange={(e) => setTituloObservacao(e.target.value)}
+                  placeholder="Ex: Comportamento, Participação, etc."
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="descricao">Descrição *</Label>
+                <Textarea
+                  id="descricao"
+                  value={descricaoObservacao}
+                  onChange={(e) => setDescricaoObservacao(e.target.value)}
+                  placeholder="Descreva a observação..."
+                  rows={4}
+                />
+              </div>
+              
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowObservacao(null);
+                    setTituloObservacao('');
+                    setDescricaoObservacao('');
+                  }}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSalvarObservacao}
+                  disabled={salvandoObservacao || !tituloObservacao.trim() || !descricaoObservacao.trim()}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                >
+                  {salvandoObservacao ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Salvar Observação
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

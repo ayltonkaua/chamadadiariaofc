@@ -6,7 +6,6 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
-    historyApiFallback: true,
   },
   plugins: [react()],
   resolve: {
