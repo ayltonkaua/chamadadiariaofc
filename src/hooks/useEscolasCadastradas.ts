@@ -23,32 +23,24 @@ export function useEscolasCadastradas() {
         return;
       }
 
-      // Se o usuário não tem escola_id, retornar lista vazia
-      if (!user.escola_id) {
-        console.log('Usuário não tem escola_id, retornando lista vazia');
-        setEscolas([]);
-        setLoading(false);
-        return;
-      }
-
       try {
-        // Buscar apenas a escola do usuário
+        // Buscar TODAS as escolas cadastradas no sistema
         const { data, error } = await supabase
           .from('escola_configuracao')
           .select('*')
-          .eq('id', user.escola_id);
+          .order('nome');
           
         if (error) {
-          console.warn('Erro ao buscar escola do usuário:', error);
+          console.warn('Erro ao buscar escolas:', error);
           setError(error.message);
           setEscolas([]);
         } else {
-          console.log('Escola carregada para usuário:', data?.[0]?.nome);
+          console.log('Escolas carregadas:', data?.length || 0);
           setEscolas(data || []);
         }
       } catch (err) {
         console.warn('Erro ao acessar banco de dados:', err);
-        setError('Erro ao carregar dados da escola');
+        setError('Erro ao carregar dados das escolas');
         setEscolas([]);
       } finally {
         setLoading(false);
@@ -56,7 +48,7 @@ export function useEscolasCadastradas() {
     }
     
     fetchEscolas();
-  }, [user?.id, user?.escola_id]);
+  }, [user?.id]);
 
   return { escolas, loading, error };
 } 

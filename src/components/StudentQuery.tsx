@@ -85,13 +85,29 @@ const StudentQuery: React.FC = () => {
     const normalizedName = normalizeText(trimmedName);
 
     try {
-      // Buscar o aluno pelo nome (normalizado) e matrícula na escola selecionada
+      // Primeiro, buscar turmas da escola selecionada
+      const { data: turmasData, error: turmasError } = await supabase
+        .from("turmas")
+        .select("id")
+        .eq("escola_id", escolaSelecionada);
+
+      if (turmasError) throw turmasError;
+
+      const turmaIds = turmasData?.map(t => t.id) || [];
+
+      if (turmaIds.length === 0) {
+        setError("Nenhuma turma encontrada para esta escola.");
+        setLoading(false);
+        return;
+      }
+
+      // Buscar o aluno pelo nome (normalizado) e matrícula nas turmas da escola
       const { data: aluno, error: alunoError } = await supabase
         .from("alunos")
-        .select("id, nome, matricula, turma_id, escola_id, turmas(nome)")
+        .select("id, nome, matricula, turma_id, turmas(nome)")
         .ilike("nome", `%${normalizedName}%`)
         .eq("matricula", trimmedEnrollment)
-        .eq("escola_id", escolaSelecionada)
+        .in("turma_id", turmaIds)
         .single();
 
       if (alunoError || !aluno) {
@@ -103,24 +119,18 @@ const StudentQuery: React.FC = () => {
       // Buscar todas as presenças do aluno
       const { data: presencasData } = await supabase
         .from("presencas")
-        .select("data_chamada, presente, falta_justificada")
+        .select("data_chamada, presente")
         .eq("aluno_id", aluno.id)
         .order("data_chamada", { ascending: true });
 
       const totalChamadas = presencasData?.length || 0;
       const presencas = presencasData?.filter(p => p.presente).length || 0;
-      const faltasJustificadas = presencasData?.filter(p => !p.presente && p.falta_justificada).length || 0;
-      const faltas = presencasData?.filter(p => !p.presente && !p.falta_justificada).length || 0;
+      const faltas = presencasData?.filter(p => !p.presente).length || 0;
 
-      // Montar lista detalhada (presenças, faltas, faltas justificadas)
+      // Montar lista detalhada (presenças e faltas)
       const detalhado: StudentAttendanceResult["detailed"] = presencasData?.map(p => ({
         data: p.data_chamada,
-        status: p.presente
-          ? "Presente"
-          : p.falta_justificada
-          ? "Falta Justificada"
-          : "Falta",
-        motivo: p.falta_justificada ? "Justificada pelo sistema" : undefined,
+        status: p.presente ? "Presente" : "Falta",
       })) || [];
       detalhado.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
 
@@ -130,10 +140,10 @@ const StudentQuery: React.FC = () => {
         className: (aluno.turmas as { nome: string }).nome,
         totalClasses: totalChamadas,
         absences: faltas,
-        justifiedAbsences: faltasJustificadas,
+        justifiedAbsences: 0, // Não há campo para faltas justificadas
         justifiedReasons: [],
-        justifiedDates: presencasData?.filter(p => !p.presente && p.falta_justificada).map(p => p.data_chamada) || [],
-        absenceDates: presencasData?.filter(p => !p.presente && !p.falta_justificada).map(p => p.data_chamada) || [],
+        justifiedDates: [],
+        absenceDates: presencasData?.filter(p => !p.presente).map(p => p.data_chamada) || [],
         presenceDates: presencasData?.filter(p => p.presente).map(p => p.data_chamada) || [],
         detailed: detalhado,
         percentagePresent: totalChamadas > 0 ? Math.round((presencas / totalChamadas) * 100) : 100
@@ -275,10 +285,6 @@ const StudentQuery: React.FC = () => {
                                 {item.status === "Presente" ? (
                                   <div className="flex items-center text-green-600">
                                     <CheckCircle2 className="w-4 h-4 mr-2" /> Presente
-                                  </div>
-                                ) : item.status === "Falta Justificada" ? (
-                                  <div className="flex items-center text-blue-600">
-                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Justificada
                                   </div>
                                 ) : (
                                   <div className="flex items-center text-red-600">

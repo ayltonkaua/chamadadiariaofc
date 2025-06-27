@@ -93,52 +93,75 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
     try {
       setError(null);
       
-      // Se não há usuário logado ou não tem escola_id, não permitir atualização
-      if (!user || !user.escola_id) {
-        console.warn('Usuário não tem permissão para atualizar configurações');
-        setError('Você não tem permissão para atualizar as configurações da escola');
+      // Se não há usuário logado, não permitir atualização
+      if (!user) {
+        console.warn('Usuário não logado, não pode atualizar configurações');
+        setError('Você precisa estar logado para atualizar as configurações');
         return false;
       }
 
-      // Se não há configuração válida, apenas atualizar o estado local
-      if (!config?.id || config.id === 'default') {
-        const newConfig = { ...config, ...updates, atualizado_em: new Date().toISOString() };
-        setConfig(newConfig as EscolaConfig);
-        return true;
-      }
-
-      // Verificar se o usuário tem permissão para atualizar esta escola
-      if (config.id !== user.escola_id) {
-        console.warn('Usuário tentando atualizar configuração de escola diferente');
-        setError('Você não tem permissão para atualizar as configurações desta escola');
-        return false;
-      }
-
-      // Tentar atualizar no banco
+      // SEMPRE criar uma nova escola quando o usuário edita o perfil
+      // Isso garante que cada usuário tenha sua própria escola
       try {
-        const { data, error } = await supabase
+        // Criar nova escola
+        const { data: newEscola, error: insertError } = await supabase
           .from('escola_configuracao')
-          .update({
-            ...updates,
-            atualizado_em: new Date().toISOString()
+          .insert({
+            nome: updates.nome || 'Nova Escola',
+            endereco: updates.endereco || 'Endereço da escola',
+            telefone: updates.telefone || '(11) 1234-5678',
+            email: updates.email || 'contato@escola.com',
+            cor_primaria: updates.cor_primaria || '#7c3aed',
+            cor_secundaria: updates.cor_secundaria || '#f3f4f6',
+            url_logo: updates.url_logo || null,
           })
-          .eq('id', user.escola_id)
           .select()
           .single();
-          
-        if (error) {
-          console.warn('Erro ao atualizar no banco:', error);
-          setError('Erro ao atualizar configurações no banco de dados');
+
+        if (insertError) {
+          console.warn('Erro ao criar nova escola:', insertError);
+          setError('Erro ao criar nova escola no banco de dados');
           return false;
         }
-        
-        if (data) {
-          setConfig(data);
+
+        if (newEscola) {
+          // Se o usuário já tem um role, atualizar para a nova escola
+          if (user.escola_id) {
+            const { error: updateRoleError } = await supabase
+              .from('user_roles')
+              .update({ escola_id: newEscola.id })
+              .eq('user_id', user.id);
+
+            if (updateRoleError) {
+              console.warn('Erro ao atualizar role do usuário:', updateRoleError);
+            }
+          } else {
+            // Criar novo registro na tabela user_roles para o usuário
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .insert({
+                user_id: user.id,
+                escola_id: newEscola.id,
+                role: 'admin' // Usuário que cria a escola é admin
+              });
+
+            if (roleError) {
+              console.warn('Erro ao criar role do usuário:', roleError);
+            }
+          }
+
+          setConfig(newEscola);
+          console.log('Nova escola criada:', newEscola.nome);
+          
+          // Atualizar o contexto de autenticação para refletir a nova escola_id
+          // Isso pode requerer um refresh da página ou atualização do contexto
+          window.location.reload();
+          
           return true;
         }
       } catch (err) {
-        console.warn('Erro ao acessar banco para atualização:', err);
-        setError('Erro ao conectar com o banco de dados');
+        console.warn('Erro ao criar nova escola:', err);
+        setError('Erro ao criar nova escola');
         return false;
       }
       

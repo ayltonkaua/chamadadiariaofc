@@ -197,6 +197,15 @@ const ChamadaPage: React.FC = () => {
       return;
     }
     
+    if (!user?.escola_id) {
+      toast({
+        title: "Erro",
+        description: "Usuário não tem escola configurada. Configure o perfil da escola primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsSaving(true);
     try {
       const dataChamada = format(date, "yyyy-MM-dd");
@@ -213,6 +222,7 @@ const ChamadaPage: React.FC = () => {
           return {
             aluno_id: alunoId,
             turma_id: turmaId,
+            escola_id: user.escola_id,
             presente,
             falta_justificada,
             data_chamada: dataChamada,

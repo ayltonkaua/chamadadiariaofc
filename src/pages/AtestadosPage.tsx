@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface Atestado {
   id: string;
@@ -53,6 +54,8 @@ const AtestadosPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { escolas, loading: escolasLoading } = useEscolasCadastradas();
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [atestados, setAtestados] = useState<Atestado[]>([]);
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -66,25 +69,49 @@ const AtestadosPage: React.FC = () => {
   });
 
   useEffect(() => {
+    if (escolas.length > 0 && !escolaSelecionada) {
+      setEscolaSelecionada(escolas[0].id);
+    }
+  }, [escolas]);
+
+  useEffect(() => {
     const carregarDados = async () => {
-      if (!user) return;
+      if (!user || !escolaSelecionada) return;
 
       try {
         setLoading(true);
 
-        // Carregar atestados
+        // Primeiro, buscar turmas da escola selecionada
+        const { data: turmasData, error: turmasError } = await supabase
+          .from("turmas")
+          .select("id")
+          .eq("escola_id", escolaSelecionada);
+
+        if (turmasError) throw turmasError;
+
+        const turmaIds = turmasData?.map(t => t.id) || [];
+
+        if (turmaIds.length === 0) {
+          setAtestados([]);
+          setAlunos([]);
+          setLoading(false);
+          return;
+        }
+
+        // Carregar atestados de alunos das turmas da escola
         const { data: atestadosData, error: atestadosError } = await supabase
           .from("atestados")
           .select(`
             id,
             aluno_id,
-            alunos!inner(nome),
+            alunos!inner(nome, turma_id),
             data_inicio,
             data_fim,
             descricao,
             status,
             created_at
           `)
+          .in("alunos.turma_id", turmaIds)
           .order("created_at", { ascending: false });
 
         if (atestadosError) throw atestadosError;
@@ -96,10 +123,11 @@ const AtestadosPage: React.FC = () => {
 
         setAtestados(atestadosFormatados);
 
-        // Carregar alunos
+        // Carregar alunos das turmas da escola
         const { data: alunosData, error: alunosError } = await supabase
           .from("alunos")
           .select("id, nome, matricula")
+          .in("turma_id", turmaIds)
           .order("nome");
 
         if (alunosError) throw alunosError;
@@ -118,7 +146,7 @@ const AtestadosPage: React.FC = () => {
     };
 
     carregarDados();
-  }, [user, toast]);
+  }, [user, escolaSelecionada, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,28 +199,40 @@ const AtestadosPage: React.FC = () => {
       });
 
       // Recarregar atestados
-      const { data: atestadosData, error: atestadosError } = await supabase
-        .from("atestados")
-        .select(`
-          id,
-          aluno_id,
-          alunos!inner(nome),
-          data_inicio,
-          data_fim,
-          descricao,
-          status,
-          created_at
-        `)
-        .order("created_at", { ascending: false });
+      const { data: turmasData, error: turmasError } = await supabase
+        .from("turmas")
+        .select("id")
+        .eq("escola_id", escolaSelecionada);
 
-      if (atestadosError) throw atestadosError;
+      if (turmasError) throw turmasError;
 
-      const atestadosFormatados = atestadosData.map(atestado => ({
-        ...atestado,
-        aluno_nome: atestado.alunos.nome
-      }));
+      const turmaIds = turmasData?.map(t => t.id) || [];
 
-      setAtestados(atestadosFormatados);
+      if (turmaIds.length > 0) {
+        const { data: atestadosData, error: atestadosError } = await supabase
+          .from("atestados")
+          .select(`
+            id,
+            aluno_id,
+            alunos!inner(nome, turma_id),
+            data_inicio,
+            data_fim,
+            descricao,
+            status,
+            created_at
+          `)
+          .in("alunos.turma_id", turmaIds)
+          .order("created_at", { ascending: false });
+
+        if (atestadosError) throw atestadosError;
+
+        const atestadosFormatados = atestadosData.map(atestado => ({
+          ...atestado,
+          aluno_nome: atestado.alunos.nome
+        }));
+
+        setAtestados(atestadosFormatados);
+      }
 
     } catch (error) {
       console.error("Erro ao salvar atestado:", error);

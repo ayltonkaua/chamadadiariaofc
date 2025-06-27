@@ -56,6 +56,7 @@ export type Database = {
           id: string
           presente: boolean
           turma_id: string
+          escola_id: string
         }
         Insert: {
           aluno_id: string
@@ -64,6 +65,7 @@ export type Database = {
           id?: string
           presente?: boolean
           turma_id: string
+          escola_id: string
         }
         Update: {
           aluno_id?: string
@@ -72,6 +74,7 @@ export type Database = {
           id?: string
           presente?: boolean
           turma_id?: string
+          escola_id?: string
         }
         Relationships: [
           {
@@ -102,6 +105,13 @@ export type Database = {
             referencedRelation: "turmas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "presencas_escola_id_fkey"
+            columns: ["escola_id"]
+            isOneToOne: false
+            referencedRelation: "escola_configuracao"
+            referencedColumns: ["id"]
+          }
         ]
       }
       turmas: {
@@ -111,6 +121,7 @@ export type Database = {
           nome: string
           numero_sala: string
           user_id: string | null
+          escola_id: string
         }
         Insert: {
           created_at?: string | null
@@ -118,6 +129,7 @@ export type Database = {
           nome: string
           numero_sala?: string
           user_id?: string | null
+          escola_id: string
         }
         Update: {
           created_at?: string | null
@@ -125,8 +137,17 @@ export type Database = {
           nome?: string
           numero_sala?: string
           user_id?: string | null
+          escola_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "turmas_escola_id_fkey",
+            columns: ["escola_id"],
+            isOneToOne: false,
+            referencedRelation: "escola_configuracao",
+            referencedColumns: ["id"]
+          }
+        ]
       }
       atestados: {
         Row: {

@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -35,10 +34,19 @@ export default function CreateTurmaDialog({ onTurmaAdded }: { onTurmaAdded?: () 
       toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
       return;
     }
+    if (!user.escola_id) {
+      toast({ title: "Erro", description: "Usuário não tem escola configurada. Configure o perfil da escola primeiro.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     const { data: turma, error: turmaError } = await supabase
       .from("turmas")
-      .insert({ nome: nomeTurma, numero_sala: numeroSala, user_id: user.id })
+      .insert({ 
+        nome: nomeTurma, 
+        numero_sala: numeroSala, 
+        user_id: user.id,
+        escola_id: user.escola_id
+      })
       .select()
       .maybeSingle();
     if (turmaError || !turma) {

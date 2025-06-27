@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserX, List } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEscolaTheme } from "@/hooks/useEscolaTheme";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DashboardStats {
   totalAlunos: number;
@@ -12,6 +13,7 @@ interface DashboardStats {
 
 export const InfoCards: React.FC = () => {
   const { primaryColor, secondaryColor } = useEscolaTheme();
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalAlunos: 0,
     alunosFaltosos: 0,
@@ -22,28 +24,69 @@ export const InfoCards: React.FC = () => {
   useEffect(() => {
     const carregarDados = async () => {
       try {
-        // Carregar total de alunos
-        const { count: totalAlunos } = await supabase
-          .from("alunos")
-          .select("id", { count: "exact", head: true });
+        // Se não há usuário logado ou não tem escola_id, não carregar dados
+        if (!user?.escola_id) {
+          console.log('Usuário não tem escola_id, não carregando dados');
+          setStats({
+            totalAlunos: 0,
+            alunosFaltosos: 0,
+            totalTurmas: 0
+          });
+          setLoading(false);
+          return;
+        }
 
-        // Carregar alunos faltosos hoje
-        const hoje = new Date().toISOString().split('T')[0];
-        const { count: alunosFaltosos } = await supabase
-          .from("presencas")
-          .select("id", { count: "exact", head: true })
-          .eq("data_chamada", hoje)
-          .eq("presente", false);
-
-        // Carregar total de turmas
-        const { count: totalTurmas } = await supabase
+        // Primeiro, buscar turmas da escola do usuário
+        const { data: turmasData, error: turmasError } = await supabase
           .from("turmas")
-          .select("id", { count: "exact", head: true });
+          .select("id")
+          .eq("escola_id", user.escola_id);
+
+        if (turmasError) {
+          console.error("Erro ao buscar turmas:", turmasError);
+          setLoading(false);
+          return;
+        }
+
+        const turmaIds = turmasData?.map(t => t.id) || [];
+
+        if (turmaIds.length === 0) {
+          setStats({
+            totalAlunos: 0,
+            alunosFaltosos: 0,
+            totalTurmas: 0
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Carregar total de alunos das turmas da escola
+        const { data: alunosData, error: alunosError } = await supabase
+          .from("alunos")
+          .select("id")
+          .in("turma_id", turmaIds);
+
+        if (alunosError) {
+          console.error("Erro ao buscar alunos:", alunosError);
+        }
+
+        // Carregar alunos faltosos hoje das turmas da escola
+        const hoje = new Date().toISOString().split('T')[0];
+        const { data: faltososData, error: faltososError } = await supabase
+          .from("presencas")
+          .select("id")
+          .eq("data_chamada", hoje)
+          .eq("presente", false)
+          .in("turma_id", turmaIds);
+
+        if (faltososError) {
+          console.error("Erro ao buscar faltosos:", faltososError);
+        }
 
         setStats({
-          totalAlunos: totalAlunos || 0,
-          alunosFaltosos: alunosFaltosos || 0,
-          totalTurmas: totalTurmas || 0
+          totalAlunos: alunosData?.length || 0,
+          alunosFaltosos: faltososData?.length || 0,
+          totalTurmas: turmaIds.length
         });
       } catch (error) {
         console.error("Erro ao carregar dados do dashboard:", error);
@@ -58,7 +101,7 @@ export const InfoCards: React.FC = () => {
     const interval = setInterval(carregarDados, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.escola_id]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
