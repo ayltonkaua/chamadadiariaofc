@@ -188,7 +188,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             <p className="text-sm font-medium text-gray-900 truncate">
               {user?.email || 'Usuário'}
             </p>
-            <p className="text-xs text-gray-500">Professor</p>
           </div>
         </div>
       </div>
@@ -275,10 +274,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile Header */}
         <div className="md:hidden bg-white border-b border-gray-200 p-4">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Home className="h-5 w-5 text-purple-700" />
-            </div>
+          <div className="flex items-center justify-center">
             <h1 className="font-bold text-lg text-purple-700 text-center">Chamada Diária</h1>
           </div>
         </div>

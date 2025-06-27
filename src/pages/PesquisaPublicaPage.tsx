@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2, Send, User, FileText, CheckCircle, AlertCircle, ArrowLeft, Search, Users, Calendar } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface Aluno { 
   id: string; 
@@ -45,16 +46,29 @@ const PesquisaPublicaPage: React.FC = () => {
     const [respostas, setRespostas] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
     const [searchLoading, setSearchLoading] = useState(false);
+    const { escolas, loading: escolasLoading } = useEscolasCadastradas();
+    const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
+
+    React.useEffect(() => {
+        if (escolas.length > 0 && !escolaSelecionada) {
+            setEscolaSelecionada(escolas[0].id);
+        }
+    }, [escolas]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!escolaSelecionada) {
+            toast({ title: "Selecione uma escola", variant: "destructive" });
+            return;
+        }
         setSearchLoading(true);
         try {
             const { data: alunoData, error: alunoError } = await supabaseGeneric
                 .from('alunos')
-                .select('id, nome, matricula')
+                .select('id, nome, matricula, escola_id')
                 .eq('matricula', matricula.trim())
                 .ilike('nome', nome.trim())
+                .eq('escola_id', escolaSelecionada)
                 .single();
             
             if (alunoError || !alunoData) {
@@ -204,6 +218,21 @@ const PesquisaPublicaPage: React.FC = () => {
                         
                         <form onSubmit={handleLogin} className="space-y-6">
                             <div className="space-y-2">
+                                <Label htmlFor="escola-select" className="text-sm font-medium">Escola</Label>
+                                <select
+                                    id="escola-select"
+                                    className="border rounded px-2 py-2 w-full"
+                                    value={escolaSelecionada}
+                                    onChange={e => setEscolaSelecionada(e.target.value)}
+                                    disabled={escolasLoading}
+                                    required
+                                >
+                                    {escolas.map(escola => (
+                                        <option key={escola.id} value={escola.id}>{escola.nome}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
                                 <Label htmlFor="nome" className="text-sm font-medium">Nome Completo</Label>
                                 <Input 
                                     id="nome" 
@@ -227,7 +256,7 @@ const PesquisaPublicaPage: React.FC = () => {
                             </div>
                             <Button 
                                 type="submit" 
-                                disabled={searchLoading} 
+                                disabled={searchLoading || !escolaSelecionada} 
                                 className="w-full h-12 bg-purple-600 hover:bg-purple-700"
                             >
                                 {searchLoading ? (

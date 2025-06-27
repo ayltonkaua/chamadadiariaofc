@@ -21,6 +21,7 @@ import {
 import { Clock, ArrowLeft, Search, FileText, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Tables } from "@/integrations/supabase/types";
+import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
 
 interface Aluno {
   id: string;
@@ -55,17 +56,25 @@ export default function ConsultarFaltasPage() {
   const [registrosAtraso, setRegistrosAtraso] = useState<RegistroAtraso[]>([]);
   const [faltasJustificadas, setFaltasJustificadas] = useState<Tables<'justificativa_faltas'>[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const { escolas, loading: escolasLoading } = useEscolasCadastradas();
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
+
+  useEffect(() => {
+    if (escolas.length > 0 && !escolaSelecionada) {
+      setEscolaSelecionada(escolas[0].id);
+    }
+  }, [escolas]);
 
   useEffect(() => {
     if (!user) {
       navigate("/login");
       return;
     }
-
+    if (!escolaSelecionada) return;
     fetchAlunos();
     fetchRegistros();
     fetchRegistrosAtraso();
-  }, [user, navigate]);
+  }, [user, navigate, escolaSelecionada]);
 
   useEffect(() => {
     if (user && alunos.length > 0) {
@@ -77,9 +86,9 @@ export default function ConsultarFaltasPage() {
     try {
       const { data, error } = await supabase
         .from("alunos")
-        .select("id, nome, matricula")
+        .select("id, nome, matricula, escola_id")
+        .eq('escola_id', escolaSelecionada)
         .order("nome");
-
       if (error) throw error;
       setAlunos(data || []);
     } catch (error) {
@@ -96,17 +105,10 @@ export default function ConsultarFaltasPage() {
     try {
       const { data, error } = await supabase
         .from("registros_faltas")
-        .select(`
-          *,
-          alunos (
-            nome,
-            matricula
-          )
-        `)
+        .select(`*, alunos (nome, matricula, escola_id)`)
         .order("data_falta", { ascending: false });
-
       if (error) throw error;
-      setRegistros(data || []);
+      setRegistros((data || []).filter((r: any) => r.alunos?.escola_id === escolaSelecionada));
     } catch (error) {
       console.error("Erro ao buscar registros:", error);
       toast({
@@ -121,17 +123,10 @@ export default function ConsultarFaltasPage() {
     try {
       const { data, error } = await supabase
         .from("registros_atrasos")
-        .select(`
-          *,
-          alunos (
-            nome,
-            matricula
-          )
-        `)
+        .select(`*, alunos (nome, matricula, escola_id)`)
         .order("data_atraso", { ascending: false });
-
       if (error) throw error;
-      setRegistrosAtraso(data || []);
+      setRegistrosAtraso((data || []).filter((r: any) => r.alunos?.escola_id === escolaSelecionada));
     } catch (error) {
       console.error("Erro ao buscar registros de atraso:", error);
       toast({
@@ -219,8 +214,22 @@ export default function ConsultarFaltasPage() {
 
   return (
     <div className="container mx-auto p-4 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
         <h1 className="text-2xl font-bold text-purple-700">Consultar Faltas</h1>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="escola-select">Escola:</Label>
+          <select
+            id="escola-select"
+            className="border rounded px-2 py-1"
+            value={escolaSelecionada}
+            onChange={e => setEscolaSelecionada(e.target.value)}
+            disabled={escolasLoading}
+          >
+            {escolas.map(escola => (
+              <option key={escola.id} value={escola.id}>{escola.nome}</option>
+            ))}
+          </select>
+        </div>
         <Link to="/dashboard">
           <Button variant="outline" className="flex gap-2">
             <ArrowLeft size={18} /> Voltar ao Dashboard

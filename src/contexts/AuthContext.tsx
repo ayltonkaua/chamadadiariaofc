@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -7,6 +6,7 @@ interface User {
   id: string;
   username: string;
   email: string;
+  escola_id?: string;
   role?: string;
 }
 
@@ -56,13 +56,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return false;
     }
 
-    // Extrai username dos metadados do usuário
+    // Extrai username e escola_id dos metadados do usuário
     const username = sessionData.user.user_metadata?.username || "";
+    const escola_id = sessionData.user.user_metadata?.escola_id || undefined;
 
     setUser({
       id: sessionData.user.id,
       username,
       email: sessionData.user.email || "",
+      escola_id,
     });
     setIsAuthenticated(true);
     return true;
@@ -83,6 +85,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           id: user.id,
           username: user.user_metadata?.username || "",
           email: user.email || "",
+          escola_id: user.user_metadata?.escola_id || undefined,
         });
         setIsAuthenticated(true);
       } else {
