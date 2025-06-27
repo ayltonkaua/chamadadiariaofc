@@ -34,7 +34,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .from('user_roles')
         .select('escola_id, role')
         .eq('user_id', userId)
-        .single();
+        .limit(1) // Garante que no máximo 1 linha será retornada
+        .maybeSingle(); // Retorna a linha ou null, sem causar erro
 
       if (error) {
         console.warn('Erro ao buscar dados do usuário:', error);
