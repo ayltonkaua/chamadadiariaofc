@@ -1,7 +1,7 @@
 // src/pages/PesquisaPublicaPage.tsx
 
 import React, { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,12 @@ interface PesquisaPendente {
     pesquisa_perguntas: { id: string; texto_pergunta: string; opcoes: string[] }[];
 }
 
+// Cliente Supabase genérico para contornar problemas de tipo
+const supabaseGeneric = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
 const PesquisaPublicaPage: React.FC = () => {
     const [step, setStep] = useState<'login' | 'list' | 'form'>('login');
     const [nome, setNome] = useState('');
@@ -32,21 +38,28 @@ const PesquisaPublicaPage: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            const { data: alunoData, error: alunoError } = await supabase.from('alunos').select('id, nome').eq('matricula', matricula).ilike('nome', nome.trim()).single();
+            const { data: alunoData, error: alunoError } = await supabaseGeneric
+                .from('alunos')
+                .select('id, nome')
+                .eq('matricula', matricula)
+                .ilike('nome', nome.trim())
+                .single();
+            
             if (alunoError || !alunoData) {
                 toast({ title: "Aluno não encontrado", description: "Verifique o nome completo e a matrícula.", variant: "destructive" });
                 return;
             }
             setAluno(alunoData);
 
-            const { data: pendentesData, error: pendentesError } = await supabase.from('pesquisa_destinatarios')
+            const { data: pendentesData, error: pendentesError } = await supabaseGeneric
+                .from('pesquisa_destinatarios')
                 .select(`pesquisas!inner(id, titulo, descricao, status, pesquisa_perguntas(id, texto_pergunta, opcoes))`)
                 .eq('aluno_id', alunoData.id)
                 .eq('status_resposta', 'pendente')
                 .eq('pesquisas.status', 'ativa');
 
             if (pendentesError) throw pendentesError;
-            const pesquisasFormatadas = pendentesData.map(item => item.pesquisas as PesquisaPendente);
+            const pesquisasFormatadas = (pendentesData as any[]).map(item => item.pesquisas as PesquisaPendente);
             setPesquisasPendentes(pesquisasFormatadas);
             setStep('list');
         } catch(err) {
@@ -78,9 +91,14 @@ const PesquisaPublicaPage: React.FC = () => {
                 aluno_id: aluno!.id,
                 resposta,
             }));
-            await supabase.from('pesquisa_respostas').insert(respostasParaInserir);
             
-            await supabase.from('pesquisa_destinatarios').update({ status_resposta: 'concluida' }).eq('aluno_id', aluno!.id).eq('pesquisa_id', pesquisaAtiva!.id);
+            await supabaseGeneric.from('pesquisa_respostas').insert(respostasParaInserir);
+            
+            await supabaseGeneric
+                .from('pesquisa_destinatarios')
+                .update({ status_resposta: 'concluida' })
+                .eq('aluno_id', aluno!.id)
+                .eq('pesquisa_id', pesquisaAtiva!.id);
 
             toast({ title: "Obrigado por responder!", description: "Sua resposta foi enviada com sucesso." });
             setStep('login'); // ou voltar para a lista
