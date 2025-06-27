@@ -14,34 +14,77 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Users, User } from "lucide-react";
 
 interface AlunoPresencaMensal {
   mes: string;
   presenca: number;
 }
 
-interface AlunoOption {
+interface Turma {
+  id: string;
+  nome: string;
+}
+
+interface Aluno {
   id: string;
   nome: string;
   matricula: string;
-  turma: string;
+  turma_id: string;
 }
 
 const EvolucaoAlunoChart = () => {
   const { user } = useAuth();
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [turmaSelecionada, setTurmaSelecionada] = useState<string>("");
   const [alunoId, setAlunoId] = useState<string>("");
-  const [alunos, setAlunos] = useState<AlunoOption[]>([]);
   const [presencaData, setPresencaData] = useState<AlunoPresencaMensal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingAlunos, setLoadingAlunos] = useState(true);
+  const [loadingTurmas, setLoadingTurmas] = useState(true);
+  const [loadingAlunos, setLoadingAlunos] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Carregar turmas do usuário
   useEffect(() => {
-    const fetchAlunos = async () => {
+    const fetchTurmas = async () => {
       if (!user) {
         setError("Usuário não autenticado");
-        setLoadingAlunos(false);
+        setLoadingTurmas(false);
+        return;
+      }
+      
+      setLoadingTurmas(true);
+      setError(null);
+      
+      try {
+        const { data: turmasData, error: turmasError } = await supabase
+          .from("turmas")
+          .select("id, nome")
+          .eq("user_id", user.id)
+          .order("nome");
+        
+        if (turmasError) {
+          throw new Error("Erro ao buscar turmas");
+        }
+        
+        setTurmas(turmasData || []);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Erro ao carregar turmas");
+      } finally {
+        setLoadingTurmas(false);
+      }
+    };
+    
+    fetchTurmas();
+  }, [user]);
+
+  // Carregar alunos quando uma turma for selecionada
+  useEffect(() => {
+    const fetchAlunos = async () => {
+      if (!turmaSelecionada) {
+        setAlunos([]);
+        setAlunoId("");
         return;
       }
       
@@ -49,54 +92,18 @@ const EvolucaoAlunoChart = () => {
       setError(null);
       
       try {
-        // Buscar turmas do usuário
-        const { data: turmas, error: turmasError } = await supabase
-          .from("turmas")
-          .select("id, nome")
-          .eq("user_id", user.id);
-        
-        if (turmasError) {
-          throw new Error("Erro ao buscar turmas");
-        }
-        
-        if (!turmas || turmas.length === 0) {
-          setAlunos([]);
-          setLoadingAlunos(false);
-          return;
-        }
-        
-        const turmaIds = turmas.map(t => t.id);
-        const turmasMap = turmas.reduce((acc: {[key: string]: string}, turma) => {
-          acc[turma.id] = turma.nome;
-          return acc;
-        }, {});
-        
-        // Buscar alunos das turmas
         const { data: alunosData, error: alunosError } = await supabase
           .from("alunos")
           .select("id, nome, matricula, turma_id")
-          .in("turma_id", turmaIds);
+          .eq("turma_id", turmaSelecionada)
+          .order("nome");
           
         if (alunosError) {
           throw new Error("Erro ao buscar alunos");
         }
         
-        if (!alunosData || alunosData.length === 0) {
-          setAlunos([]);
-          setLoadingAlunos(false);
-          return;
-        }
-        
-        const alunosFormatados = alunosData
-          .map(aluno => ({
-            id: aluno.id,
-            nome: aluno.nome,
-            matricula: aluno.matricula,
-            turma: turmasMap[aluno.turma_id]
-          }))
-          .sort((a, b) => a.nome.localeCompare(b.nome));
-        
-        setAlunos(alunosFormatados);
+        setAlunos(alunosData || []);
+        setAlunoId(""); // Reset aluno selecionado quando mudar turma
       } catch (error) {
         setError(error instanceof Error ? error.message : "Erro ao carregar alunos");
       } finally {
@@ -105,8 +112,9 @@ const EvolucaoAlunoChart = () => {
     };
     
     fetchAlunos();
-  }, [user]);
+  }, [turmaSelecionada]);
 
+  // Carregar dados de presença quando um aluno for selecionado
   useEffect(() => {
     const fetchPresencaAluno = async () => {
       if (!alunoId) {
@@ -169,53 +177,149 @@ const EvolucaoAlunoChart = () => {
     fetchPresencaAluno();
   }, [alunoId]);
 
+  const handleTurmaChange = (value: string) => {
+    setTurmaSelecionada(value);
+  };
+
   const handleAlunoChange = (value: string) => {
     setAlunoId(value);
   };
 
+  const turmaAtual = turmas.find(t => t.id === turmaSelecionada);
+  const alunoAtual = alunos.find(a => a.id === alunoId);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Evolução do Aluno</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <User className="h-5 w-5" />
+          Evolução do Aluno
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="mb-6">
-          <Select value={alunoId} onValueChange={handleAlunoChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um aluno" />
-            </SelectTrigger>
-            <SelectContent>
-              {alunos.map((aluno) => (
-                <SelectItem key={aluno.id} value={aluno.id}>
-                  {aluno.nome} - {aluno.turma}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-4 mb-6">
+          {/* Seletor de Turma */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Turma
+            </label>
+            <Select value={turmaSelecionada} onValueChange={handleTurmaChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma turma" />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingTurmas ? (
+                  <SelectItem value="" disabled>
+                    Carregando turmas...
+                  </SelectItem>
+                ) : turmas.length === 0 ? (
+                  <SelectItem value="" disabled>
+                    Nenhuma turma encontrada
+                  </SelectItem>
+                ) : (
+                  turmas.map((turma) => (
+                    <SelectItem key={turma.id} value={turma.id}>
+                      {turma.nome}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Seletor de Aluno */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Aluno
+            </label>
+            <Select value={alunoId} onValueChange={handleAlunoChange} disabled={!turmaSelecionada}>
+              <SelectTrigger>
+                <SelectValue placeholder={turmaSelecionada ? "Selecione um aluno" : "Primeiro selecione uma turma"} />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingAlunos ? (
+                  <SelectItem value="" disabled>
+                    Carregando alunos...
+                  </SelectItem>
+                ) : alunos.length === 0 ? (
+                  <SelectItem value="" disabled>
+                    Nenhum aluno encontrado nesta turma
+                  </SelectItem>
+                ) : (
+                  alunos.map((aluno) => (
+                    <SelectItem key={aluno.id} value={aluno.id}>
+                      {aluno.nome} ({aluno.matricula})
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Informações do aluno selecionado */}
+          {alunoAtual && turmaAtual && (
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-sm text-blue-800">
+                <p className="font-medium">Aluno: {alunoAtual.nome}</p>
+                <p>Turma: {turmaAtual.nome} • Matrícula: {alunoAtual.matricula}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="h-[300px]">
-          {loadingAlunos ? (
+          {loadingTurmas ? (
             <div className="h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-2">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
-                <p className="text-gray-500">Carregando alunos...</p>
+                <p className="text-gray-500">Carregando turmas...</p>
               </div>
             </div>
           ) : error ? (
             <div className="h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-2 text-red-500">
                 <AlertCircle size={24} />
-                <p>{error}</p>
+                <p className="text-center">{error}</p>
+              </div>
+            </div>
+          ) : turmas.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Users className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">Nenhuma turma encontrada.</p>
+                <p className="text-sm text-gray-400">Crie uma turma para começar.</p>
+              </div>
+            </div>
+          ) : !turmaSelecionada ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Users className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">Selecione uma turma para ver os alunos.</p>
+              </div>
+            </div>
+          ) : loadingAlunos ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                <p className="text-gray-500">Carregando alunos...</p>
               </div>
             </div>
           ) : alunos.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <p className="text-gray-500">Nenhum aluno encontrado.</p>
+              <div className="text-center">
+                <User className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">Nenhum aluno encontrado nesta turma.</p>
+                <p className="text-sm text-gray-400">Adicione alunos à turma para começar.</p>
+              </div>
             </div>
           ) : !alunoId ? (
             <div className="h-full flex items-center justify-center">
-              <p className="text-gray-500">Selecione um aluno para visualizar sua evolução.</p>
+              <div className="text-center">
+                <User className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">Selecione um aluno para visualizar sua evolução.</p>
+              </div>
             </div>
           ) : loading ? (
             <div className="h-full flex items-center justify-center">
@@ -226,7 +330,11 @@ const EvolucaoAlunoChart = () => {
             </div>
           ) : presencaData.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <p className="text-gray-500">Nenhum registro de presença encontrado para este aluno.</p>
+              <div className="text-center">
+                <AlertCircle className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-500">Nenhum registro de presença encontrado.</p>
+                <p className="text-sm text-gray-400">Faça algumas chamadas para ver a evolução.</p>
+              </div>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">

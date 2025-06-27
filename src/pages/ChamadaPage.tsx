@@ -318,19 +318,19 @@ const ChamadaPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4 max-w-3xl mx-auto">
+    <div className="min-h-screen bg-gray-50 py-4 px-2 sm:py-6 sm:px-4 max-w-4xl mx-auto">
       {/* Status da conexão */}
       {!isOnline && (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4 flex items-center">
-          <WifiOff className="h-4 w-4 mr-2" />
-          <span className="text-sm font-medium">Modo offline - As chamadas serão salvas localmente</span>
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-3 py-2 sm:px-4 sm:py-3 rounded mb-4 flex items-center text-sm">
+          <WifiOff className="h-4 w-4 mr-2 flex-shrink-0" />
+          <span className="font-medium">Modo offline - As chamadas serão salvas localmente</span>
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-purple-700">Chamada</h2>
-          <div className="flex items-center gap-2">
+      <div className="bg-white rounded-xl shadow-md p-4 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-purple-700">Chamada</h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             {isOnline ? (
               <div className="flex items-center text-green-600 text-sm">
                 <Wifi className="h-4 w-4 mr-1" />
@@ -343,32 +343,48 @@ const ChamadaPage: React.FC = () => {
               </div>
             )}
             <Link to="/dashboard">
-              <Button variant="outline" className="flex gap-2">
-                <ArrowLeft size={18} /> Voltar ao Dashboard
+              <Button variant="outline" className="flex gap-2 w-full sm:w-auto">
+                <ArrowLeft size={18} /> 
+                <span className="hidden sm:inline">Voltar ao Dashboard</span>
+                <span className="sm:hidden">Voltar</span>
               </Button>
             </Link>
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
-            <span className="font-medium">Data selecionada:</span>{" "}
-            <span className="text-gray-800">
+            <span className="font-medium text-sm sm:text-base">Data selecionada:</span>{" "}
+            <span className="text-gray-800 text-sm sm:text-base">
               {format(date, "dd/MM/yyyy")}
             </span>
           </div>
-          <div>
-            <Calendar 
-              mode="single"
-              selected={date}
-              onSelect={(date) => date && setDate(date)}
-              className="p-3 pointer-events-auto"
-            />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPresencas({});
+                setTentouSalvar(false);
+              }}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              Limpar Seleção
+            </Button>
+            <div>
+              <Calendar 
+                mode="single"
+                selected={date}
+                onSelect={(date) => date && setDate(date)}
+                className="p-3 pointer-events-auto"
+              />
+            </div>
           </div>
         </div>
+        
         <div className="mb-2 mt-4">
-          <h3 className="font-semibold text-gray-700">Alunos</h3>
+          <h3 className="font-semibold text-gray-700 text-sm sm:text-base">Alunos</h3>
         </div>
+        
         <div className="flex flex-col gap-2">
           {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
             const semRegistro = tentouSalvar && !presencas[aluno.id];
@@ -376,66 +392,87 @@ const ChamadaPage: React.FC = () => {
             return (
               <div
                 key={aluno.id}
-                className={`flex items-center justify-between border rounded-md p-2 gap-2 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
+                className={`flex flex-col sm:flex-row sm:items-center sm:justify-between border rounded-md p-3 gap-3 bg-gray-50 ${semRegistro ? "border-2 border-red-500 bg-red-50" : ""}`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{aluno.nome}</span>
-                  <span className="text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                    <span className="font-medium text-sm sm:text-base">{aluno.nome}</span>
+                    <span className="text-xs sm:text-sm text-gray-500">(Matrícula: {aluno.matricula})</span>
+                  </div>
                   {temAtestado && (
                     <div className="flex items-center gap-1 text-blue-600" title="Aluno com atestado aprovado para esta data">
-                      <Shield className="h-4 w-4" />
+                      <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span className="text-xs font-medium">Atestado</span>
                     </div>
                   )}
                 </div>
-                <div className="flex gap-2">
+                
+                <div className="flex flex-wrap gap-1 sm:gap-2">
                   <Button
                     variant={presencas[aluno.id] === "presente" ? "default" : "outline"}
-                    className={presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}
+                    size="sm"
+                    className={`${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
                     onClick={() => handlePresenca(aluno.id, "presente")}
                     title="Presente"
-                  ><Check size={18}/></Button>
+                  >
+                    <Check size={16} className="sm:hidden" />
+                    <span className="hidden sm:inline">Presente</span>
+                  </Button>
                   <Button
                     variant={presencas[aluno.id] === "falta" ? "default" : "outline"}
-                    className={presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}
+                    size="sm"
+                    className={`${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
                     onClick={() => handlePresenca(aluno.id, "falta")}
                     title="Falta"
-                  ><X size={18}/></Button>
+                  >
+                    <X size={16} className="sm:hidden" />
+                    <span className="hidden sm:inline">Falta</span>
+                  </Button>
                   <Button
                     variant={presencas[aluno.id] === "atestado" ? "default" : "outline"}
-                    className={presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}
+                    size="sm"
+                    className={`${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""} min-w-[60px] sm:min-w-[80px]`}
                     onClick={() => handlePresenca(aluno.id, "atestado")}
                     title="Atestado"
-                  ><FileText size={18}/></Button>
+                  >
+                    <FileText size={16} className="sm:hidden" />
+                    <span className="hidden sm:inline">Atestado</span>
+                  </Button>
                   <Button
                     variant="outline"
-                    size="icon"
+                    size="sm"
                     onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })}
                     title="Adicionar Observação"
-                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 min-w-[40px] sm:min-w-[50px]"
                   >
                     <MessageSquare size={16}/>
                   </Button>
                 </div>
+                
                 {semRegistro && (
-                  <span className="text-xs text-red-600 font-semibold ml-2">Obrigatório registrar presença</span>
+                  <span className="text-xs text-red-600 font-semibold sm:ml-2">Obrigatório registrar presença</span>
                 )}
               </div>
             );
           })}
         </div>
+        
         <Button 
-          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center" 
+          className="mt-6 w-full bg-purple-600 hover:bg-purple-700 text-white flex gap-2 items-center justify-center h-12" 
           onClick={handleSalvar}
           disabled={isSaving || alunos.some(aluno => !presencas[aluno.id])}
         >
           {isSaving ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Salvando...
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> 
+              <span className="hidden sm:inline">Salvando...</span>
+              <span className="sm:hidden">Salvando</span>
             </>
           ) : (
             <>
-              <Save size={20}/> Salvar Chamada
+              <Save size={20}/> 
+              <span className="hidden sm:inline">Salvar Chamada</span>
+              <span className="sm:hidden">Salvar</span>
             </>
           )}
         </Button>
