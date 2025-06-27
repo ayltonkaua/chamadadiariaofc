@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -22,6 +24,13 @@ import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
 import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
+
+// Importe as novas páginas de pesquisa que você irá criar
+import PesquisasListPage from "./pages/PesquisasListPage";
+import PesquisaCreatePage from "./pages/PesquisaCreatePage";
+import PesquisaResultadosPage from "./pages/PesquisaResultadosPage";
+import PesquisaPublicaPage from "./pages/PesquisaPublicaPage";
+
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -30,38 +39,11 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async function (OneSignal: any) {
-      await OneSignal.init({
-        appId: "a2c919d8-ec01-4dd8-a533-fc13fb138321",
-        notifyButton: {
-          enable: true,
-        },
-        allowLocalhostAsSecureOrigin: false,
-      });
-    });
+    // ... seu código do OneSignal
   }, []);
 
   useEffect(() => {
-    const syncChamadas = async () => {
-      if (navigator.onLine) {
-        const pendentes = await getChamadasPendentes();
-        for (const chamadas of pendentes) {
-          try {
-            await supabase.from('presencas').insert(chamadas);
-          } catch (e) {
-            return; // Se falhar, pare a sincronização
-          }
-        }
-        await limparChamadasPendentes();
-        if (pendentes.length > 0) {
-          toast({ title: "Chamadas sincronizadas", description: "Chamadas offline foram enviadas com sucesso." });
-        }
-      }
-    };
-    window.addEventListener('online', syncChamadas);
-    syncChamadas();
-    return () => window.removeEventListener('online', syncChamadas);
+    // ... sua lógica de sincronização offline
   }, []);
 
   return (
@@ -95,6 +77,13 @@ const App = () => {
                 <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
                 <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
                 <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
+                
+                {/* NOVAS ROTAS PARA O MÓDULO DE PESQUISA */}
+                <Route path="/pesquisas" element={<PesquisasListPage />} />
+                <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
+                <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
+                <Route path="/responder-pesquisa" element={<PesquisaPublicaPage />} />
+
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Router>

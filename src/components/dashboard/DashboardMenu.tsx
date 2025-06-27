@@ -1,3 +1,5 @@
+// src/components/dashboard/DashboardMenu.tsx
+
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,11 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Settings, School, Lock, FileText, AlertTriangle, Clock, Moon, Sun } from "lucide-react";
+// Adicione o ícone ListChecks
+import { Settings, School, Lock, FileText, AlertTriangle, Clock, Moon, Sun, Bell, ListChecks } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Bell } from "lucide-react";
 
 export const DashboardMenu: React.FC = () => {
   const { user } = useAuth();
@@ -83,6 +85,13 @@ export const DashboardMenu: React.FC = () => {
           <Link to="/alertas" className="flex items-center">
             <AlertTriangle className="h-4 w-4 mr-2" />
             Alertas
+          </Link>
+        </DropdownMenuItem>
+        {/* NOVO ITEM DE MENU PARA PESQUISAS */}
+        <DropdownMenuItem className="cursor-pointer" asChild>
+          <Link to="/pesquisas" className="flex items-center">
+            <ListChecks className="h-4 w-4 mr-2" />
+            Pesquisas
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer" asChild>
