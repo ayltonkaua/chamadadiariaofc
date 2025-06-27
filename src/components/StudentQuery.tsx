@@ -12,6 +12,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Tables } from "@/integrations/supabase/types";
 import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 interface StudentAttendanceResult {
   name: string;
