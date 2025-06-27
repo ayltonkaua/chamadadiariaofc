@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => void;
   register: (username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   isAuthenticated: boolean;
+  refreshUserData: () => Promise<void>;
 }
 
 // Cria contexto
@@ -135,8 +136,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     getSession();
   }, []);
 
+  const refreshUserData = async () => {
+    if (!user) return;
+    
+    try {
+      // Busca escola_id e role da tabela user_roles
+      const userData = await fetchUserData(user.id);
+
+      setUser({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        escola_id: userData.escola_id,
+        role: userData.role,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar dados do usuário:', error);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, register, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, register, isAuthenticated, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );

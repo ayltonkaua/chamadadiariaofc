@@ -11,8 +11,8 @@ import { Loader2, Upload, Check, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const EscolaConfigForm: React.FC = () => {
-  const { config, loading, error, updateConfig } = useEscolaConfig();
-  const { user } = useAuth();
+  const { config, loading, error, updateConfig, refreshConfig } = useEscolaConfig();
+  const { user, refreshUserData } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,6 +24,11 @@ const EscolaConfigForm: React.FC = () => {
     cor_secundaria: '#f3f4f6',
     url_logo: ''
   });
+
+  // Debug: verificar dados do usuário
+  console.log('EscolaConfigForm - User:', user);
+  console.log('EscolaConfigForm - User escola_id:', user?.escola_id);
+  console.log('EscolaConfigForm - User role:', user?.role);
 
   React.useEffect(() => {
     if (config) {
@@ -97,7 +102,13 @@ const EscolaConfigForm: React.FC = () => {
     try {
       const success = await updateConfig(formData);
       if (success) {
-        alert('Configurações atualizadas com sucesso!');
+        await refreshConfig();
+        if (user?.escola_id) {
+          alert('Configurações atualizadas com sucesso!');
+        } else {
+          alert('Escola criada com sucesso! Atualizando configurações...');
+          await refreshUserData();
+        }
       }
     } catch (error) {
       console.error('Erro ao atualizar configurações:', error);
@@ -107,7 +118,7 @@ const EscolaConfigForm: React.FC = () => {
   };
 
   // Verificar se o usuário tem permissão para editar
-  const canEdit = user && user.escola_id;
+  const canEdit = user; // Qualquer usuário logado pode editar
 
   if (loading) {
     return (
@@ -118,7 +129,7 @@ const EscolaConfigForm: React.FC = () => {
     );
   }
 
-  // Se o usuário não tem escola_id, mostrar aviso
+  // Se o usuário não está logado, mostrar aviso
   if (!canEdit) {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -130,79 +141,9 @@ const EscolaConfigForm: React.FC = () => {
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Acesso Restrito:</strong> Você não tem permissão para editar as configurações da escola. 
-            Entre em contato com o administrador do sistema para obter acesso.
+            <strong>Acesso Restrito:</strong> Você precisa estar logado para configurar o perfil da escola.
           </AlertDescription>
         </Alert>
-
-        {config && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuração Atual (Somente Visualização)</CardTitle>
-              <CardDescription>
-                Estas são as configurações atuais da escola. Você pode visualizar, mas não editar.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Nome da Escola</Label>
-                  <Input value={config.nome} disabled />
-                </div>
-                <div>
-                  <Label>E-mail</Label>
-                  <Input value={config.email} disabled />
-                </div>
-              </div>
-              
-              <div>
-                <Label>Endereço</Label>
-                <Textarea value={config.endereco} disabled />
-              </div>
-              
-              <div>
-                <Label>Telefone</Label>
-                <Input value={config.telefone} disabled />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Cor Primária</Label>
-                  <div className="flex items-center gap-2">
-                    <Input value={config.cor_primaria} disabled />
-                    <div 
-                      className="w-8 h-8 rounded border"
-                      style={{ backgroundColor: config.cor_primaria }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Cor Secundária</Label>
-                  <div className="flex items-center gap-2">
-                    <Input value={config.cor_secundaria} disabled />
-                    <div 
-                      className="w-8 h-8 rounded border"
-                      style={{ backgroundColor: config.cor_secundaria }}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {config.url_logo && (
-                <div>
-                  <Label>Logo da Escola</Label>
-                  <div className="mt-2">
-                    <img 
-                      src={config.url_logo} 
-                      alt="Logo da escola" 
-                      className="h-20 w-auto object-contain"
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     );
   }
@@ -212,6 +153,20 @@ const EscolaConfigForm: React.FC = () => {
       <div className="text-center">
         <h1 className="text-3xl font-bold mb-2">Perfil da Escola</h1>
         <p className="text-gray-600">Gerencie as informações institucionais da sua escola.</p>
+        {!user?.escola_id ? (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-blue-800 text-sm">
+              <strong>Primeira vez aqui?</strong> Configure o perfil da sua escola. 
+              Uma nova escola será criada automaticamente para você.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-green-800 text-sm">
+              <strong>Escola configurada!</strong> Você pode editar as informações da sua escola abaixo.
+            </p>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -390,7 +345,12 @@ const EscolaConfigForm: React.FC = () => {
             ) : (
               <Check className="h-4 w-4" />
             )}
-            {isUpdating ? 'Salvando...' : 'Salvar Configurações'}
+            {isUpdating 
+              ? 'Salvando...' 
+              : user?.escola_id 
+                ? 'Atualizar Configurações' 
+                : 'Criar Escola'
+            }
           </Button>
         </div>
       </form>

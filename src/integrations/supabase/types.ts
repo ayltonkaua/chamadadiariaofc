@@ -315,7 +315,18 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      criar_escola_e_associar_admin: {
+        Args: {
+          nome_escola: string;
+          endereco_escola: string;
+          telefone_escola: string;
+          email_escola: string;
+          url_logo_escola?: string | null;
+          cor_primaria_escola?: string | null;
+          cor_secundaria_escola?: string | null;
+        };
+        Returns: string;
+      };
     }
     Enums: {
       [_ in never]: never
