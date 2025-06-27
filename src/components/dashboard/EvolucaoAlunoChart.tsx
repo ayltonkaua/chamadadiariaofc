@@ -210,13 +210,9 @@ const EvolucaoAlunoChart = () => {
               </SelectTrigger>
               <SelectContent>
                 {loadingTurmas ? (
-                  <SelectItem value="" disabled>
-                    Carregando turmas...
-                  </SelectItem>
+                  <div className="px-4 py-2 text-gray-500">Carregando turmas...</div>
                 ) : turmas.length === 0 ? (
-                  <SelectItem value="" disabled>
-                    Nenhuma turma encontrada
-                  </SelectItem>
+                  <div className="px-4 py-2 text-gray-500">Nenhuma turma encontrada</div>
                 ) : (
                   turmas.map((turma) => (
                     <SelectItem key={turma.id} value={turma.id}>
@@ -240,13 +236,9 @@ const EvolucaoAlunoChart = () => {
               </SelectTrigger>
               <SelectContent>
                 {loadingAlunos ? (
-                  <SelectItem value="" disabled>
-                    Carregando alunos...
-                  </SelectItem>
+                  <div className="px-4 py-2 text-gray-500">Carregando alunos...</div>
                 ) : alunos.length === 0 ? (
-                  <SelectItem value="" disabled>
-                    Nenhum aluno encontrado nesta turma
-                  </SelectItem>
+                  <div className="px-4 py-2 text-gray-500">Nenhum aluno encontrado nesta turma</div>
                 ) : (
                   alunos.map((aluno) => (
                     <SelectItem key={aluno.id} value={aluno.id}>
