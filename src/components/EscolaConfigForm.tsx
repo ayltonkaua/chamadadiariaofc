@@ -78,7 +78,7 @@ const EscolaConfigForm: React.FC = () => {
             <div className="space-y-4 border-t pt-6">
                 <h3 className="text-lg font-medium text-gray-700">Identidade Visual</h3>
                 <div className="space-y-2">
-                    {/* CORREÇÃO: Alterado de 'logo_url' para 'url_logo' */}
+                    {/* CORREÇÃO DEFINITIVA: O 'name' e 'id' devem ser 'url_logo' */}
                     <Label htmlFor="url_logo">URL do Logo</Label>
                     <Input
                         id="url_logo"
@@ -91,7 +91,7 @@ const EscolaConfigForm: React.FC = () => {
                     <p className="text-xs text-gray-500">Cole a URL completa da imagem do logo da sua escola.</p>
                 </div>
 
-                {/* CORREÇÃO: Alterado de 'logo_url' para 'url_logo' */}
+                {/* CORREÇÃO DEFINITIVA: Acessar a propriedade 'url_logo' do estado */}
                 {formData.url_logo && (
                     <div>
                         <Label>Pré-visualização</Label>

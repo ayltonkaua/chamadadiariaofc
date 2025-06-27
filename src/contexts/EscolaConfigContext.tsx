@@ -6,13 +6,13 @@ import { toast } from "@/hooks/use-toast";
 
 type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "criado_em" | "atualizado_em">;
 
-// CORREÇÃO: Alterado de 'logo_url' para 'url_logo' para corresponder ao DB
+// CORREÇÃO DEFINITIVA: O nome da propriedade aqui deve ser 'url_logo'.
 const defaultConfig: EscolaConfig = {
   nome: "",
   endereco: null,
   email: "",
   telefone: null,
-  url_logo: null,
+  url_logo: null, 
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
 };
@@ -40,6 +40,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     setLoading(true);
     try {
+      // CORREÇÃO DEFINITIVA: Selecionando 'url_logo' do banco.
       const { data, error } = await supabase
         .from("escola_configuracao")
         .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria")
