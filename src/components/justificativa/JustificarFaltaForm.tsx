@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { X, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,8 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DialogFooter } from "@/components/ui/dialog";
 import { TablesInsert } from "@/integrations/supabase/types";
-import { useAuth } from '@/contexts/AuthContext';
+import { useEscolasCadastradas, Escola } from "@/hooks/useEscolasCadastradas"; // NOVO: Hook para buscar escolas
 
 interface Aluno {
   id: string;
@@ -30,8 +31,12 @@ interface JustificarFaltaFormProps {
 const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSuccess }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  
+  // NOVO: Estados para controlar a seleção de escola e a lista de alunos
+  const { escolas, loading: escolasLoading } = useEscolasCadastradas();
+  const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const { user } = useAuth();
+  const [alunosLoading, setAlunosLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     aluno_id: "",
@@ -40,15 +45,22 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
     descricao: "",
   });
 
+  // MODIFICADO: Efeito para carregar alunos QUANDO a escola for selecionada
   useEffect(() => {
-    const carregarAlunos = async () => {
-      if (!user?.escola_id) return;
+    // Limpa a lista de alunos se nenhuma escola estiver selecionada
+    if (!escolaSelecionada) {
+      setAlunos([]);
+      setFormData(prev => ({ ...prev, aluno_id: '' }));
+      return;
+    }
 
+    const carregarAlunos = async () => {
+      setAlunosLoading(true);
       try {
         const { data, error } = await supabase
           .from("alunos")
           .select("id, nome, matricula")
-          .eq("escola_id", user.escola_id)
+          .eq("escola_id", escolaSelecionada) // Filtra pela escola selecionada
           .order("nome");
 
         if (error) throw error;
@@ -57,19 +69,22 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
         console.error("Erro ao carregar alunos:", error);
         toast({
           title: "Erro",
-          description: "Não foi possível carregar a lista de alunos.",
+          description: "Não foi possível carregar a lista de alunos para esta escola.",
           variant: "destructive",
         });
+      } finally {
+        setAlunosLoading(false);
       }
     };
 
     carregarAlunos();
-  }, [user?.escola_id, toast]);
+  }, [escolaSelecionada, toast]); // A dependência agora é a escola selecionada
 
+  // MODIFICADO: Função de envio para usar o ID da escola selecionada
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.escola_id) {
-        toast({ title: "Erro", description: "Escola não identificada. Faça login novamente.", variant: "destructive" });
+    if (!escolaSelecionada) {
+        toast({ title: "Erro", description: "Selecione uma escola para continuar.", variant: "destructive" });
         return;
     }
     if (!formData.aluno_id || !formData.data_inicio || !formData.data_fim || !formData.descricao) {
@@ -85,7 +100,7 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
         data_fim: formData.data_fim,
         descricao: formData.descricao,
         status: "pendente",
-        escola_id: user.escola_id
+        escola_id: escolaSelecionada // Usa o ID da escola selecionada
       };
       const { error } = await supabase.from("atestados").insert(insertData);
 
@@ -96,8 +111,8 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
         description: "Atestado enviado com sucesso e aguardando aprovação.",
       });
       
-      onSuccess(); // Chama a função de sucesso para recarregar os dados na página pai
-      onClose();   // Fecha o diálogo
+      onSuccess();
+      onClose();
 
     } catch (error: any) {
       console.error("Erro ao enviar atestado:", error);
@@ -111,24 +126,57 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
     }
   };
 
+  const handleEscolaChange = (id: string) => {
+    setEscolaSelecionada(id);
+    setAlunos([]);
+    setFormData(prev => ({ ...prev, aluno_id: '' }));
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+        {/* NOVO: Seletor de Escola */}
+        <div className="space-y-2">
+            <Label htmlFor="escola">Escola *</Label>
+            <Select
+              onValueChange={handleEscolaChange}
+              value={escolaSelecionada}
+              disabled={escolasLoading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={escolasLoading ? "Carregando escolas..." : "Selecione a escola"} />
+              </SelectTrigger>
+              <SelectContent>
+                {escolas.map((escola) => (
+                  <SelectItem key={escola.id} value={escola.id}>
+                    {escola.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+        </div>
+
+        {/* MODIFICADO: Seletor de Aluno agora depende da Escola */}
         <div className="space-y-2">
             <Label htmlFor="aluno">Aluno *</Label>
             <Select
               value={formData.aluno_id}
               onValueChange={(value) => setFormData({ ...formData, aluno_id: value })}
-              disabled={alunos.length === 0}
+              disabled={!escolaSelecionada || alunosLoading || alunos.length === 0}
             >
               <SelectTrigger>
-                <SelectValue placeholder={alunos.length > 0 ? "Selecione um aluno" : "Nenhum aluno encontrado"} />
+                <SelectValue placeholder={
+                    !escolaSelecionada ? "Selecione uma escola primeiro" :
+                    alunosLoading ? "Carregando alunos..." :
+                    alunos.length === 0 ? "Nenhum aluno encontrado" :
+                    "Selecione um aluno"
+                } />
               </SelectTrigger>
               <SelectContent>
-                  {alunos.map((aluno) => (
+                {alunos.map((aluno) => (
                   <SelectItem key={aluno.id} value={aluno.id}>
                       {aluno.nome} - {aluno.matricula}
                   </SelectItem>
-                  ))}
+                ))}
               </SelectContent>
             </Select>
         </div>
