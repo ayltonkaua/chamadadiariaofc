@@ -3,22 +3,23 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
 import { Button } from '@/components/ui/button';
-import { 
-  Home, 
-  Users, 
-  Calendar, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X, 
-  FileText, 
-  BarChart3, 
-  Bell, 
+import {
+  Home,
+  Users,
+  Calendar,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  FileText,
+  BarChart3,
+  Bell,
   AlertTriangle,
   ClipboardList,
   Plus,
   Search,
-  UserCheck
+  UserCheck,
+  LineChart // Ícone modificado/adicionado
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -53,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     {
       title: 'Chamadas',
       icon: UserCheck,
-      href: '/dashboard',
+      href: '/dashboard', // Manter o href principal para o grupo
       description: 'Realizar chamadas',
       subItems: [
         { title: 'Fazer Chamada', href: '/dashboard', icon: Calendar },
@@ -63,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     {
       title: 'Alunos',
       icon: Users,
-      href: '/dashboard',
+      href: '/dashboard', // Manter o href principal para o grupo
       description: 'Gerenciar alunos',
       subItems: [
         { title: 'Gerenciar Alunos', href: '/dashboard', icon: Users },
@@ -81,12 +82,15 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         { title: 'Responder Pesquisa', href: '/responder-pesquisa', icon: Search },
       ]
     },
+    // ===== ITEM MODIFICADO =====
     {
       title: 'Relatórios',
-      icon: BarChart3,
-      href: '/dashboard',
-      description: 'Relatórios e estatísticas'
+      icon: LineChart, // Ícone atualizado
+      href: '/relatorios', // Rota atualizada
+      description: 'Relatórios e estatísticas',
+      roles: ['admin', 'diretor'] // Permissões adicionadas
     },
+    // ===========================
     {
       title: 'Atestados',
       icon: ClipboardList,
@@ -103,50 +107,52 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       title: 'Notificações',
       icon: Bell,
       href: '/notificacoes',
-      description: 'Central de notificações'
+      description: 'Central de notificações',
+      roles: ['admin', 'diretor'] // Exemplo de permissão
     },
     {
       title: 'Perfil da Escola',
       icon: Settings,
       href: '/perfil-escola',
-      description: 'Informações da escola'
+      description: 'Informações da escola',
+      roles: ['admin'] // Exemplo de permissão
     },
   ];
 
   const isActive = (href: string) => {
-    return location.pathname === href || location.pathname.startsWith(href + '/');
+    if (href === '/dashboard') {
+        return location.pathname === href;
+    }
+    return location.pathname.startsWith(href);
   };
 
-  // Função para gerar classes CSS dinâmicas baseadas nas cores da escola
   const getDynamicClasses = (isActive: boolean) => {
     const primaryColor = config?.cor_primaria || '#7c3aed';
-    const secondaryColor = config?.cor_secundaria || '#f3f4f6';
     
     if (isActive) {
       return {
-        backgroundColor: `${primaryColor}20`, // 20% de opacidade
+        backgroundColor: `${primaryColor}20`,
         color: primaryColor,
         borderColor: primaryColor
       };
     }
     
     return {
-      color: primaryColor,
+      color: 'inherit', // Cor padrão do texto para itens não ativos
       '&:hover': {
-        backgroundColor: `${primaryColor}10` // 10% de opacidade
+        backgroundColor: `${primaryColor}10`
       }
     };
   };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div 
+      <div
         className="p-4 border-b"
         style={{ backgroundColor: config?.cor_secundaria || '#f3f4f6' }}
       >
         <div className="flex items-center gap-3">
-          <div 
+          <div
             className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: config?.cor_primaria || '#7c3aed' }}
           >
@@ -161,7 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             )}
           </div>
           <div>
-            <h1 
+            <h1
               className="font-bold text-lg"
               style={{ color: config?.cor_primaria || '#7c3aed' }}
             >
@@ -172,46 +178,46 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => (
-          <div key={item.title}>
-            <Link
-              to={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+        {/* ===== LÓGICA DE FILTRAGEM ADICIONADA ===== */}
+        {menuItems
+          .filter(item => !item.roles || item.roles.includes(user?.role || ''))
+          .map((item) => (
+            <div key={item.title}>
+              <Link
+                to={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-700"
+                )}
+                style={getDynamicClasses(isActive(item.href))}
+                onClick={() => setIsOpen(false)}
+              >
+                <item.icon className="h-5 w-5" />
+                <span>{item.title}</span>
+              </Link>
+              
+              {item.subItems && (
+                <div className="ml-8 mt-1 space-y-1">
+                  {item.subItems.map((subItem) => (
+                    <Link
+                      key={subItem.title}
+                      to={subItem.href}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors text-gray-600"
+                      )}
+                      style={getDynamicClasses(isActive(subItem.href))}
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <subItem.icon className="h-4 w-4" />
+                      <span>{subItem.title}</span>
+                    </Link>
+                  ))}
+                </div>
               )}
-              style={getDynamicClasses(isActive(item.href))}
-              onClick={() => setIsOpen(false)}
-            >
-              <item.icon className="h-5 w-5" />
-              <span>{item.title}</span>
-            </Link>
-            
-            {/* Sub-items */}
-            {item.subItems && (
-              <div className="ml-8 mt-1 space-y-1">
-                {item.subItems.map((subItem) => (
-                  <Link
-                    key={subItem.title}
-                    to={subItem.href}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors"
-                    )}
-                    style={getDynamicClasses(isActive(subItem.href))}
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <subItem.icon className="h-4 w-4" />
-                    <span>{subItem.title}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
         ))}
       </nav>
 
-      {/* Footer */}
       <div className="p-4 border-t">
         <Button
           variant="ghost"
@@ -227,14 +233,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Desktop Sidebar */}
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200 shadow-sm">
           <SidebarContent />
         </div>
       </div>
 
-      {/* Mobile Sidebar */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
           <Button
@@ -250,16 +254,13 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         </SheetContent>
       </Sheet>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile Header */}
         <div className="md:hidden bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-center">
             <h1 className="font-bold text-lg text-purple-700 text-center">Chamada Diária</h1>
           </div>
         </div>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50">
           {children}
         </main>
@@ -268,4 +269,4 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   );
 };
 
-export default Sidebar; 
+export default Sidebar;

@@ -29,6 +29,8 @@ import PesquisaCreatePage from "@/pages/PesquisaCreatePage";
 import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
 import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
+// NOVO: Importe a página de relatórios que você criará
+import RelatoriosPage from "@/pages/RelatoriosPage";
 
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
@@ -86,6 +88,9 @@ const App = () => {
                     <Route path="/pesquisas" element={<Layout><PesquisasListPage /></Layout>} />
                     <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />
                     <Route path="/pesquisas/:pesquisaId/resultados" element={<Layout><PesquisaResultadosPage /></Layout>} />
+
+                    {/* ROTA ADICIONADA */}
+                    <Route path="/relatorios" element={<Layout><RelatoriosPage /></Layout>} />
 
                     <Route path="/perfil-escola" element={<Layout><PerfilEscolaPage /></Layout>} />
 
