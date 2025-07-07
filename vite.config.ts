@@ -18,7 +18,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
         name: 'Chamada Diária',
-        short_name: 'Chamada',
+        short_name: 'Chamada Diária',
         description: 'Sistema de gestão de frequência escolar.',
         theme_color: '#7c3aed', // Cor principal da sua UI
         background_color: '#ffffff',
