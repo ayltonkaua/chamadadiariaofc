@@ -29,8 +29,9 @@ import PesquisaCreatePage from "@/pages/PesquisaCreatePage";
 import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
 import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
-// NOVO: Importe a página de relatórios que você criará
 import RelatoriosPage from "@/pages/RelatoriosPage";
+// NOVO: Importe a nova página do portal do aluno
+import PortalAlunoPage from "@/pages/PortalAlunoPage";
 
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,6 +72,7 @@ const App = () => {
                     
                     {/* Páginas autenticadas (com sidebar) */}
                     <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+                    <Route path="/portal-aluno" element={<Layout><PortalAlunoPage /></Layout>} /> {/* ROTA ADICIONADA */}
                     <Route path="/chamadas/:turmaId" element={<Layout><ChamadaPage /></Layout>} />
                     <Route path="/gerenciar-alunos/:turmaId" element={<Layout><GerenciarAlunosPage /></Layout>} />
                     <Route path="/historico-chamada/:turmaId" element={<Layout><HistoricoChamadaPage /></Layout>} />
@@ -89,7 +91,6 @@ const App = () => {
                     <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />
                     <Route path="/pesquisas/:pesquisaId/resultados" element={<Layout><PesquisaResultadosPage /></Layout>} />
 
-                    {/* ROTA ADICIONADA */}
                     <Route path="/relatorios" element={<Layout><RelatoriosPage /></Layout>} />
 
                     <Route path="/perfil-escola" element={<Layout><PerfilEscolaPage /></Layout>} />

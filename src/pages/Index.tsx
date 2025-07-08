@@ -1,45 +1,29 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-// Importe o novo ícone para pesquisas
-import { FileText, Calendar, ClipboardList, ListChecks } from "lucide-react";
-import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { FileText, Calendar, LogIn } from "lucide-react"; // LogIn foi adicionado e outros removidos
 
 const advantages = [
   "Fácil controle de presença diária",
   "Consulta rápida de faltas para alunos",
-  "Acesso para monitores da busca ativa e professores",
-  "Dados armazenados com segurança",
+  "Acesso para gestores, professores, alunos e monitores da busca ativa",
   "Interface moderna e responsiva",
 ];
 
 const Index: React.FC = () => {
-  const { user } = useAuth();
+  const { isAuthenticated } = useAuth(); // isAuthenticated foi mantido para consistência
   const navigate = useNavigate();
-  const [showForm, setShowForm] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col justify-between bg-gradient-to-tr from-blue-100 via-purple-50 to-white">
-      {/* HEADER */}
+      {/* HEADER MODIFICADO: Removido o botão "Ir para o Dashboard" */}
       <header className="py-4 sm:py-8 px-4 sm:px-12 flex flex-col sm:flex-row items-center justify-between gap-4">
         <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-purple-700 drop-shadow text-center sm:text-left">Chamada Diária</h1>
-        {user ? (
-          <div className="w-full sm:w-auto">
-            <Link to="/dashboard" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto">Ir para o Dashboard</Button>
-            </Link>
-          </div>
-        ) : (
-          <Link to="/login" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto">Entrar</Button>
-          </Link>
+        {!isAuthenticated && (
+           <Link to="/login" className="w-full sm:w-auto">
+             <Button className="w-full sm:w-auto">Entrar</Button>
+           </Link>
         )}
       </header>
 
@@ -67,54 +51,19 @@ const Index: React.FC = () => {
             ))}
           </ul>
 
-          {/* Ações */}
+          {/* Ações MODIFICADAS */}
           <div className="flex flex-col gap-3 sm:gap-4 w-full">
+            {/* O único botão de ação agora é "Fazer Login" */}
             <Button
               size="lg"
               className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-sm sm:text-base md:text-lg py-3 sm:py-4 md:py-5 font-semibold"
               onClick={() => navigate("/login")}
             >
-              <Calendar className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-              Fazer chamada
+              <LogIn className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+              Fazer Login
             </Button>
 
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-sm sm:text-base md:text-lg py-3 sm:py-4 md:py-5 font-semibold"
-              onClick={() => navigate("/student-query")}
-            >
-              <ClipboardList className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-              Consultar faltas
-            </Button>
-            
-            {/* NOVO BOTÃO PARA CONSULTAR PESQUISAS */}
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-sm sm:text-base md:text-lg py-3 sm:py-4 md:py-5 font-semibold"
-              onClick={() => navigate("/responder-pesquisa")}
-            >
-              <ListChecks className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-              Responder Pesquisa
-            </Button>
-
-            <Dialog open={showForm} onOpenChange={setShowForm}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full border-purple-600 text-purple-700 hover:bg-purple-100 hover:border-purple-700 text-sm sm:text-base md:text-lg py-3 sm:py-4 md:py-5 font-semibold"
-                >
-                  <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                  Justificar falta
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[95vw] max-w-md sm:max-w-lg">
-                <DialogTitle>Justificar Falta</DialogTitle>
-                <JustificarFaltaForm onClose={() => setShowForm(false)} />
-              </DialogContent>
-            </Dialog>
+            {/* Os outros botões foram removidos */}
           </div>
         </div>
       </main>
