@@ -1,24 +1,68 @@
-# Logs
-logs
-*.log
+# Arquivo gerado para o projeto Chamada Diária
+
+# Log de dependências e erros
+# Evita enviar logs de erros e versões de pacotes para o repositório.
 npm-debug.log*
-yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+yarn-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Variáveis de Ambiente
+# Arquivos .env contêm chaves de API, senhas e outras informações sensíveis.
+# NUNCA devem ser enviados para o repositório.
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
+# Pasta de dependências
+# A pasta node_modules é gigantesca e pode ser recriada com o comando 'npm install'.
+node_modules/
+
+# Pasta de build
+# A pasta 'dist' contém os arquivos finais gerados para produção.
+# Ela é recriada a cada 'npm run build'.
+dist/
+dist-ssr/
+.output
+.next
+
+# Arquivos de IDE e Editores de Código
+# Configurações pessoais do seu editor de código (VSCode, WebStorm, etc.).
+.vscode/
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Arquivos do Capacitor (NATIVO)
+# As pastas 'android' e 'ios' são geradas pelos comandos do Capacitor.
+# É uma boa prática não versioná-las, pois podem ser recriadas.
+# Isso mantém o repositório leve e focado no código-fonte.
+/android/
+/ios/
+
+# Arquivos de Sistema Operacional
+# Lixo gerado pelo macOS, Windows e Linux.
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Arquivos de Teste
+# Relatórios de cobertura de testes e caches.
+coverage/
+.nyc_output/
+
+# Arquivos de Cache do Vite
+.vite/
+.vite-ssg-cache/
+
+# Arquivos do Supabase
+# Ignora arquivos de configuração e estado local da CLI do Supabase.
+# IMPORTANTE: Não ignora a pasta 'supabase/functions' e 'supabase/migrations',
+# que devem ser versionadas.
+.supabase/
