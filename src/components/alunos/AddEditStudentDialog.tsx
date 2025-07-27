@@ -13,11 +13,14 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
+// MODIFICADO: Adicionado os novos campos na interface
 interface Student {
   id?: string;
   nome: string;
   matricula: string;
   turma_id: string;
+  nome_responsavel?: string;
+  telefone_responsavel?: string;
 }
 
 interface AddEditStudentDialogProps {
@@ -40,16 +43,25 @@ export default function AddEditStudentDialog({
   const { toast } = useToast();
   const [nome, setNome] = useState("");
   const [matricula, setMatricula] = useState("");
+  // NOVO: Estados para os novos campos
+  const [nomeResponsavel, setNomeResponsavel] = useState("");
+  const [telefoneResponsavel, setTelefoneResponsavel] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (student && open) {
       setNome(student.nome || "");
       setMatricula(student.matricula || "");
+      // NOVO: Preenche os campos do responsável ao editar
+      setNomeResponsavel(student.nome_responsavel || "");
+      setTelefoneResponsavel(student.telefone_responsavel || "");
     } else if (!isEditing) {
       // Reset form when opening for new student
       setNome("");
       setMatricula("");
+      // NOVO: Reseta os campos do responsável ao adicionar
+      setNomeResponsavel("");
+      setTelefoneResponsavel("");
     }
   }, [student, open, isEditing]);
 
@@ -67,10 +79,15 @@ export default function AddEditStudentDialog({
 
     try {
       if (isEditing && student?.id) {
-        // Atualizar aluno existente
+        // MODIFICADO: Incluindo os novos campos na atualização
         const { error } = await supabase
           .from("alunos")
-          .update({ nome, matricula })
+          .update({ 
+            nome, 
+            matricula,
+            nome_responsavel: nomeResponsavel,
+            telefone_responsavel: telefoneResponsavel
+          })
           .eq("id", student.id);
 
         if (error) throw error;
@@ -80,11 +97,13 @@ export default function AddEditStudentDialog({
           description: "Os dados do aluno foram atualizados com sucesso.",
         });
       } else {
-        // Adicionar novo aluno
+        // MODIFICADO: Incluindo os novos campos na inserção
         const { error } = await supabase.from("alunos").insert({
           nome,
           matricula,
           turma_id: turmaId,
+          nome_responsavel: nomeResponsavel,
+          telefone_responsavel: telefoneResponsavel
         });
 
         if (error) throw error;
@@ -142,6 +161,28 @@ export default function AddEditStudentDialog({
                 onChange={(e) => setMatricula(e.target.value)}
                 placeholder="Digite o número de matrícula"
                 required
+              />
+            </div>
+            
+            {/* NOVO CAMPO: Nome do Responsável */}
+            <div className="grid gap-2">
+              <Label htmlFor="nome_responsavel">Nome do Responsável (Opcional)</Label>
+              <Input
+                id="nome_responsavel"
+                value={nomeResponsavel}
+                onChange={(e) => setNomeResponsavel(e.target.value)}
+                placeholder="Digite o nome do responsável"
+              />
+            </div>
+
+            {/* NOVO CAMPO: Telefone do Responsável */}
+            <div className="grid gap-2">
+              <Label htmlFor="telefone_responsavel">Telefone do Responsável (Opcional)</Label>
+              <Input
+                id="telefone_responsavel"
+                value={telefoneResponsavel}
+                onChange={(e) => setTelefoneResponsavel(e.target.value)}
+                placeholder="Ex: 5581999998888"
               />
             </div>
           </div>

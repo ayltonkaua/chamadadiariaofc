@@ -30,13 +30,14 @@ const GerenciarAlunosPage: React.FC = () => {
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
 
+  // MODIFICADO: Adicionado os novos campos para serem buscados pelo hook
   const { 
     alunos, 
     setAlunos, 
     turmaInfo, 
     loading,
     refreshAlunos
-  } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id"]);
+  } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id", "nome_responsavel", "telefone_responsavel"]);
 
   const navigate = useNavigate();
 
