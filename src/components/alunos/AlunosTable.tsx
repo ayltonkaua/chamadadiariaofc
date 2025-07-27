@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 
+// MODIFICADO: Adicionado os novos campos na interface
 interface Aluno {
   id: string;
   nome: string;
@@ -19,6 +20,8 @@ interface Aluno {
   faltas: number;
   frequencia: number;
   turma_id: string;
+  nome_responsavel?: string;
+  telefone_responsavel?: string;
 }
 
 interface AlunosTableProps {
@@ -45,11 +48,15 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
           className="w-full sm:w-64"
         />
       </div>
-      <Table className="min-w-[600px] w-full text-sm sm:text-base">
+      <Table className="min-w-[800px] w-full text-sm sm:text-base"> {/* Aumentado o min-w para acomodar novas colunas */}
         <TableHeader>
           <TableRow>
             <TableHead className="min-w-[120px]">Nome</TableHead>
             <TableHead className="min-w-[100px]">Matrícula</TableHead>
+            {/* NOVO CABEÇALHO */}
+            <TableHead className="min-w-[120px]">Responsável</TableHead>
+            {/* NOVO CABEÇALHO */}
+            <TableHead className="min-w-[120px]">Telefone do Responsável</TableHead>
             <TableHead className="min-w-[60px]">Faltas</TableHead>
             <TableHead className="min-w-[100px]">Frequência</TableHead>
             <TableHead className="text-right min-w-[120px]">Ações</TableHead>
@@ -63,6 +70,10 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
             >
               <TableCell className="font-medium">{aluno.nome}</TableCell>
               <TableCell>{aluno.matricula}</TableCell>
+              {/* NOVA CÉLULA */}
+              <TableCell>{aluno.nome_responsavel || "-"}</TableCell>
+              {/* NOVA CÉLULA */}
+              <TableCell>{aluno.telefone_responsavel || "-"}</TableCell>
               <TableCell>
                 <span className={aluno.faltas > 10 ? "font-bold text-red-600" : ""}>
                   {aluno.faltas}
