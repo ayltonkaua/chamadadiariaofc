@@ -166,7 +166,7 @@ export default function AddEditStudentDialog({
             
             {/* NOVO CAMPO: Nome do Responsável */}
             <div className="grid gap-2">
-              <Label htmlFor="nome_responsavel">Nome do Responsável (Opcional)</Label>
+              <Label htmlFor="nome_responsavel">Nome do Responsável (Obrigatório)</Label>
               <Input
                 id="nome_responsavel"
                 value={nomeResponsavel}
@@ -177,12 +177,12 @@ export default function AddEditStudentDialog({
 
             {/* NOVO CAMPO: Telefone do Responsável */}
             <div className="grid gap-2">
-              <Label htmlFor="telefone_responsavel">Telefone do Responsável (Opcional)</Label>
+              <Label htmlFor="telefone_responsavel">Telefone do Responsável (Obrigatório)</Label>
               <Input
                 id="telefone_responsavel"
                 value={telefoneResponsavel}
                 onChange={(e) => setTelefoneResponsavel(e.target.value)}
-                placeholder="Ex: 5581999998888"
+                placeholder="Ex: 558199998888"
               />
             </div>
           </div>
