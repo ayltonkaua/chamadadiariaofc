@@ -17,7 +17,9 @@ interface Turma {
   alunos: number;
 }
 
-const TurmasCards: React.FC = () => {
+// --- MODIFICAÇÃO 1: Adicionada a propriedade 'turno' ---
+// O componente agora espera receber o turno que deve ser exibido.
+const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno }) => {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
   const [turmaParaRemover, setTurmaParaRemover] = useState<Turma | null>(null);
@@ -33,10 +35,13 @@ const TurmasCards: React.FC = () => {
       return;
     }
 
+    // --- MODIFICAÇÃO 2: Adicionado o filtro .eq('turno', turno) ---
+    // A busca no Supabase agora filtra as turmas pelo turno recebido.
     const { data: turmasDB, error } = await supabase
       .from("turmas")
       .select("id, nome, numero_sala")
       .eq("user_id", user.id)
+      .eq("turno", turno) // <-- FILTRO ADICIONADO AQUI
       .order("nome", { ascending: true });
 
     if (error) {
@@ -71,9 +76,11 @@ const TurmasCards: React.FC = () => {
     setLoading(false);
   };
 
+  // --- MODIFICAÇÃO 3: Adicionado 'turno' ao array de dependências ---
+  // Isso garante que, quando o utilizador muda a aba de turno, a lista de turmas é recarregada.
   useEffect(() => {
     fetchTurmas();
-  }, [user?.id]);
+  }, [user?.id, turno]);
 
   const handleEditarTurma = (turma: Turma) => {
     setTurmaParaEditar(turma);
@@ -104,13 +111,16 @@ const TurmasCards: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="text-center py-10 text-gray-500">Carregando turmas...</div>;
+    return <div className="text-center py-10 text-gray-500">A carregar turmas do turno da {turno.toLowerCase()}...</div>;
   }
 
   return (
     <>
+      {/* O seu cabeçalho com o botão de importar permanece intacto, 
+          mas podemos movê-lo para a página principal se for um botão geral.
+          Por agora, vou mantê-lo aqui. */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Turmas</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Turmas do Turno da {turno}</h2>
         <Button onClick={() => setShowImportDialog(true)} variant="outline" className="flex items-center gap-2">
           <FileSpreadsheet size={20} /> Importar Excel
         </Button>
@@ -127,6 +137,7 @@ const TurmasCards: React.FC = () => {
         ))}
       </div>
 
+      {/* A sua lógica para estados vazios e dialogs permanece 100% intacta. */}
       {turmas.length === 0 && !loading && (
         <EmptyTurmasState />
       )}

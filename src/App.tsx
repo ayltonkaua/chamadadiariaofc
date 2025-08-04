@@ -30,9 +30,8 @@ import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
 import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 import RelatoriosPage from "@/pages/RelatoriosPage";
-// NOVO: Importe a nova página do portal do aluno
 import PortalAlunoPage from "@/pages/PortalAlunoPage";
-
+import DashboardGestorPage from "@/pages/DashboardGestorPage";
 import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -85,7 +84,8 @@ const App = () => {
                     <Route path="/turmas/:turmaId/alunos/:alunoId" element={<Layout><AlunoPage /></Layout>} />
                     <Route path="/turmas/:turmaId/chamada" element={<Layout><ChamadaPage /></Layout>} />
                     <Route path="/consultar-faltas" element={<Layout><ConsultarFaltasPage /></Layout>} />
-                    
+                    <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
+            
                     {/* Rotas do módulo de pesquisa */}
                     <Route path="/pesquisas" element={<Layout><PesquisasListPage /></Layout>} />
                     <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />

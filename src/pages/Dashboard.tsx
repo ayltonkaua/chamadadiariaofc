@@ -2,17 +2,13 @@ import React, { useEffect, useState } from "react";
 import TurmasCards from "@/components/TurmasCards";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import FrequenciaGeralChart from "@/components/dashboard/FrequenciaGeralChart";
-import ComparativoTurmasChart from "@/components/dashboard/ComparativoTurmasChart";
-import EvolucaoAlunoChart from "@/components/dashboard/EvolucaoAlunoChart";
 import { InfoCards } from "@/components/dashboard/InfoCards";
-import { DashboardMenu } from "@/components/dashboard/DashboardMenu";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tabValue, setTabValue] = useState("graficos");
+  const [tabValue, setTabValue] = useState("turmas");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +24,7 @@ const Dashboard: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         setLoading(false);
       } catch (err) {
-        setError("Erro ao carregar o dashboard");
+        setError("Erro ao carregar a página inicial");
         setLoading(false);
       }
     };
@@ -40,7 +36,7 @@ const Dashboard: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <p className="text-gray-600">Carregando dados do dashboard...</p>
+          <p className="text-gray-600">Carregando dados da página inicial...</p>
         </div>
       </div>
     );
@@ -58,39 +54,45 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="p-6">
-      {/* Header da página */}
+      {/* Header da página (INTACTO) */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Visão geral do sistema de chamadas</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Página Inicial</h1>
+        <p className="text-gray-600">Bem-vindo ao sistema de chamadas</p>
       </div>
 
-      {/* Cards Informativos */}
+      {/* Cards Informativos (INTACTO) */}
       <div className="mb-8">
         <InfoCards />
       </div>
 
       <div className="mb-8">
-        <Tabs defaultValue="graficos" value={tabValue} onValueChange={setTabValue}>
+        <Tabs defaultValue="turmas" value={tabValue} onValueChange={setTabValue}>
           <TabsList className="mb-4">
-            <TabsTrigger value="graficos">Gráficos</TabsTrigger>
             <TabsTrigger value="turmas">Turmas</TabsTrigger>
           </TabsList>
-          <TabsContent value="graficos">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <FrequenciaGeralChart />
-              </div>
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <ComparativoTurmasChart />
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <EvolucaoAlunoChart />
-            </div>
-          </TabsContent>
+
+          {/* --- CONTEÚDO DA ABA "TURMAS" MODIFICADO --- */}
           <TabsContent value="turmas">
             <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <TurmasCards />
+              {/* Novas abas de turno adicionadas aqui */}
+              <Tabs defaultValue="manha" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="manha">Manhã</TabsTrigger>
+                  <TabsTrigger value="tarde">Tarde</TabsTrigger>
+                  <TabsTrigger value="noite">Noite</TabsTrigger>
+                </TabsList>
+
+                {/* Conteúdo para cada turno, chamando o seu componente TurmasCards com um filtro */}
+                <TabsContent value="manha">
+                  <TurmasCards turno="Manhã" />
+                </TabsContent>
+                <TabsContent value="tarde">
+                  <TurmasCards turno="Tarde" />
+                </TabsContent>
+                <TabsContent value="noite">
+                  <TurmasCards turno="Noite" />
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
         </Tabs>

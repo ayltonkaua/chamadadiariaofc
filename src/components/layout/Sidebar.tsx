@@ -46,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
 
   const menuItems = [
     {
-      title: 'Dashboard',
+      title: 'Página Inicial',
       icon: Home,
       href: '/dashboard',
       description: 'Visão geral do sistema'
@@ -82,26 +82,18 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         { title: 'Responder Pesquisa', href: '/responder-pesquisa', icon: Search },
       ]
     },
-    // ===== ITEM MODIFICADO =====
     {
-      title: 'Relatórios',
-      icon: LineChart, // Ícone atualizado
-      href: '/relatorios', // Rota atualizada
-      description: 'Relatórios e estatísticas',
-      roles: ['admin', 'diretor'] // Permissões adicionadas
+      title: 'Relatórios de Gestão',
+      icon: LineChart, 
+      href: '/gestor/dashboard',
+      description: 'Visão estratégica para gestores',
+      roles: ['admin', 'diretor'] 
     },
-    // ===========================
     {
       title: 'Atestados',
       icon: ClipboardList,
       href: '/atestados',
       description: 'Gerenciar atestados'
-    },
-    {
-      title: 'Alertas',
-      icon: AlertTriangle,
-      href: '/alertas',
-      description: 'Sistema de alertas'
     },
     {
       title: 'Notificações',
