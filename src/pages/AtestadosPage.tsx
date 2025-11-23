@@ -1,22 +1,20 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PlusCircle, CheckCircle, XCircle, Pencil, Trash2, Loader2, Inbox, Search, Calendar as CalendarIcon, Eye } from "lucide-react";
+import { PlusCircle, CheckCircle, XCircle, Pencil, Trash2, Loader2, Inbox, Search, Calendar as CalendarIcon, Eye, FileText, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-// CORREÇÃO: Adicionado 'DialogFooter' à lista de importação do dialog.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
@@ -187,98 +185,185 @@ const AtestadosPage: React.FC = () => {
   }
   
   const getStatusBadgeVariant = (status: string) => {
-    if (status === 'aprovado') return 'success';
+    if (status === 'aprovado') return 'success'; // Certifique-se que existe variant 'success' ou use 'default' com className customizada
     if (status === 'rejeitado') return 'destructive';
-    return 'warning';
+    return 'secondary';
   };
+
+  const getStatusBadge = (status: string) => {
+      switch (status) {
+          case 'aprovado': return <Badge className="bg-green-600 hover:bg-green-700">Aprovado</Badge>;
+          case 'rejeitado': return <Badge variant="destructive">Rejeitado</Badge>;
+          default: return <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">Pendente</Badge>;
+      }
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Gerenciar Atestados</h1>
-        <Button onClick={openNewForm}>
+        <Button onClick={openNewForm} className="w-full sm:w-auto">
           <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Atestado
         </Button>
       </div>
 
+      {/* Filtros */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros e Busca</CardTitle>
-          <CardDescription>Use os filtros para refinar os resultados.</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Filtros e Busca</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input type="search" placeholder="Buscar por nome do aluno..." className="pl-8 w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <Input type="search" placeholder="Buscar aluno..." className="pl-8 w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, "dd/MM/yy")} - ${format(dateRange.to, "dd/MM/yy")}` : format(dateRange.from, "dd/MM/yy")) : <span>Selecione um período</span>}
+                {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, "dd/MM")} - ${format(dateRange.to, "dd/MM")}` : format(dateRange.from, "dd/MM/yy")) : <span>Período</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar initialFocus mode="range" selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+              <Calendar initialFocus mode="range" selected={dateRange} onSelect={setDateRange} numberOfMonths={1} />
             </PopoverContent>
           </Popover>
         </CardContent>
       </Card>
       
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AtestadoStatus)}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
           <TabsTrigger value="pendente">Pendentes</TabsTrigger>
           <TabsTrigger value="aprovado">Aprovados</TabsTrigger>
           <TabsTrigger value="rejeitado">Rejeitados</TabsTrigger>
         </TabsList>
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Aluno</TableHead>
-                    <TableHead className="hidden md:table-cell">Período</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && <TableRow><TableCell colSpan={4} className="text-center h-24"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>}
-                  {!loading && atestados.length === 0 && <TableRow><TableCell colSpan={4} className="text-center h-24"><Inbox className="mx-auto h-8 w-8 text-gray-400"/><p className="mt-2">Nenhum atestado encontrado.</p></TableCell></TableRow>}
-                  {!loading && atestados.map((atestado) => (
-                    <TableRow key={atestado.id}>
-                      <TableCell className="font-medium">{atestado.alunos?.nome || 'Aluno Removido'}</TableCell>
-                      <TableCell className="hidden md:table-cell">{format(parseISO(atestado.data_inicio), "dd/MM/yy")} a {format(parseISO(atestado.data_fim), "dd/MM/yy")}</TableCell>
-                      <TableCell><Badge variant={getStatusBadgeVariant(atestado.status)}>{atestado.status}</Badge></TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setViewingAtestado(atestado)}><Eye className="h-4 w-4" /></Button>
-                          {atestado.status === 'pendente' && (
-                              <>
-                                  <Button variant="ghost" size="icon" className="text-green-600 hover:text-green-700" onClick={() => handleStatusChange(atestado.id, 'aprovado')}><CheckCircle className="h-4 w-4" /></Button>
-                                  <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-700" onClick={() => handleStatusChange(atestado.id, 'rejeitado')}><XCircle className="h-4 w-4" /></Button>
-                              </>
-                          )}
-                          <Button variant="ghost" size="icon" onClick={() => openEditForm(atestado)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(atestado.id)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+
+        {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
+        ) : atestados.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500 border-2 border-dashed rounded-lg bg-gray-50">
+                <Inbox className="h-12 w-12 mb-2 opacity-50"/>
+                <p>Nenhum atestado encontrado nesta categoria.</p>
             </div>
-          </CardContent>
-          <CardFooter className="flex items-center justify-between p-4">
-            <div className="text-xs text-muted-foreground">Página {currentPage} de {totalPages} ({totalCount} atestado(s))</div>
-            <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>Anterior</Button><Button size="sm" variant="outline" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages}>Próxima</Button></div>
-          </CardFooter>
-        </Card>
+        ) : (
+            <>
+                {/* --- VISÃO MOBILE (CARDS) --- */}
+                <div className="grid grid-cols-1 gap-4 md:hidden">
+                    {atestados.map((atestado) => (
+                        <Card key={atestado.id} className="overflow-hidden shadow-sm border-l-4" style={{ borderLeftColor: atestado.status === 'pendente' ? '#EAB308' : atestado.status === 'aprovado' ? '#16A34A' : '#DC2626' }}>
+                            <CardHeader className="pb-2 bg-gray-50/50">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <CardTitle className="text-base">{atestado.alunos?.nome}</CardTitle>
+                                        <CardDescription className="text-xs mt-1">{atestado.alunos?.turmas?.nome}</CardDescription>
+                                    </div>
+                                    {getStatusBadge(atestado.status)}
+                                </div>
+                            </CardHeader>
+                            <CardContent className="pt-4 pb-3 space-y-2 text-sm">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <CalendarIcon className="h-4 w-4 text-primary" />
+                                    <span>
+                                        {format(parseISO(atestado.data_inicio), "dd/MM")} até {format(parseISO(atestado.data_fim), "dd/MM/yyyy")}
+                                    </span>
+                                </div>
+                                <div className="bg-slate-50 p-2 rounded border text-gray-700 flex gap-2 items-start">
+                                    <FileText className="h-4 w-4 mt-0.5 text-gray-400 shrink-0"/>
+                                    <span className="italic line-clamp-2">{atestado.descricao}</span>
+                                </div>
+                            </CardContent>
+                            <CardFooter className="bg-gray-50 p-2 flex justify-end gap-2">
+                                <Button variant="ghost" size="sm" onClick={() => setViewingAtestado(atestado)}>
+                                    <Eye className="h-4 w-4 mr-1"/> Ver
+                                </Button>
+                                {atestado.status === 'pendente' ? (
+                                    <>
+                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8" onClick={() => handleStatusChange(atestado.id, 'aprovado')}>
+                                            <CheckCircle className="h-4 w-4"/>
+                                        </Button>
+                                        <Button size="sm" variant="destructive" className="h-8" onClick={() => handleStatusChange(atestado.id, 'rejeitado')}>
+                                            <XCircle className="h-4 w-4"/>
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button variant="ghost" size="sm" onClick={() => handleDelete(atestado.id)}>
+                                        <Trash2 className="h-4 w-4 text-red-500"/>
+                                    </Button>
+                                )}
+                            </CardFooter>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* --- VISÃO DESKTOP (TABELA) --- */}
+                <div className="hidden md:block border rounded-lg overflow-hidden bg-white shadow-sm">
+                    <Table>
+                        <TableHeader className="bg-gray-50">
+                            <TableRow>
+                                <TableHead>Aluno</TableHead>
+                                <TableHead>Turma</TableHead>
+                                <TableHead>Período</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {atestados.map((atestado) => (
+                                <TableRow key={atestado.id} className="hover:bg-gray-50/50">
+                                    <TableCell className="font-medium">{atestado.alunos?.nome || 'Aluno Removido'}</TableCell>
+                                    <TableCell>{atestado.alunos?.turmas?.nome || '-'}</TableCell>
+                                    <TableCell>{format(parseISO(atestado.data_inicio), "dd/MM/yy")} a {format(parseISO(atestado.data_fim), "dd/MM/yy")}</TableCell>
+                                    <TableCell>{getStatusBadge(atestado.status)}</TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                            <Button variant="ghost" size="icon" title="Ver detalhes" onClick={() => setViewingAtestado(atestado)}>
+                                                <Eye className="h-4 w-4 text-gray-500" />
+                                            </Button>
+                                            {atestado.status === 'pendente' && (
+                                                <>
+                                                    <Button variant="ghost" size="icon" title="Aprovar" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleStatusChange(atestado.id, 'aprovado')}>
+                                                        <CheckCircle className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" title="Rejeitar" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleStatusChange(atestado.id, 'rejeitado')}>
+                                                        <XCircle className="h-4 w-4" />
+                                                    </Button>
+                                                </>
+                                            )}
+                                            <Button variant="ghost" size="icon" title="Editar" onClick={() => openEditForm(atestado)}>
+                                                <Pencil className="h-4 w-4 text-blue-600" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" title="Excluir" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(atestado.id)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                {/* Paginação */}
+                <div className="flex items-center justify-between pt-4">
+                    <div className="text-xs text-muted-foreground">
+                        Página {currentPage} de {totalPages || 1} ({totalCount} registros)
+                    </div>
+                    <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                            Anterior
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
+                            Próxima
+                        </Button>
+                    </div>
+                </div>
+            </>
+        )}
       </Tabs>
       
+      {/* Dialog de Cadastro/Edição */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingAtestado ? "Editar Atestado" : "Registrar Novo Atestado"}</DialogTitle>
             <DialogDescription>Preencha as informações abaixo.</DialogDescription>
@@ -303,29 +388,64 @@ const AtestadosPage: React.FC = () => {
             </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="ghost" onClick={() => setShowFormDialog(false)}>Cancelar</Button>
-              <Button type="submit" disabled={loading}><Loader2 className={`mr-2 h-4 w-4 animate-spin ${!loading && 'hidden'}`}/>{editingAtestado ? "Atualizar" : "Registrar"}</Button>
+              <Button type="submit" disabled={loading}>
+                <Loader2 className={`mr-2 h-4 w-4 animate-spin ${!loading && 'hidden'}`}/>
+                {editingAtestado ? "Atualizar" : "Registrar"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
       
+      {/* Dialog de Visualização */}
       <Dialog open={!!viewingAtestado} onOpenChange={() => setViewingAtestado(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
             <DialogHeader>
-                <DialogTitle>Detalhes do Atestado</DialogTitle>
-                <DialogDescription>Informações completas do atestado recebido.</DialogDescription>
+                <DialogTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary"/> Detalhes do Atestado
+                </DialogTitle>
             </DialogHeader>
             {viewingAtestado && (
-                <div className="space-y-4 pt-4 text-sm">
-                    <div><Label>Aluno:</Label><p>{viewingAtestado.alunos?.nome}</p></div>
-                    <div><Label>Período:</Label><p>{format(parseISO(viewingAtestado.data_inicio), "dd/MM/yyyy")} a {format(parseISO(viewingAtestado.data_fim), "dd/MM/yyyy")}</p></div>
-                    <div><Label>Status:</Label><p><Badge variant={getStatusBadgeVariant(viewingAtestado.status)}>{viewingAtestado.status}</Badge></p></div>
-                    <div><Label>Data de Envio:</Label><p>{format(parseISO(viewingAtestado.created_at), "dd/MM/yyyy 'às' HH:mm")}</p></div>
-                    <div className="border-t pt-4"><Label>Motivo / Descrição:</Label><p className="whitespace-pre-wrap bg-slate-50 p-2 rounded-md mt-1">{viewingAtestado.descricao}</p></div>
+                <div className="space-y-4 pt-2 text-sm">
+                    <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg">
+                        <div>
+                            <Label className="text-xs text-muted-foreground uppercase font-bold">Aluno</Label>
+                            <p className="font-medium">{viewingAtestado.alunos?.nome}</p>
+                        </div>
+                        <div>
+                            <Label className="text-xs text-muted-foreground uppercase font-bold">Turma</Label>
+                            <p>{viewingAtestado.alunos?.turmas?.nome || '-'}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between border-b pb-2">
+                        <div>
+                            <Label className="text-xs text-muted-foreground uppercase font-bold">Período</Label>
+                            <p className="flex items-center gap-1">
+                                <CalendarIcon className="h-3 w-3"/>
+                                {format(parseISO(viewingAtestado.data_inicio), "dd/MM/yyyy")} até {format(parseISO(viewingAtestado.data_fim), "dd/MM/yyyy")}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <Label className="text-xs text-muted-foreground uppercase font-bold block mb-1">Status</Label>
+                            {getStatusBadge(viewingAtestado.status)}
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label className="text-xs text-muted-foreground uppercase font-bold">Motivo / Descrição</Label>
+                        <p className="whitespace-pre-wrap bg-white border p-3 rounded-md mt-1 text-gray-700 min-h-[80px]">
+                            {viewingAtestado.descricao}
+                        </p>
+                    </div>
+                    
+                    <div className="text-xs text-center text-gray-400 pt-2">
+                        Enviado em: {format(parseISO(viewingAtestado.created_at), "dd/MM/yyyy 'às' HH:mm")}
+                    </div>
                 </div>
             )}
-            <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setViewingAtestado(null)}>Fechar</Button>
+            <DialogFooter>
+                <Button className="w-full" type="button" variant="secondary" onClick={() => setViewingAtestado(null)}>Fechar</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
