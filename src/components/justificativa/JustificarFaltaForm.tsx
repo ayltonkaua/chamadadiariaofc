@@ -10,16 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DialogFooter } from "@/components/ui/dialog";
 import { TablesInsert } from "@/integrations/supabase/types";
 import { useAuth } from '@/contexts/AuthContext';
-import { useEscolasCadastradas, Escola } from "@/hooks/useEscolasCadastradas";
+import { useEscolasCadastradas } from "@/hooks/useEscolasCadastradas";
 
-// Tipos
 interface Aluno {
   id: string;
   nome: string;
   matricula: string;
 }
 
-// MODIFICADO: Adicionada a prop opcional 'isPortal'
 interface JustificarFaltaFormProps {
   onClose: () => void;
   onSuccess: () => void;
@@ -29,9 +27,8 @@ interface JustificarFaltaFormProps {
 const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSuccess, isPortal = false }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth(); // Usado para obter os dados do aluno logado
+  const { user } = useAuth();
 
-  // Estados para o formulário público
   const { escolas, loading: escolasLoading } = useEscolasCadastradas();
   const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -44,11 +41,11 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
     descricao: "",
   });
 
-  // Efeito para carregar alunos (apenas se não estiver no portal)
+  // Carregar alunos apenas se NÃO for portal (admin público)
   useEffect(() => {
     if (isPortal || !escolaSelecionada) {
       setAlunos([]);
-      setFormData(prev => ({ ...prev, aluno_id: '' }));
+      if (!isPortal) setFormData(prev => ({ ...prev, aluno_id: '' }));
       return;
     }
 
@@ -73,11 +70,17 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
     e.preventDefault();
     setLoading(true);
 
-    // MODIFICADO: A lógica agora sabe de onde pegar os IDs
+    // SEGURANÇA: Se for portal, FORÇA o uso do ID do usuário logado
     const alunoParaEnviar = isPortal ? user?.aluno_id : formData.aluno_id;
     const escolaParaEnviar = isPortal ? user?.escola_id : escolaSelecionada;
 
-    if (!alunoParaEnviar || !escolaParaEnviar || !formData.data_inicio || !formData.data_fim || !formData.descricao) {
+    if (!alunoParaEnviar) {
+        toast({ title: "Erro de Identificação", description: "Não foi possível identificar o aluno logado. Tente sair e entrar novamente.", variant: "destructive" });
+        setLoading(false);
+        return;
+    }
+
+    if (!escolaParaEnviar || !formData.data_inicio || !formData.data_fim || !formData.descricao) {
       toast({ title: "Campos obrigatórios", description: "Por favor, preencha todos os campos.", variant: "destructive" });
       setLoading(false);
       return;
@@ -85,13 +88,14 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
 
     try {
       const insertData: TablesInsert<'atestados'> = {
-        aluno_id: alunoParaEnviar,
+        aluno_id: alunoParaEnviar, // Valor seguro
         data_inicio: formData.data_inicio,
         data_fim: formData.data_fim,
         descricao: formData.descricao,
         status: "pendente",
         escola_id: escolaParaEnviar
       };
+      
       const { error } = await supabase.from("atestados").insert(insertData);
       if (error) throw error;
 
@@ -108,7 +112,7 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-      {/* MODIFICADO: Renderização condicional dos seletores */}
+      {/* Se NÃO for portal, mostra os selects de Escola e Aluno */}
       {!isPortal && (
         <>
           <div className="space-y-2">
@@ -136,7 +140,7 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
         </>
       )}
 
-      {/* Campos que aparecem em ambos os contextos */}
+      {/* Campos comuns */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="data_inicio">Data de Início *</Label>
@@ -148,14 +152,14 @@ const JustificarFaltaForm: React.FC<JustificarFaltaFormProps> = ({ onClose, onSu
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="descricao">Motivo/Descrição do Atestado *</Label>
-        <Textarea id="descricao" value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Descreva o motivo do atestado médico..." />
+        <Label htmlFor="descricao">Motivo/Descrição *</Label>
+        <Textarea id="descricao" value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} required placeholder="Descreva o motivo (ex: Atestado Médico, Consulta...)" />
       </div>
 
       <DialogFooter className="pt-4">
         <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
         <Button type="submit" disabled={loading}>
-          {loading ? <Loader2 className="animate-spin mr-2"/> : null}
+          {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : null}
           {loading ? "Enviando..." : "Enviar Atestado"}
         </Button>
       </DialogFooter>

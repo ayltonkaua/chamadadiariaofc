@@ -1,34 +1,25 @@
 import React from 'react';
 import Sidebar from './Sidebar';
+import { MobileNav } from './MobileNav'; // Importe o componente criado
 import { useAuth } from '@/contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
-  showSidebar?: boolean; // Esta prop continua útil para forçar a ocultação em páginas públicas
+  showSidebar?: boolean;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
   const { user, loadingUser } = useAuth();
 
-  // Condição para mostrar o Sidebar de Admin:
-  // 1. A prop showSidebar não deve ser false.
-  // 2. O usuário deve estar logado.
-  // 3. O tipo do usuário deve ser 'admin'.
-  const shouldShowAdminSidebar = showSidebar && user && user.type === 'admin';
+  const isAdmin = user?.type === 'admin';
+  const isStudent = user?.type === 'aluno' || !isAdmin; // Assume aluno se não for admin explícito
 
-  // Enquanto o contexto de autenticação está carregando, mostre um loader para evitar
-  // que o layout errado pisque na tela.
   if (loadingUser) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        {/* Você pode colocar um componente de Spinner aqui */}
-        <p>Carregando...</p>
-      </div>
-    );
+    return <div className="flex h-screen w-full items-center justify-center">Carregando...</div>;
   }
 
-  // Se for um admin, renderiza o layout com o Sidebar
-  if (shouldShowAdminSidebar) {
+  // Layout do ADMIN (Com Sidebar lateral)
+  if (isAdmin && showSidebar) {
     return (
       <div className="flex h-screen">
         <Sidebar>
@@ -38,10 +29,15 @@ const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
     );
   }
 
-  // Para alunos, usuários não logados ou páginas públicas, renderiza apenas o conteúdo
+  // Layout do ALUNO (Com Mobile Nav no celular)
   return (
-    <div className="h-screen">
-      <main className="h-full overflow-y-auto">{children}</main>
+    <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0"> {/* Padding bottom para não esconder conteúdo atrás da nav */}
+      <main className="h-full overflow-y-auto">
+        {children}
+      </main>
+      
+      {/* A barra só aparece se for aluno e em telas pequenas (controlado via CSS no componente) */}
+      {isStudent && <MobileNav />}
     </div>
   );
 };
