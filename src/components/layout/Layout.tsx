@@ -1,6 +1,6 @@
 import React from 'react';
 import Sidebar from './Sidebar';
-import { MobileNav } from './MobileNav'; // Importe o componente criado
+import { MobileNav } from './MobileNav'; // Certifique-se que o caminho está correto
 import { useAuth } from '@/contexts/AuthContext';
 
 interface LayoutProps {
@@ -11,15 +11,26 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
   const { user, loadingUser } = useAuth();
 
-  const isAdmin = user?.type === 'admin';
-  const isStudent = user?.type === 'aluno' || !isAdmin; // Assume aluno se não for admin explícito
+  // 1. Lógica para Sidebar de Admin
+  const shouldShowAdminSidebar = showSidebar && user?.type === 'admin';
+
+  // 2. CORREÇÃO DO BUG:
+  // A barra mobile só aparece se:
+  // - O usuário EXISTIR (estiver logado)
+  // - E o tipo for 'aluno' (ou 'indefinido', se preferir)
+  // Isso evita que ela apareça na tela de Login (onde user é null)
+  const shouldShowMobileNav = !!user && user.type === 'aluno';
 
   if (loadingUser) {
-    return <div className="flex h-screen w-full items-center justify-center">Carregando...</div>;
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <p>Carregando...</p>
+      </div>
+    );
   }
 
-  // Layout do ADMIN (Com Sidebar lateral)
-  if (isAdmin && showSidebar) {
+  // Layout do Admin (Desktop/Mobile com Sidebar)
+  if (shouldShowAdminSidebar) {
     return (
       <div className="flex h-screen">
         <Sidebar>
@@ -29,15 +40,16 @@ const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
     );
   }
 
-  // Layout do ALUNO (Com Mobile Nav no celular)
+  // Layout Padrão (Aluno / Público)
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0"> {/* Padding bottom para não esconder conteúdo atrás da nav */}
+    // Adicionamos 'pb-20' apenas se a MobileNav for exibida, para o conteúdo não ficar escondido atrás dela
+    <div className={`min-h-screen bg-gray-50 ${shouldShowMobileNav ? 'pb-20 sm:pb-0' : ''}`}>
       <main className="h-full overflow-y-auto">
         {children}
       </main>
       
-      {/* A barra só aparece se for aluno e em telas pequenas (controlado via CSS no componente) */}
-      {isStudent && <MobileNav />}
+      {/* Renderização Condicional Corrigida */}
+      {shouldShowMobileNav && <MobileNav />}
     </div>
   );
 };
