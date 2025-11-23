@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InfoCards } from "@/components/dashboard/InfoCards";
 import { useNavigate } from "react-router-dom";
+import OfflineManager from "@/components/offline/OfflineManager"; // <--- Importação do componente
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -54,10 +55,15 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="p-6">
-      {/* Header da página (INTACTO) */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Página Inicial</h1>
-        <p className="text-gray-600">Bem-vindo ao sistema de chamadas</p>
+      {/* Header da página (MODIFICADO) */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Página Inicial</h1>
+          <p className="text-gray-600">Bem-vindo ao sistema de chamadas</p>
+        </div>
+        
+        {/* Componente de Gestão Offline inserido aqui */}
+        <OfflineManager />
       </div>
 
       {/* Cards Informativos (INTACTO) */}
@@ -76,7 +82,7 @@ const Dashboard: React.FC = () => {
             <div className="bg-white p-6 rounded-lg shadow-sm border">
               {/* Novas abas de turno adicionadas aqui */}
               <Tabs defaultValue="manha" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
                   <TabsTrigger value="manha">Manhã</TabsTrigger>
                   <TabsTrigger value="tarde">Tarde</TabsTrigger>
                   <TabsTrigger value="noite">Noite</TabsTrigger>

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff, MessageSquare, Plus } from "lucide-react";
+import { Check, X, FileText, Save, ArrowLeft, Loader2, Wifi, WifiOff, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import JustificarFaltaForm from "@/components/justificativa/JustificarFaltaForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -15,7 +15,9 @@ import {
   getSessaoChamada, 
   salvarSessaoChamada, 
   limparSessaoChamada,
-  sincronizarChamadasOffline
+  sincronizarChamadasOffline,
+  salvarChamadaOffline,
+  getAlunosDaTurmaOffline // <--- IMPORTADO
 } from '@/lib/offlineChamada';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -60,6 +62,7 @@ const ChamadaPage: React.FC = () => {
   const [descricaoObservacao, setDescricaoObservacao] = useState('');
   const [salvandoObservacao, setSalvandoObservacao] = useState(false);
 
+  // Monitoramento de Conexão
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
@@ -88,20 +91,42 @@ const ChamadaPage: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [toast]);
+  }, []);
 
+  // Carregamento de Dados (Híbrido Online/Offline)
   useEffect(() => {
     let cancelado = false;
     const carregarDados = async () => {
       if (!turmaId) return;
       setIsLoading(true);
+      
       try {
-        const { data: alunosData, error: alunosError } = await supabase
-          .from("alunos")
-          .select("id, nome, matricula, turma_id")
-          .eq("turma_id", turmaId);
-        if (alunosError) throw alunosError;
+        let alunosEncontrados: Aluno[] = [];
 
+        // 1. Tentar buscar alunos (Online ou Cache)
+        if (navigator.onLine) {
+          try {
+            const { data, error } = await supabase
+              .from("alunos")
+              .select("id, nome, matricula, turma_id")
+              .eq("turma_id", turmaId);
+              
+            if (!error && data) {
+              alunosEncontrados = data;
+            } else {
+              throw error;
+            }
+          } catch (err) {
+            console.warn("Falha ao buscar online, tentando cache...", err);
+            // Fallback para offline se a requisição falhar
+            alunosEncontrados = await getAlunosDaTurmaOffline(turmaId);
+          }
+        } else {
+          // Modo Offline direto
+          alunosEncontrados = await getAlunosDaTurmaOffline(turmaId);
+        }
+
+        // 2. Recuperar Sessão Salva (Rascunho)
         const sessaoSalva = await getSessaoChamada();
         let presencasRestauradas = {};
         let dataRestaurada = new Date();
@@ -112,30 +137,47 @@ const ChamadaPage: React.FC = () => {
           presencasRestauradas = sessaoSalva.presencas;
         }
         
-        const dataFormatada = format(dataRestaurada, "yyyy-MM-dd");
-        const { data: atestadosData, error: atestadosError } = await supabase
-          .from("atestados")
-          .select("id, aluno_id, data_inicio, data_fim, status")
-          .eq("status", "aprovado")
-          .lte("data_inicio", dataFormatada)
-          .gte("data_fim", dataFormatada);
-        if (atestadosError) throw atestadosError;
-        
-        const atestadosPorAluno: Record<string, Atestado[]> = {};
-        if (atestadosData) {
-          atestadosData.forEach(atestado => {
-            if (!atestadosPorAluno[atestado.aluno_id]) {
-              atestadosPorAluno[atestado.aluno_id] = [];
+        // 3. Buscar Atestados (Apenas se Online - ou deixar vazio se offline)
+        let atestadosPorAluno: Record<string, Atestado[]> = {};
+        if (navigator.onLine) {
+            try {
+                const dataFormatada = format(dataRestaurada, "yyyy-MM-dd");
+                const { data: atestadosData } = await supabase
+                  .from("atestados")
+                  .select("id, aluno_id, data_inicio, data_fim, status")
+                  .eq("status", "aprovado")
+                  .lte("data_inicio", dataFormatada)
+                  .gte("data_fim", dataFormatada);
+                
+                if (atestadosData) {
+                  atestadosData.forEach(atestado => {
+                    if (!atestadosPorAluno[atestado.aluno_id]) {
+                      atestadosPorAluno[atestado.aluno_id] = [];
+                    }
+                    atestadosPorAluno[atestado.aluno_id].push(atestado);
+                  });
+                }
+            } catch (err) {
+                console.warn("Não foi possível carregar atestados (offline ou erro).");
             }
-            atestadosPorAluno[atestado.aluno_id].push(atestado);
-          });
         }
         
         if (!cancelado) {
-          if (alunosData) setAlunos(alunosData);
+          if (alunosEncontrados.length > 0) {
+            setAlunos(alunosEncontrados);
+          } else if (!navigator.onLine) {
+             // Se não achou nada e está offline
+             toast({
+                title: "Dados não encontrados",
+                description: "Você baixou os dados desta turma antes de ficar offline?",
+                variant: "destructive"
+             });
+          }
+
           setDate(dataRestaurada);
           setPresencas(presencasRestauradas);
           setAtestados(atestadosPorAluno);
+          
           if (Object.keys(presencasRestauradas).length > 0) {
             toast({
               title: "Sessão restaurada",
@@ -146,8 +188,8 @@ const ChamadaPage: React.FC = () => {
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
         toast({
-          title: "Erro ao carregar dados",
-          description: "Não foi possível carregar os dados dos alunos.",
+          title: "Erro ao carregar",
+          description: "Ocorreu um problema ao carregar a turma.",
           variant: "destructive",
         });
       } finally {
@@ -156,8 +198,9 @@ const ChamadaPage: React.FC = () => {
     };
     carregarDados();
     return () => { cancelado = true; };
-  }, [turmaId, toast]);
+  }, [turmaId, toast, isOnline]); // Adicionado isOnline para recarregar se a rede mudar
 
+  // Auto-save da sessão (rascunho)
   useEffect(() => {
     if (turmaId && Object.keys(presencas).length > 0) {
       const salvarSessao = async () => {
@@ -192,7 +235,7 @@ const ChamadaPage: React.FC = () => {
     if (!user?.escola_id) {
       toast({
         title: "Erro de Configuração",
-        description: "Seu usuário não está vinculado a uma escola. Contate o suporte.",
+        description: "Seu usuário não está vinculado a uma escola.",
         variant: "destructive",
       });
       return;
@@ -212,18 +255,50 @@ const ChamadaPage: React.FC = () => {
           return {
             aluno_id: alunoId,
             turma_id: turmaId,
-            escola_id: user.escola_id,
+            escola_id: user.escola_id!,
             presente,
             falta_justificada,
             data_chamada: dataChamada,
           };
         });
 
+      // =================== LÓGICA OFFLINE DE SALVAMENTO ===================
       if (!isOnline) {
-        // ... Sua lógica offline ...
+        const chamadasOffline = presencasParaInserir.map(p => ({
+          aluno_id: p.aluno_id,
+          turma_id: p.turma_id!,
+          escola_id: p.escola_id, 
+          presente: p.presente,
+          falta_justificada: p.falta_justificada,
+          data_chamada: p.data_chamada,
+        }));
+
+        const salvou = await salvarChamadaOffline(chamadasOffline);
+        
+        if (salvou) {
+          toast({
+            title: "Salvo Offline",
+            description: "Chamada salva no dispositivo. Será sincronizada quando a internet voltar.",
+            className: "bg-yellow-100 border-yellow-400 text-yellow-800"
+          });
+          setPresencas({});
+          setTentouSalvar(false);
+          await limparSessaoChamada();
+        } else {
+          toast({
+            title: "Erro ao salvar",
+            description: "Não foi possível salvar localmente.",
+            variant: "destructive"
+          });
+        }
+        
+        setIsSaving(false);
+        return; // INTERROMPE AQUI se estiver offline
       }
+      // ===================================================================
 
       if (presencasParaInserir.length > 0) {
+        // Limpa registros anteriores desse dia para evitar duplicidade
         await supabase.from("presencas").delete().eq("turma_id", turmaId).eq("data_chamada", dataChamada);
         
         const { error } = await supabase.from("presencas").insert(presencasParaInserir);
@@ -241,7 +316,7 @@ const ChamadaPage: React.FC = () => {
       console.error("Erro ao salvar chamada:", error);
       toast({
         title: "Erro ao salvar",
-        description: "Não foi possível salvar a chamada. Verifique sua conexão e tente novamente.",
+        description: "Não foi possível salvar a chamada. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -249,15 +324,13 @@ const ChamadaPage: React.FC = () => {
     }
   };
 
-  // =================== CORREÇÃO AQUI ===================
-  // A lógica para salvar a observação foi implementada.
   const handleSalvarObservacao = async () => {
     if (!showObservacao || !tituloObservacao.trim() || !descricaoObservacao.trim()) {
       toast({ title: "Erro", description: "Título e descrição são obrigatórios.", variant: "destructive" });
       return;
     }
     if (!user || !turmaId || !user.escola_id) {
-        toast({ title: "Erro", description: "Dados de usuário, turma ou escola não encontrados.", variant: "destructive" });
+        toast({ title: "Erro", description: "Dados incompletos.", variant: "destructive" });
         return;
     }
 
@@ -273,8 +346,12 @@ const ChamadaPage: React.FC = () => {
         escola_id: user.escola_id,
       };
 
-      // Usamos 'upsert' por causa da sua constraint UNIQUE (aluno_id, data_observacao).
-      // Isso cria uma nova observação ou atualiza uma existente para o mesmo aluno no mesmo dia.
+      if (!isOnline) {
+          toast({ title: "Offline", description: "Observações só podem ser salvas online no momento.", variant: "destructive" });
+          setSalvandoObservacao(false);
+          return;
+      }
+
       const { error } = await supabase
         .from("observacoes_alunos")
         .upsert(observacaoData, {
@@ -283,23 +360,14 @@ const ChamadaPage: React.FC = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "Observação salva",
-        description: "A observação foi registrada com sucesso.",
-      });
-
-      // Limpa o formulário e fecha o modal
+      toast({ title: "Observação salva", description: "A observação foi registrada com sucesso." });
       setTituloObservacao('');
       setDescricaoObservacao('');
       setShowObservacao(null);
 
     } catch (error: any) {
       console.error("Erro ao salvar observação:", error);
-      toast({
-        title: "Erro ao salvar observação",
-        description: error.message || "Ocorreu um erro inesperado.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     } finally {
       setSalvandoObservacao(false);
     }
@@ -325,7 +393,7 @@ const ChamadaPage: React.FC = () => {
       {!isOnline && (
         <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-3 py-2 sm:px-4 sm:py-3 rounded mb-4 flex items-center text-sm">
           <WifiOff className="h-4 w-4 mr-2 flex-shrink-0" />
-          <span className="font-medium">Modo offline - As chamadas serão salvas localmente</span>
+          <span className="font-medium">Modo offline - Usando dados locais</span>
         </div>
       )}
 
@@ -377,51 +445,58 @@ const ChamadaPage: React.FC = () => {
         </div>
         
         <div className="mb-2 mt-4">
-          <h3 className="font-semibold text-gray-700 text-sm sm:text-base">Alunos</h3>
+          <h3 className="font-semibold text-gray-700 text-sm sm:text-base">Alunos ({alunos.length})</h3>
         </div>
         
         <div className="flex flex-col gap-1">
-          {[...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
-            const semRegistro = tentouSalvar && !presencas[aluno.id];
-            const temAtestado = temAtestadoAprovado(aluno.id);
-            return (
-              <div
-                key={aluno.id}
-                className={`flex flex-col sm:flex-row items-center border rounded-lg p-3 gap-3 transition-all ${semRegistro ? "border-2 border-red-500 bg-red-50" : "border-gray-200"}`}
-              >
-                <div className="flex-1 min-w-0 text-center sm:text-left flex items-center">
-                  <span className="font-medium text-sm">{aluno.nome}</span>
-                  <span className="text-xs text-gray-500 ml-2 hidden sm:inline">({aluno.matricula})</span>
-                  {temAtestado && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <FileText className="h-4 w-4 ml-2 text-blue-500 cursor-pointer" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Atestado aprovado para este dia.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
+          {alunos.length === 0 ? (
+             <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+                <p>Nenhum aluno encontrado.</p>
+                {!isOnline && <p className="text-xs mt-1">Verifique se você baixou os dados antes de ficar offline.</p>}
+             </div>
+          ) : (
+            [...alunos].sort((a, b) => a.nome.localeCompare(b.nome)).map((aluno) => {
+              const semRegistro = tentouSalvar && !presencas[aluno.id];
+              const temAtestado = temAtestadoAprovado(aluno.id);
+              return (
+                <div
+                  key={aluno.id}
+                  className={`flex flex-col sm:flex-row items-center border rounded-lg p-3 gap-3 transition-all ${semRegistro ? "border-2 border-red-500 bg-red-50" : "border-gray-200"}`}
+                >
+                  <div className="flex-1 min-w-0 text-center sm:text-left flex items-center">
+                    <span className="font-medium text-sm">{aluno.nome}</span>
+                    <span className="text-xs text-gray-500 ml-2 hidden sm:inline">({aluno.matricula})</span>
+                    {temAtestado && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <FileText className="h-4 w-4 ml-2 text-blue-500 cursor-pointer" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Atestado aprovado para este dia.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                  <div className="flex flex-row gap-2">
+                    <Button variant={presencas[aluno.id] === "presente" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "presente")} title="Presente">
+                      <Check size={16} /> <span className="hidden sm:inline ml-1">Presente</span>
+                    </Button>
+                    <Button variant={presencas[aluno.id] === "falta" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "falta")} title="Falta">
+                      <X size={16} /> <span className="hidden sm:inline ml-1">Falta</span>
+                    </Button>
+                    <Button variant={presencas[aluno.id] === "atestado" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "atestado")} title="Atestado">
+                      <FileText size={16} /> <span className="hidden sm:inline ml-1">Atestado</span>
+                    </Button>
+                    <Button variant="outline" size="icon" onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })} title="Adicionar Observação" className="h-9 w-9 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+                      <MessageSquare size={16}/>
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-row gap-2">
-                  <Button variant={presencas[aluno.id] === "presente" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "presente" ? "bg-green-600 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "presente")} title="Presente">
-                    <Check size={16} /> <span className="hidden sm:inline ml-1">Presente</span>
-                  </Button>
-                  <Button variant={presencas[aluno.id] === "falta" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "falta" ? "bg-red-600 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "falta")} title="Falta">
-                    <X size={16} /> <span className="hidden sm:inline ml-1">Falta</span>
-                  </Button>
-                  <Button variant={presencas[aluno.id] === "atestado" ? "default" : "outline"} size="sm" className={`h-9 px-3 ${presencas[aluno.id] === "atestado" ? "bg-blue-400 text-white" : ""}`} onClick={() => handlePresenca(aluno.id, "atestado")} title="Atestado">
-                    <FileText size={16} /> <span className="hidden sm:inline ml-1">Atestado</span>
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })} title="Adicionar Observação" className="h-9 w-9 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
-                    <MessageSquare size={16}/>
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
         
         <Button 

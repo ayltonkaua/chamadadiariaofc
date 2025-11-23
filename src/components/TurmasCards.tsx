@@ -8,79 +8,133 @@ import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
 import { ImportTurmasDialog } from "./turmas/ImportTurmasDialog";
 import { EmptyTurmasState } from "./turmas/EmptyTurmasState";
 import { Button } from "./ui/button";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, WifiOff } from "lucide-react";
+// Importações da lógica Offline/Híbrida
+import { buscarTurmasHibrido, getDadosEscolaOffline } from "@/lib/offlineChamada";
 
 interface Turma {
   id: string;
   nome: string;
   numero_sala: string;
   alunos: number;
+  user_id?: string; // Adicionado para tipagem correta
+  turno?: string;
 }
 
-// --- MODIFICAÇÃO 1: Adicionada a propriedade 'turno' ---
-// O componente agora espera receber o turno que deve ser exibido.
 const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno }) => {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  
+  // Estados dos modais
   const [turmaParaRemover, setTurmaParaRemover] = useState<Turma | null>(null);
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  
   const { user } = useAuth();
 
   const fetchTurmas = async () => {
     setLoading(true);
-    if (!user?.id) {
+    
+    // Verificação de segurança: precisamos do ID do usuário e da escola
+    if (!user?.id || !user?.escola_id) {
+      console.log("Usuário ou Escola ID ausente");
       setTurmas([]);
       setLoading(false);
       return;
     }
 
-    // --- MODIFICAÇÃO 2: Adicionado o filtro .eq('turno', turno) ---
-    // A busca no Supabase agora filtra as turmas pelo turno recebido.
-    const { data: turmasDB, error } = await supabase
-      .from("turmas")
-      .select("id, nome, numero_sala")
-      .eq("user_id", user.id)
-      .eq("turno", turno) // <-- FILTRO ADICIONADO AQUI
-      .order("nome", { ascending: true });
+    try {
+      // 1. Busca Híbrida (Tenta Online -> Falha -> Busca Offline)
+      const { data: dadosMist, fonte } = await buscarTurmasHibrido(user.escola_id);
+      
+      setIsOfflineMode(fonte === 'offline');
 
-    if (error) {
-      toast({
-        title: "Erro ao carregar turmas",
-        description: error.message,
-        variant: "destructive",
-      });
-      setTurmas([]);
-      setLoading(false);
-      return;
-    }
+      if (!dadosMist) {
+        setTurmas([]);
+        setLoading(false);
+        return;
+      }
 
-    if (turmasDB && turmasDB.length > 0) {
-      const turmasWithAlunos: Turma[] = await Promise.all(
-        turmasDB.map(async (turma: any) => {
-          const { count } = await supabase
-            .from("alunos")
-            .select("id", { count: "exact", head: true })
-            .eq("turma_id", turma.id);
+      // 2. Filtragem Inicial (Turno e Dono da Turma)
+      // Filtramos pelo user_id para garantir que o prof só veja as turmas dele, mesmo offline
+      let turmasFiltradas = dadosMist.filter((t: any) => 
+        t.turno === turno && t.user_id === user.id
+      );
 
+      // 3. Processamento da contagem de alunos
+      let turmasComContagem: Turma[] = [];
+
+      if (fonte === 'online') {
+        // --- CENÁRIO ONLINE: Buscamos a contagem precisa no banco ---
+        // (Fazemos isso para garantir a contagem exata do banco)
+        const turmasIds = turmasFiltradas.map((t: any) => t.id);
+        
+        // Se não houver turmas, paramos aqui
+        if (turmasIds.length === 0) {
+           setTurmas([]);
+           setLoading(false);
+           return;
+        }
+
+        // Refazemos a query específica para garantir os counts (como no seu original)
+        // Ou, para otimizar, buscamos apenas os counts das turmas já filtradas
+        turmasComContagem = await Promise.all(
+          turmasFiltradas.map(async (turma: any) => {
+            const { count } = await supabase
+              .from("alunos")
+              .select("id", { count: "exact", head: true })
+              .eq("turma_id", turma.id);
+
+            return {
+              ...turma,
+              alunos: count ?? 0,
+            };
+          })
+        );
+
+      } else {
+        // --- CENÁRIO OFFLINE: Contamos baseado no cache local ---
+        const dadosOffline = await getDadosEscolaOffline();
+        const todosAlunos = dadosOffline?.alunos || [];
+
+        turmasComContagem = turmasFiltradas.map((turma: any) => {
+          // Conta quantos alunos neste array local pertencem a esta turma
+          const qtdAlunos = todosAlunos.filter((a: any) => a.turma_id === turma.id).length;
           return {
             ...turma,
-            alunos: count ?? 0,
+            alunos: qtdAlunos
           };
-        })
-      );
-      setTurmas(turmasWithAlunos);
-    } else {
-      setTurmas([]);
+        });
+      }
+
+      // 4. Ordenação
+      turmasComContagem.sort((a, b) => a.nome.localeCompare(b.nome));
+      setTurmas(turmasComContagem);
+
+    } catch (error: any) {
+      console.error("Erro ao processar turmas:", error);
+      toast({
+        title: "Erro ao carregar",
+        description: "Não foi possível carregar a lista de turmas.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // --- MODIFICAÇÃO 3: Adicionado 'turno' ao array de dependências ---
-  // Isso garante que, quando o utilizador muda a aba de turno, a lista de turmas é recarregada.
+  // Recarrega quando muda o turno ou o usuário
   useEffect(() => {
     fetchTurmas();
-  }, [user?.id, turno]);
+    
+    // Opcional: Recarregar se a conexão voltar
+    const handleOnline = () => fetchTurmas();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [user?.id, turno, user?.escola_id]);
+
+  // --- Funções de Manipulação (Iguais ao original) ---
 
   const handleEditarTurma = (turma: Turma) => {
     setTurmaParaEditar(turma);
@@ -89,6 +143,16 @@ const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno 
   const handleRemoverTurma = async () => {
     if (turmaParaRemover) {
       try {
+        // Se estiver offline, avisa que não pode deletar
+        if (!navigator.onLine) {
+            toast({ 
+                title: "Sem conexão", 
+                description: "Você precisa de internet para excluir turmas.",
+                variant: "destructive" 
+            });
+            return;
+        }
+
         await supabase.from("alunos").delete().eq("turma_id", turmaParaRemover.id);
         await supabase.from("presencas").delete().eq("turma_id", turmaParaRemover.id);
         await supabase.from("turmas").delete().eq("id", turmaParaRemover.id);
@@ -116,11 +180,16 @@ const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno 
 
   return (
     <>
-      {/* O seu cabeçalho com o botão de importar permanece intacto, 
-          mas podemos movê-lo para a página principal se for um botão geral.
-          Por agora, vou mantê-lo aqui. */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Turmas do Turno da {turno}</h2>
+        <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-gray-800">Turmas do Turno da {turno}</h2>
+            {isOfflineMode && (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center gap-1 border border-yellow-200">
+                    <WifiOff size={12} /> Modo Offline
+                </span>
+            )}
+        </div>
+        
         <Button onClick={() => setShowImportDialog(true)} variant="outline" className="flex items-center gap-2">
           <FileSpreadsheet size={20} /> Importar Excel
         </Button>
@@ -137,7 +206,6 @@ const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno 
         ))}
       </div>
 
-      {/* A sua lógica para estados vazios e dialogs permanece 100% intacta. */}
       {turmas.length === 0 && !loading && (
         <EmptyTurmasState />
       )}
