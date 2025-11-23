@@ -31,69 +31,86 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loadingUser, setLoadingUser] = useState(true);
 
   const loadUserSession = async (sessionUser: any): Promise<User | null> => {
-    // 1. PRIMEIRO, verifica se o usuário está vinculado a um perfil de ALUNO.
-    const { data: alunoData } = await supabase
-      .from('alunos')
-      .select('id, nome, turmas(escola_id)')
-      .eq('user_id', sessionUser.id)
-      .single();
+    try {
+      // 1. PRIMEIRO, verifica se o usuário está vinculado a um perfil de ALUNO.
+      // Correção: Usei .maybeSingle() em vez de .single() para evitar o erro 406
+      const { data: alunoData } = await supabase
+        .from('alunos')
+        .select('id, nome, turmas(escola_id)')
+        .eq('user_id', sessionUser.id)
+        .maybeSingle(); 
 
-    if (alunoData) {
-      const alunoUser: User = {
-        id: sessionUser.id,
-        username: alunoData.nome,
-        email: sessionUser.email || "",
-        escola_id: (alunoData.turmas as any)?.escola_id,
-        type: 'aluno',
-        aluno_id: alunoData.id,
+      if (alunoData) {
+        const alunoUser: User = {
+          id: sessionUser.id,
+          username: alunoData.nome,
+          email: sessionUser.email || "",
+          escola_id: (alunoData.turmas as any)?.escola_id,
+          type: 'aluno',
+          aluno_id: alunoData.id,
+        };
+        setUser(alunoUser);
+        return alunoUser;
+      }
+
+      // 2. SE NÃO FOR ALUNO, verifica se tem uma role de ADMIN/PROFESSOR.
+      // Correção: .maybeSingle() aqui também
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('escola_id, role')
+        .eq('user_id', sessionUser.id)
+        .maybeSingle();
+
+      if (roleData) {
+        const adminUser: User = {
+          id: sessionUser.id,
+          username: sessionUser.user_metadata?.username || "",
+          email: sessionUser.email || "",
+          escola_id: roleData.escola_id,
+          role: roleData.role,
+          type: 'admin',
+        };
+        setUser(adminUser);
+        return adminUser;
+      }
+
+      // 3. Se não for nenhum dos dois, é um usuário sem vínculo.
+      const unlinkedUser: User = {
+          id: sessionUser.id,
+          username: sessionUser.user_metadata?.username || "Usuário",
+          email: sessionUser.email || "",
+          type: 'indefinido',
       };
-      setUser(alunoUser);
-      return alunoUser;
+      setUser(unlinkedUser);
+      return unlinkedUser;
+
+    } catch (error) {
+      console.error("Erro ao carregar sessão:", error);
+      setUser(null);
+      return null;
     }
-
-    // 2. SE NÃO FOR ALUNO, verifica se tem uma role de ADMIN/PROFESSOR.
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('escola_id, role')
-      .eq('user_id', sessionUser.id)
-      .single();
-
-    if (roleData) {
-      const adminUser: User = {
-        id: sessionUser.id,
-        username: sessionUser.user_metadata?.username || "",
-        email: sessionUser.email || "",
-        escola_id: roleData.escola_id,
-        role: roleData.role,
-        type: 'admin',
-      };
-      setUser(adminUser);
-      return adminUser;
-    }
-
-    // 3. Se não for nenhum dos dois, é um usuário sem vínculo.
-    const unlinkedUser: User = {
-        id: sessionUser.id,
-        username: sessionUser.user_metadata?.username || "Usuário",
-        email: sessionUser.email || "",
-        type: 'indefinido',
-    };
-    setUser(unlinkedUser);
-    return unlinkedUser;
   };
 
   const register = async (username: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    // Tenta criar o usuário no Auth
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { username } },
+      options: { 
+        data: { username },
+        emailRedirectTo: undefined // Evita problemas com redirecionamento local se não configurado
+      },
     });
+
     if (error) {
-      let errorMsg = error.message.includes("User already registered")
-        ? "E-mail já cadastrado."
-        : error.message;
+      console.error("Erro no registro:", error);
+      let errorMsg = error.message;
+      if (error.message.includes("User already registered")) errorMsg = "E-mail já cadastrado.";
+      if (error.message.includes("Database error")) errorMsg = "Erro interno no servidor. Contate o suporte.";
+      
       return { success: false, error: errorMsg };
     }
+    
     return { success: true };
   };
 
@@ -125,11 +142,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     getSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        loadUserSession(session.user);
+        // Pequeno delay para garantir que triggers (se existirem e estiverem corretos) completem
+        setTimeout(() => loadUserSession(session.user), 100);
       } else {
         setUser(null);
+        setLoadingUser(false);
       }
     });
 
@@ -155,8 +174,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useAuth = (): AuthContextType => {
-  // AQUI ESTAVA O ERRO
-  const context = useContext(AuthContext); // CORRIGIDO: Era Auth.Context
+  const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth deve ser usado dentro de um AuthProvider");
   }

@@ -8,6 +8,7 @@ interface Aluno {
   faltas: number;
   frequencia: number;
   turma_id: string;
+  user_id?: string; // Campo opcional
 }
 
 interface TurmaInfo {
@@ -27,6 +28,12 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
     setLoading(true);
     
     try {
+      // 1. Garante que 'user_id' e 'turma_id' sempre sejam buscados, 
+      //    mesmo que a página não tenha pedido explicitamente.
+      const camposObrigatorios = ["id", "turma_id", "user_id"];
+      // Une os campos pedidos com os obrigatórios e remove duplicatas
+      const camposParaBuscar = [...new Set([...campos, ...camposObrigatorios])];
+
       // Get turma info
       const { data: turmaData, error: turmaError } = await supabase
         .from("turmas")
@@ -41,7 +48,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
       // Get students
       const { data: alunosData, error: alunosError } = await supabase
         .from("alunos")
-        .select(campos.join(", "))
+        .select(camposParaBuscar.join(", ")) // Usa a lista combinada
         .eq("turma_id", turmaId)
         .order("nome");
       
@@ -79,7 +86,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
       );
 
       setTurmaInfo(turmaData);
-      setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)));
+      setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)) as Aluno[]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     } finally {

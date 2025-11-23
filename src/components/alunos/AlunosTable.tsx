@@ -19,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// MODIFICADO: Campos de responsável adicionados e campos calculados como opcionais
 interface Aluno {
   id: string;
   nome: string;
@@ -29,6 +28,7 @@ interface Aluno {
   turma_id: string;
   nome_responsavel?: string;
   telefone_responsavel?: string;
+  user_id?: string;
 }
 
 interface AlunosTableProps {

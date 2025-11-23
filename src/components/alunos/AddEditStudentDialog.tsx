@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { Badge } from "@/components/ui/badge";
+import { Mail, UserX, CheckCircle2, Loader2 } from "lucide-react";
 
 interface Student {
   id?: string;
@@ -21,6 +23,7 @@ interface Student {
   turma_id: string;
   nome_responsavel?: string;
   telefone_responsavel?: string;
+  user_id?: string; // ID do usuário vinculado (auth.users)
 }
 
 interface AddEditStudentDialogProps {
@@ -47,15 +50,15 @@ export default function AddEditStudentDialog({
   const [matricula, setMatricula] = useState("");
   const [nomeResponsavel, setNomeResponsavel] = useState("");
   const [telefoneResponsavel, setTelefoneResponsavel] = useState("");
-
-  const [gerarAcesso, setGerarAcesso] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  
+  // Estados para exibição do vínculo de conta
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [loadingEmail, setLoadingEmail] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
 
   // -------------------------------------------------------
-  // Preenchimento automático quando editar
+  // Carregar dados ao abrir
   // -------------------------------------------------------
   useEffect(() => {
     if (student && open) {
@@ -63,20 +66,40 @@ export default function AddEditStudentDialog({
       setMatricula(student.matricula || "");
       setNomeResponsavel(student.nome_responsavel || "");
       setTelefoneResponsavel(student.telefone_responsavel || "");
+      
+      // Busca o e-mail se o aluno tiver um usuário vinculado
+      if (student.user_id) {
+        fetchStudentEmail(student.user_id);
+      } else {
+        setRegisteredEmail(null);
+      }
 
-      setGerarAcesso(false);
-      setEmail("");
-      setPassword("");
     } else if (!isEditing) {
+      // Limpar campos para novo aluno
       setNome("");
       setMatricula("");
       setNomeResponsavel("");
       setTelefoneResponsavel("");
-      setGerarAcesso(false);
-      setEmail("");
-      setPassword("");
+      setRegisteredEmail(null);
     }
   }, [student, open, isEditing]);
+
+  const fetchStudentEmail = async (userId: string) => {
+    setLoadingEmail(true);
+    try {
+      // Chama a função RPC criada no banco de dados
+      const { data, error } = await supabase.rpc('get_user_email', { p_user_id: userId });
+      if (!error && data) {
+        setRegisteredEmail(data);
+      } else {
+        setRegisteredEmail(null);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar email:", err);
+    } finally {
+      setLoadingEmail(false);
+    }
+  };
 
   // -------------------------------------------------------
   // ENVIO DO FORMULÁRIO
@@ -93,48 +116,26 @@ export default function AddEditStudentDialog({
       return;
     }
 
-    if (gerarAcesso) {
-      if (!email.trim() || !password.trim()) {
-        toast({
-          title: "Erro",
-          description: "Email e senha são obrigatórios para gerar acesso.",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (password.length < 6) {
-        toast({
-          title: "Senha fraca",
-          description: "A senha deve ter pelo menos 6 caracteres.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
     setIsLoading(true);
 
     try {
-      let currentStudentId = student?.id;
-
       if (!isEditing && !user?.escola_id) {
         throw new Error(
-          "ID da escola não encontrado no usuário logado. Faça login novamente."
+          "ID da escola não encontrado. Faça login novamente."
         );
       }
 
-      // -------------------------------------------------------
-      // 1. SALVAR OU EDITAR ALUNO
-      // -------------------------------------------------------
+      const payload = {
+        nome,
+        matricula,
+        nome_responsavel: nomeResponsavel,
+        telefone_responsavel: telefoneResponsavel,
+      };
+
       if (isEditing && student?.id) {
         const { error } = await supabase
           .from("alunos")
-          .update({
-            nome,
-            matricula,
-            nome_responsavel: nomeResponsavel,
-            telefone_responsavel: telefoneResponsavel,
-          })
+          .update(payload)
           .eq("id", student.id);
 
         if (error) throw error;
@@ -144,75 +145,19 @@ export default function AddEditStudentDialog({
           description: "Os dados foram atualizados com sucesso",
         });
       } else {
-        const { data: newStudent, error } = await supabase
+        const { error } = await supabase
           .from("alunos")
           .insert({
-            nome,
-            matricula,
+            ...payload,
             turma_id: turmaId,
             escola_id: user?.escola_id,
-            nome_responsavel: nomeResponsavel,
-            telefone_responsavel: telefoneResponsavel,
-          })
-          .select()
-          .single();
+          });
 
         if (error) throw error;
 
-        currentStudentId = newStudent.id;
-
-        if (!gerarAcesso) {
-          toast({
-            title: "Aluno cadastrado",
-            description: "Aluno inserido com sucesso!",
-          });
-        }
-      }
-
-      // -------------------------------------------------------
-      // 2. GERAR ACESSO — CHAMAR EDGE FUNCTION
-      // -------------------------------------------------------
-      if (gerarAcesso && currentStudentId) {
-        console.log("Criando acesso para:", email);
-
-        // pegar token do usuário
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-
-        if (!token) {
-          throw new Error("Sessão expirada. Faça login novamente.");
-        }
-
-        const { data: funcData, error: funcError } = await supabase.functions.invoke(
-          "create-student-user",
-          {
-            body: {
-              email: email.trim(),
-              password: password.trim(),
-              alunoId: currentStudentId,
-              nome: nome,
-              escolaId: user?.escola_id,
-            },
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (funcError) {
-          console.error("Erro Edge Function:", funcError);
-          throw new Error(
-            funcError.message || "Erro ao criar acesso do aluno."
-          );
-        }
-
-        if (funcData?.error) {
-          throw new Error(funcData.error);
-        }
-
         toast({
-          title: "Acesso Criado",
-          description: `O login ${email} foi criado com sucesso.`,
+          title: "Aluno cadastrado",
+          description: "Aluno inserido com sucesso!",
         });
       }
 
@@ -220,7 +165,6 @@ export default function AddEditStudentDialog({
       onClose();
     } catch (error: any) {
       console.error(error);
-
       toast({
         title: "Erro",
         description: error.message || "Falha ao salvar aluno.",
@@ -231,9 +175,6 @@ export default function AddEditStudentDialog({
     }
   };
 
-  // -------------------------------------------------------
-  // JSX
-  // -------------------------------------------------------
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
@@ -250,6 +191,37 @@ export default function AddEditStudentDialog({
 
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
+            {/* Status do Cadastro (Visível apenas na edição) */}
+            {isEditing && (
+              <div className={`p-3 rounded-md border ${registeredEmail ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  {loadingEmail ? (
+                     <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                  ) : registeredEmail ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <UserX className="h-5 w-5 text-orange-500" />
+                  )}
+                  <span className={`font-semibold text-sm ${registeredEmail ? "text-green-800" : "text-orange-800"}`}>
+                    {loadingEmail ? "Verificando vínculo..." : (registeredEmail ? "Aluno Registrado no App" : "Aluno Não Registrado")}
+                  </span>
+                </div>
+                
+                {registeredEmail && (
+                  <div className="flex items-center gap-2 mt-1 text-sm text-green-700 ml-7">
+                    <Mail className="h-3 w-3" />
+                    <span>{registeredEmail}</span>
+                  </div>
+                )}
+                
+                {!registeredEmail && !loadingEmail && (
+                  <p className="text-xs text-orange-700 ml-7">
+                    Este aluno ainda não criou uma conta no aplicativo usando esta matrícula.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Dados pessoais */}
             <div className="space-y-4">
               <h4 className="text-sm font-medium text-muted-foreground border-b pb-1">
@@ -304,51 +276,6 @@ export default function AddEditStudentDialog({
                   placeholder="(XX) 9XXXX-XXXX"
                 />
               </div>
-            </div>
-
-            {/* Gerar acesso */}
-            <div className="space-y-4 mt-2 bg-slate-50 p-4 rounded-md border">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="gerarAcesso"
-                  className="h-4 w-4"
-                  checked={gerarAcesso}
-                  onChange={(e) => setGerarAcesso(e.target.checked)}
-                />
-                <Label htmlFor="gerarAcesso" className="font-semibold">
-                  Gerar acesso ao Portal do Aluno?
-                </Label>
-              </div>
-
-              {gerarAcesso && (
-                <div className="grid gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">E-mail</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      className="bg-white"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required={gerarAcesso}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="password">Senha</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      className="bg-white"
-                      minLength={6}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required={gerarAcesso}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
