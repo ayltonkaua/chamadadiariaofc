@@ -140,4 +140,4 @@ const OfflineManager: React.FC = () => {
   );
 };
 
-export default OfflineManager;
+export default OfflineManager; 
