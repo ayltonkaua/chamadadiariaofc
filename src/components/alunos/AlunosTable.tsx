@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, Trash2, History, MoreVertical } from "lucide-react";
+import { Edit, Trash2, History, MoreVertical, GraduationCap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+// Importe o componente de Boletim que criamos anteriormente
+import { BoletimAluno } from "@/components/notas/BoletimAluno";
 
 interface Aluno {
   id: string;
@@ -39,6 +42,9 @@ interface AlunosTableProps {
 
 const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
+  // Estado para controlar qual aluno teve o boletim aberto
+  const [alunoBoletimId, setAlunoBoletimId] = useState<string | null>(null);
+
   const filteredAlunos = alunos.filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
     a.matricula.toLowerCase().includes(search.toLowerCase())
@@ -72,6 +78,9 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setAlunoBoletimId(aluno.id)}>
+                    <GraduationCap className="mr-2 h-4 w-4" /> Ver Notas
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
                     <Edit className="mr-2 h-4 w-4" /> Editar
                   </DropdownMenuItem>
@@ -93,6 +102,14 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                 <span><strong>Faltas:</strong> {aluno.faltas ?? 'N/A'}</span>
                 <span><strong>Frequência:</strong> {aluno.frequencia ?? 'N/A'}%</span>
               </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full mt-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                onClick={() => setAlunoBoletimId(aluno.id)}
+              >
+                <GraduationCap className="mr-2 h-4 w-4" /> Boletim Escolar
+              </Button>
             </CardContent>
           </Card>
         ))}
@@ -139,16 +156,25 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => setAlunoBoletimId(aluno.id)}
+                      title="Ver Notas (Boletim)"
+                    >
+                      <GraduationCap className="h-4 w-4" />
+                    </Button>
                     <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`}>
-                      <Button variant="ghost" size="icon" title="Ver histórico">
+                      <Button variant="ghost" size="icon" title="Ver histórico de chamadas">
                         <History className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button onClick={() => onEdit(aluno.id)} variant="outline" size="sm" className="h-8 border-purple-300 text-purple-700">
-                      <Edit size={16}/> <span className="hidden md:inline ml-2">Editar</span>
+                    <Button onClick={() => onEdit(aluno.id)} variant="outline" size="icon" className="h-8 w-8 border-purple-300 text-purple-700" title="Editar Aluno">
+                      <Edit size={14}/> 
                     </Button>
-                    <Button onClick={() => onRemove(aluno)} variant="outline" size="sm" className="h-8 border-red-300 text-red-600">
-                      <Trash2 size={16}/> <span className="hidden md:inline ml-2">Apagar</span>
+                    <Button onClick={() => onRemove(aluno)} variant="outline" size="icon" className="h-8 w-8 border-red-300 text-red-600" title="Remover Aluno">
+                      <Trash2 size={14}/> 
                     </Button>
                   </div>
                 </TableCell>
@@ -157,6 +183,22 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
           </TableBody>
         </Table>
       </div>
+
+      {/* --- MODAL DO BOLETIM --- */}
+      <Dialog open={!!alunoBoletimId} onOpenChange={(open) => !open && setAlunoBoletimId(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap className="h-6 w-6 text-blue-600" />
+              Boletim Escolar
+            </DialogTitle>
+          </DialogHeader>
+          
+          {/* Renderiza o componente de boletim passando o ID do aluno selecionado */}
+          {alunoBoletimId && <BoletimAluno alunoId={alunoBoletimId} />}
+          
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

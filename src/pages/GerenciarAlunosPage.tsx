@@ -18,6 +18,7 @@ import { TurmaStatsCards } from "@/components/alunos/TurmaStatsCards";
 import AlunosTable from "@/components/alunos/AlunosTable";
 import { useAlunosTurma } from "@/hooks/useAlunosTurma";
 import AddEditStudentDialog from "@/components/alunos/AddEditStudentDialog";
+import { ImportarNotasDialog } from "@/components/notas/ImportarNotasDialog"; // MODIFICADO: Importação adicionada
 
 const GerenciarAlunosPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
@@ -30,7 +31,6 @@ const GerenciarAlunosPage: React.FC = () => {
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // MODIFICADO: Adicionado os novos campos para serem buscados pelo hook
   const { 
     alunos, 
     setAlunos, 
@@ -111,14 +111,20 @@ const GerenciarAlunosPage: React.FC = () => {
         {turmaInfo && <TurmaStatsCards turmaInfo={turmaInfo} />}
 
         <div className="bg-white rounded-xl shadow-md p-3 sm:p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-2 sm:gap-0">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-4">
             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Lista de Alunos</h2>
-            <Button 
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-              onClick={handleAddAluno}
-            >
-              <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Aluno</span>
-            </Button>
+            
+            {/* MODIFICADO: Agrupamento dos botões de Ação */}
+            <div className="flex gap-2 w-full sm:w-auto">
+              <ImportarNotasDialog />
+              
+              <Button 
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 flex-1 sm:flex-none justify-center"
+                onClick={handleAddAluno}
+              >
+                <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Aluno</span>
+              </Button>
+            </div>
           </div>
           
           {loading ? (
@@ -132,12 +138,15 @@ const GerenciarAlunosPage: React.FC = () => {
           ) : (
             <div className="text-center py-10 text-gray-500">
               <p className="mb-4">Nenhum aluno cadastrado nesta turma.</p>
-              <Button 
-                className="bg-green-600 hover:bg-green-700"
-                onClick={handleAddAluno}
-              >
-                <UserPlus className="mr-2" size={18} /> Adicionar Primeiro Aluno
-              </Button>
+              <div className="flex flex-col sm:flex-row justify-center gap-3">
+                 <ImportarNotasDialog />
+                 <Button 
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={handleAddAluno}
+                >
+                  <UserPlus className="mr-2" size={18} /> Adicionar Primeiro Aluno
+                </Button>
+              </div>
             </div>
           )}
         </div>
