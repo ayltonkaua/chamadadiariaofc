@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Trophy } from "lucide-react";
 
@@ -17,72 +18,103 @@ interface BoletimItem {
   situacao?: string;
 }
 
+// Aceita alunoId opcional. Se não vier, tenta pegar do usuário logado.
 export function BoletimAluno({ alunoId }: { alunoId?: string }) {
+  const { user } = useAuth(); // Hook de autenticação para pegar dados do aluno logado
   const [boletim, setBoletim] = useState<BoletimItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Define qual ID usar: o passado via prop (Gestor) ou o do usuário (Aluno)
+  const targetId = alunoId || user?.aluno_id;
+
   useEffect(() => {
     const fetchNotas = async () => {
-      if (!alunoId) return;
+      if (!targetId) {
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
 
-      const { data, error } = await supabase
-        .from("notas")
-        .select(`
-          valor,
-          semestre,
-          disciplina:disciplinas(nome)
-        `)
-        .eq("aluno_id", alunoId);
+      try {
+        const { data, error } = await supabase
+          .from("notas")
+          .select(`
+            valor,
+            semestre,
+            disciplina:disciplinas(nome)
+          `)
+          .eq("aluno_id", targetId); // Usa o ID resolvido
 
-      if (!error && data) {
-        const notasMap = new Map<string, BoletimItem>();
+        if (error) throw error;
 
-        data.forEach((nota: any) => {
-          const discNome = nota.disciplina?.nome || "Desconhecida";
-          if (!notasMap.has(discNome)) {
-            notasMap.set(discNome, { 
-              disciplina: discNome, 
-              notas: { 1: null, 2: null, 3: null } 
-            });
-          }
-          const item = notasMap.get(discNome)!;
-          // @ts-ignore
-          item.notas[nota.semestre] = nota.valor;
-        });
+        if (data) {
+          const notasMap = new Map<string, BoletimItem>();
 
-        const boletimArray = Array.from(notasMap.values()).map(item => {
-            const notasValidas = Object.values(item.notas).filter(n => n !== null) as number[];
-            const soma = notasValidas.reduce((a, b) => a + b, 0);
-            const media = notasValidas.length > 0 ? parseFloat((soma / notasValidas.length).toFixed(1)) : undefined;
+          data.forEach((nota: any) => {
+            // Garante que disciplina tenha nome, caso venha nulo (ex: disciplina deletada)
+            const discNome = nota.disciplina?.nome || "Disciplina Removida";
             
-            // Lógica simples de situação (Pode ajustar conforme regras de PE)
-            let situacao = "-";
-            if (media !== undefined) {
-                if (media >= 6) situacao = "Aprovado";
-                else if (media >= 4) situacao = "Recuperação";
-                else situacao = "Reprovado";
+            if (!notasMap.has(discNome)) {
+              notasMap.set(discNome, { 
+                disciplina: discNome, 
+                notas: { 1: null, 2: null, 3: null } 
+              });
             }
+            
+            const item = notasMap.get(discNome)!;
+            // @ts-ignore
+            item.notas[nota.semestre] = Number(nota.valor);
+          });
 
-            return { ...item, mediaFinal: media, situacao };
-        });
+          const boletimArray = Array.from(notasMap.values()).map(item => {
+              const notasValidas = Object.values(item.notas).filter(n => n !== null) as number[];
+              const soma = notasValidas.reduce((a, b) => a + b, 0);
+              const media = notasValidas.length > 0 ? parseFloat((soma / notasValidas.length).toFixed(1)) : undefined;
+              
+              let situacao = "-";
+              if (media !== undefined) {
+                  if (media >= 6) situacao = "Aprovado";
+                  else if (media >= 4) situacao = "Recuperação";
+                  else situacao = "Reprovado";
+              }
 
-        setBoletim(boletimArray);
+              return { ...item, mediaFinal: media, situacao };
+          });
+
+          // Ordena por nome da disciplina
+          setBoletim(boletimArray.sort((a, b) => a.disciplina.localeCompare(b.disciplina)));
+        }
+      } catch (error) {
+        console.error("Erro ao buscar boletim:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchNotas();
-  }, [alunoId]);
+  }, [targetId]); // Recarrega se o ID mudar
 
-  if (loading) return <div className="p-4 space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>;
+  if (loading) {
+    return (
+      <div className="p-4 space-y-3">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (!targetId) {
+    return <div className="text-center py-8 text-red-500">Erro: Aluno não identificado.</div>;
+  }
 
   if (boletim.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-slate-50 rounded-xl border border-dashed mx-4 mb-4">
         <AlertTriangle className="h-10 w-10 mb-2 opacity-20" />
         <p className="text-sm font-medium">Boletim indisponível.</p>
-        <p className="text-xs">Nenhuma nota registrada neste período.</p>
+        <p className="text-xs">Nenhuma nota registrada para este aluno ainda.</p>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom'; // Adicionado useSearchParams
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import JustificarFaltaForm from '@/components/justificativa/JustificarFaltaForm';
 import { toast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
+
+// Componente de Boletim (Importação Nova)
+import { BoletimAluno } from "@/components/notas/BoletimAluno";
 
 // Ícones
 import { 
@@ -34,7 +37,6 @@ const AttendanceRing = ({ percentage }: { percentage: number }) => {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
-  // Definição de cores baseada na porcentagem
   const color = percentage >= 75 ? "text-green-500" : percentage >= 60 ? "text-yellow-500" : "text-red-500";
 
   return (
@@ -85,11 +87,12 @@ const PortalAlunoPage: React.FC = () => {
   const { user, logout } = useAuth();
   const { config: escolaConfig } = useEscolaConfig();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams(); // Hook para ler parâmetros da URL
+  const [searchParams] = useSearchParams();
   
   // Estados para controle da UI
   const [isJustifyDialogOpen, setIsJustifyDialogOpen] = useState(false);
   const [showCarteirinha, setShowCarteirinha] = useState(false);
+  const [isBoletimOpen, setIsBoletimOpen] = useState(false); // Estado para o Boletim
   
   // Estado para visualização segura de atestados
   const [isMeusAtestadosOpen, setIsMeusAtestadosOpen] = useState(false);
@@ -108,13 +111,14 @@ const PortalAlunoPage: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   // --- EFEITO: Listener de URL para Navegação Mobile ---
-  // Isso permite que o link do menu mobile (/portal-aluno?tab=atestados) abra o popup correto
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab === 'atestados') {
       setIsMeusAtestadosOpen(true);
     } else if (tab === 'justificar') {
       setIsJustifyDialogOpen(true);
+    } else if (tab === 'boletim') { // Adicionado listener para boletim
+      setIsBoletimOpen(true);
     }
   }, [searchParams]);
 
@@ -188,7 +192,7 @@ const PortalAlunoPage: React.FC = () => {
       const { data, error } = await supabase
         .from('atestados')
         .select('*')
-        .eq('aluno_id', user.aluno_id) // SEGURANÇA: Garante que só traz do aluno logado
+        .eq('aluno_id', user.aluno_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -200,7 +204,6 @@ const PortalAlunoPage: React.FC = () => {
     }
   };
 
-  // Efeito para carregar atestados quando o modal abrir
   useEffect(() => {
     if (isMeusAtestadosOpen) {
       fetchMeusAtestados();
@@ -239,7 +242,7 @@ const PortalAlunoPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-24 font-sans">
-      {/* HEADER APP-LIKE */}
+      {/* HEADER */}
       <header className="bg-white sticky top-0 z-10 border-b px-4 py-3 flex items-center justify-between shadow-sm sm:px-8 sm:py-4">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold border border-purple-200 shadow-sm">
@@ -357,7 +360,36 @@ const PortalAlunoPage: React.FC = () => {
               </div>
             </Button>
 
-            {/* 2. Justificar Falta (INSERT Seguro) */}
+            {/* 2. Boletim Escolar (NOVO) */}
+            <Dialog open={isBoletimOpen} onOpenChange={setIsBoletimOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
+                >
+                  <div className="p-3 bg-pink-50 rounded-2xl text-pink-600 group-hover:scale-110 transition-transform">
+                    <GraduationCap className="h-6 w-6" />
+                  </div>
+                  <div className="text-center">
+                    <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Boletim</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Ver notas</span>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <GraduationCap className="h-6 w-6 text-pink-600" />
+                    Boletim Escolar
+                  </DialogTitle>
+                  <DialogDescription>Confira suas notas e médias por disciplina.</DialogDescription>
+                </DialogHeader>
+                {/* O componente busca as notas do aluno logado automaticamente */}
+                <BoletimAluno />
+              </DialogContent>
+            </Dialog>
+
+            {/* 3. Justificar Falta */}
             <Dialog open={isJustifyDialogOpen} onOpenChange={setIsJustifyDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group">
@@ -379,14 +411,13 @@ const PortalAlunoPage: React.FC = () => {
                   onSuccess={() => {
                     toast({ title: 'Enviado!', description: 'Sua justificativa será analisada.' });
                     setIsJustifyDialogOpen(false);
-                    fetchMeusAtestados(); // Atualiza a lista se estiver aberta
                   }}
                   onClose={() => setIsJustifyDialogOpen(false)}
                 />
               </DialogContent>
             </Dialog>
 
-            {/* 3. Meus Atestados (VIEW Segura - Modal) */}
+            {/* 4. Meus Atestados */}
             <Dialog open={isMeusAtestadosOpen} onOpenChange={setIsMeusAtestadosOpen}>
               <DialogTrigger asChild>
                 <Button 
@@ -397,8 +428,8 @@ const PortalAlunoPage: React.FC = () => {
                     <FileText className="h-6 w-6" />
                   </div>
                   <div className="text-center">
-                    <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Meus Atestados</span>
-                    <span className="text-[10px] text-gray-400 font-normal">Consultar status</span>
+                    <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Atestados</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Status envios</span>
                   </div>
                 </Button>
               </DialogTrigger>
@@ -410,7 +441,6 @@ const PortalAlunoPage: React.FC = () => {
                 <div className="flex-1 overflow-hidden bg-gray-50/50 relative">
                   {loadingAtestados ? (
                     <div className="p-6 space-y-3">
-                      <Skeleton className="h-20 w-full rounded-lg" />
                       <Skeleton className="h-20 w-full rounded-lg" />
                       <Skeleton className="h-20 w-full rounded-lg" />
                     </div>
@@ -448,7 +478,7 @@ const PortalAlunoPage: React.FC = () => {
               </DialogContent>
             </Dialog>
 
-            {/* 4. Pesquisas (Em Breve) */}
+            {/* 5. Pesquisas (Em Breve) */}
             <Button 
               variant="outline" 
               className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white opacity-70 cursor-not-allowed hover:bg-white"

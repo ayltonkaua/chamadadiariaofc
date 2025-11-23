@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from "@/components/ui/scroll-area";
+// Importação do novo gráfico de notas
+import { DesempenhoAcademicoChart } from "@/components/dashboard/DesempenhoAcademicoChart";
 
 // --- Tipagens ---
 
@@ -33,7 +35,7 @@ interface UltimaObservacaoData {
   aluno_matricula: string;
   titulo: string;
   descricao: string;
-  created_at?: string; // Opcional, caso queira mostrar data
+  created_at?: string;
 }
 interface KpiData {
   taxa_presenca_geral: number;
@@ -61,7 +63,7 @@ interface UltimaPresenca {
   presente: boolean;
 }
 
-const ITEMS_PER_PAGE = 5; // Reduzido ligeiramente para ajustar melhor visualmente nas listas
+const ITEMS_PER_PAGE = 5;
 
 // --- Subcomponentes ---
 
@@ -82,7 +84,6 @@ const SummaryCard = ({ title, value, icon: Icon, colorClass, loading }: { title:
   );
 };
 
-// AlunoListItem limpo (sem lógica de tendência)
 function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasConsecutivasData; tipo: 'risco' | 'consecutivo' }) {
   const [ultimasPresencas, setUltimasPresencas] = useState<UltimaPresenca[]>([]);
 
@@ -164,7 +165,6 @@ export default function DashboardGestorPage() {
     async function fetchDashboardData() {
       try {
         setLoading(true);
-        // Removida a chamada de tendência
         const [
             kpiResult, turmaResult, riscoResult, consecutivasResult,
             kpiAdminResult, faltasDiaResult, obsResult
@@ -175,7 +175,6 @@ export default function DashboardGestorPage() {
           supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3 }),
           supabase.rpc('get_kpis_administrativos').select().single(),
           supabase.rpc('get_faltas_por_dia_semana'),
-          // Aumentei o limite de observações já que o card ficará maior
           supabase.rpc('get_ultimas_observacoes', {limite: 10}),
         ]);
 
@@ -223,7 +222,7 @@ export default function DashboardGestorPage() {
                 <SummaryCard title="Justificativas" value={kpisAdmin?.justificativas_a_rever ?? '0'} icon={BookCopy} colorClass="bg-gradient-to-br from-amber-500 to-amber-600" loading={loading} />
             </section>
             
-            {/* LINHA 2: Gráficos */}
+            {/* LINHA 2: Gráficos de Frequência */}
             <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <Card className="shadow-sm border-gray-200">
                 <CardHeader>
@@ -268,7 +267,14 @@ export default function DashboardGestorPage() {
               </Card>
             </section>
 
-            {/* LINHA 3: Listas e Radar */}
+            {/* LINHA 3: Desempenho Acadêmico (NOVO) */}
+            <section className="grid grid-cols-1 gap-6">
+                <div className="w-full">
+                    <DesempenhoAcademicoChart />
+                </div>
+            </section>
+
+            {/* LINHA 4: Listas e Radar */}
             <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-start">
               {/* Coluna Esquerda: Listas de Risco */}
               <div className="lg:col-span-2 space-y-6">
@@ -304,7 +310,7 @@ export default function DashboardGestorPage() {
 
                 <Card className="shadow-sm border-gray-200">
                   <CardHeader className="bg-orange-50/50 pb-4 border-b border-orange-100">
-                     <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between">
                         <div>
                             <CardTitle className="flex items-center gap-2 text-orange-700 text-lg">
                                 <AlertTriangle className="h-5 w-5"/> Faltas Consecutivas
@@ -333,7 +339,7 @@ export default function DashboardGestorPage() {
                 </Card>
               </div>
 
-              {/* Coluna Direita: Radar de Comportamento (Agora ocupa toda a altura lateral) */}
+              {/* Coluna Direita: Radar de Comportamento */}
               <div className="lg:col-span-1 h-full">
                 <Card className="shadow-sm border-gray-200 h-full flex flex-col bg-white">
                   <CardHeader className="bg-sky-50/50 border-b border-sky-100 pb-4">
