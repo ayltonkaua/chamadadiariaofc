@@ -29,12 +29,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { subDays, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useAuth } from '@/contexts/AuthContext'; // IMPORTANTE: Adicionado useAuth
 
 // --- Tipagens ---
 interface KpiAdminData { atestados_pendentes: number; justificativas_a_rever: number; }
 interface UltimaObservacaoData { aluno_nome: string; aluno_matricula: string; titulo: string; descricao: string; created_at?: string; }
 interface KpiData { taxa_presenca_geral: number; total_alunos: number; }
-interface TurmaComparisonData { turma_nome: string; taxa_presenca: number; turma_id?: string; } // Adicionado ID opcional
+interface TurmaComparisonData { turma_nome: string; taxa_presenca: number; turma_id?: string; }
 interface AlunoRiscoData { aluno_id: string; aluno_nome: string; turma_nome: string; total_faltas: number; }
 interface AlunoFaltasConsecutivasData { aluno_id: string; aluno_nome: string; turma_nome: string; ultima_falta: string; contagem_faltas_consecutivas: number; }
 interface UltimaPresenca { data_chamada: string; presente: boolean; }
@@ -42,7 +43,7 @@ interface TurmaMetadata { id: string; nome: string; turno: string | null; }
 
 const ITEMS_PER_PAGE = 5;
 
-// --- Subcomponentes ---
+// --- Subcomponentes (mantidos) ---
 const SummaryCard = ({ title, value, icon: Icon, colorClass, loading }: { title: string; value: string | number; icon: React.ElementType; colorClass: string; loading: boolean; }) => {
   if (loading) return <Skeleton className="h-28 w-full rounded-xl" />;
   return (
@@ -64,6 +65,8 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   useEffect(() => {
     let isMounted = true;
     async function fetchPresencas() {
+      // Nota: As RPCs do tipo get_ultimas_presencas_aluno já devem filtrar internamente
+      // para garantir a segurança, mas vou assumir que ela pega o dado e o RLS da tabela 'presencas' filtra.
       // @ts-ignore
       const { data } = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
       if (isMounted && data) setUltimasPresencas(data.slice(0, 3));
@@ -110,6 +113,8 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 }
 
 export default function DashboardGestorPage() {
+  const { user } = useAuth(); // Obtém o usuário logado
+  
   // --- ESTADOS ---
   const [kpis, setKpis] = useState<KpiData | null>(null);
   const [kpisAdmin, setKpisAdmin] = useState<KpiAdminData | null>(null);
@@ -139,19 +144,31 @@ export default function DashboardGestorPage() {
   // --- 1. FETCH METADADOS ---
   useEffect(() => {
     async function fetchTurmas() {
-      const { data } = await supabase.from('turmas').select('id, nome, turno').order('nome');
+      if (!user?.escola_id) return;
+      // Filtro explícito para garantir a segregação
+      const { data } = await supabase.from('turmas').select('id, nome, turno').eq('escola_id', user.escola_id).order('nome');
       if (data) setTurmasDisponiveis(data);
     }
     fetchTurmas();
-  }, []);
+  }, [user?.escola_id]);
 
   // --- 2. FETCH DADOS (Progressivo) ---
   useEffect(() => {
+    if (!user?.escola_id) {
+        setLoadingKpis(false); 
+        setLoadingCharts(false);
+        setLoadingLists(false);
+        return;
+    }
+
+    const escolaId = user.escola_id;
+
     async function fetchKpis() {
         setLoadingKpis(true);
         const [kpiRes, kpiAdminRes] = await Promise.all([
-            supabase.rpc('get_escola_kpis').select().single(),
-            supabase.rpc('get_kpis_administrativos').select().single(),
+            // Passa o escola_id explicitamente para as RPCs
+            supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
+            supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
         ]);
         if (kpiRes.data) setKpis(kpiRes.data);
         if (kpiAdminRes.data) setKpisAdmin(kpiAdminRes.data);
@@ -160,16 +177,16 @@ export default function DashboardGestorPage() {
 
     async function fetchCharts() {
         setLoadingCharts(true);
-        // Busca Comparativo de Turmas (Já traz todas as turmas, vamos filtrar no front)
+        // Busca Comparativo de Turmas (RPC deve usar o escola_id do JWT ou passado)
         const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas');
         if (turmaRes) setRawTurmaData(turmaRes);
 
-        // Busca Presenças Recentes (para calcular gráfico de dias da semana dinamicamente)
-        // Pegamos 15 dias para ter uma amostra boa
+        // Busca Presenças Recentes (Filtro direto na tabela)
         const dataLimite = subDays(new Date(), 15).toISOString();
         const { data: presencasRes } = await supabase
             .from('presencas')
             .select('data_chamada, presente, turma_id')
+            .eq('escola_id', escolaId) // Filtro adicionado
             .gte('data_chamada', dataLimite);
         
         if (presencasRes) setRawPresencasRecentes(presencasRes);
@@ -180,9 +197,10 @@ export default function DashboardGestorPage() {
     async function fetchLists() {
         setLoadingLists(true);
         const [riscoRes, consecRes, obsRes] = await Promise.all([
-            supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16 }),
-            supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3 }),
-            supabase.rpc('get_ultimas_observacoes', {limite: 10}),
+            // Passa o escola_id explicitamente
+            supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
+            supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
+            supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
         ]);
         if (riscoRes.data) setRawAlunosRisco(riscoRes.data);
         if (consecRes.data) setRawAlunosConsecutivos(consecRes.data);
@@ -193,11 +211,10 @@ export default function DashboardGestorPage() {
     fetchKpis();
     fetchCharts();
     fetchLists();
-  }, [filtroAno]);
+  }, [filtroAno, user?.escola_id]); // Depende do escola_id do usuário
 
-  // --- 3. LÓGICA DE FILTRAGEM ---
+  // --- 3. LÓGICA DE FILTRAGEM (Mantida) ---
   
-  // a) Determina turmas ativas baseadas nos filtros
   const activeTurmas = useMemo(() => {
     let filtered = turmasDisponiveis;
     if (filtroTurno !== "todos") {
@@ -212,24 +229,19 @@ export default function DashboardGestorPage() {
   const activeTurmaIds = useMemo(() => activeTurmas.map(t => t.id), [activeTurmas]);
   const activeTurmaNomes = useMemo(() => activeTurmas.map(t => t.nome), [activeTurmas]);
 
-  // b) Gráfico de Comparativo por Turma (Filtrado)
   const filteredTurmaData = useMemo(() => {
-    // Mostra apenas as turmas que estão no filtro ativo
     return rawTurmaData.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawTurmaData, activeTurmaNomes]);
 
-  // c) Gráfico de Ausências na Semana (Cálculo Dinâmico)
   const chartAusenciasSemana = useMemo(() => {
-    // Filtra presenças pelas turmas ativas
     const presencasFiltradas = rawPresencasRecentes.filter(p => activeTurmaIds.includes(p.turma_id));
     
-    // Agrupa por dia da semana
     const diasMap = new Map<string, { total: number; faltas: number }>();
     
     presencasFiltradas.forEach(p => {
         const data = parseISO(p.data_chamada);
-        const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', ''); // 'seg', 'ter'...
-        const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1); // 'Seg'
+        const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', '');
+        const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1);
         
         if (!diasMap.has(diaCapitalized)) {
             diasMap.set(diaCapitalized, { total: 0, faltas: 0 });
@@ -239,21 +251,18 @@ export default function DashboardGestorPage() {
         if (!p.presente) entry.faltas++;
     });
 
-    // Formata para o gráfico
     const ordemDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
     const result = Array.from(diasMap.entries()).map(([dia, dados]) => ({
         dia_semana_nome: dia,
         percentual_faltas: dados.total > 0 ? parseFloat(((dados.faltas / dados.total) * 100).toFixed(1)) : 0
     }));
 
-    // Ordena corretamente
     return result.sort((a, b) => {
         return ordemDias.indexOf(a.dia_semana_nome.substring(0,3)) - ordemDias.indexOf(b.dia_semana_nome.substring(0,3));
     });
 
   }, [rawPresencasRecentes, activeTurmaIds]);
 
-  // d) Listas Filtradas
   const filteredAlunosRisco = useMemo(() => {
     return rawAlunosRisco.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawAlunosRisco, activeTurmaNomes]);
