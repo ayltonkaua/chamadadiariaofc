@@ -65,6 +65,7 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   useEffect(() => {
     let isMounted = true;
     async function fetchPresencas() {
+      // Esta RPC já deve filtrar por segurança, mas o RLS da tabela 'presencas' é a garantia final
       // @ts-ignore
       const { data } = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
       if (isMounted && data) setUltimasPresencas(data.slice(0, 3));
@@ -121,7 +122,7 @@ export default function DashboardGestorPage() {
   const [rawTurmaData, setRawTurmaData] = useState<TurmaComparisonData[]>([]);
   const [rawAlunosRisco, setRawAlunosRisco] = useState<AlunoRiscoData[]>([]);
   const [rawAlunosConsecutivos, setRawAlunosConsecutivos] = useState<AlunoFaltasConsecutivasData[]>([]);
-  const [rawPresencasRecentes, setRawPresencasRecentes] = useState<any[]>([]); // Para cálculo dinâmico
+  const [rawPresencasRecentes, setRawPresencasRecentes] = useState<any[]>([]);
   const [ultimasObservacoes, setUltimasObservacoes] = useState<UltimaObservacaoData[]>([]);
   
   // Loaders
@@ -143,16 +144,22 @@ export default function DashboardGestorPage() {
   useEffect(() => {
     async function fetchTurmas() {
       if (!user?.escola_id) return;
-      // CORREÇÃO: Filtro explícito na tabela 'turmas'
-      const { data } = await supabase.from('turmas').select('id, nome, turno').eq('escola_id', user.escola_id).order('nome');
+      // SEGURANÇA: Filtro explícito por escola_id
+      const { data } = await supabase
+        .from('turmas')
+        .select('id, nome, turno')
+        .eq('escola_id', user.escola_id)
+        .order('nome');
+        
       if (data) setTurmasDisponiveis(data);
     }
     fetchTurmas();
   }, [user?.escola_id]);
 
-  // --- 2. FETCH DADOS (Progressivo) ---
+  // --- 2. FETCH DADOS (Progressivo e Seguro) ---
   useEffect(() => {
     if (!user?.escola_id) {
+        // Se não tem escola_id, para tudo e limpa os loaders
         setLoadingKpis(false); 
         setLoadingCharts(false);
         setLoadingLists(false);
@@ -163,57 +170,76 @@ export default function DashboardGestorPage() {
 
     async function fetchKpis() {
         setLoadingKpis(true);
-        const [kpiRes, kpiAdminRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id explicitamente para todas as RPCs
-            supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
-            supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
-        ]);
-        if (kpiRes.data) setKpis(kpiRes.data);
-        if (kpiAdminRes.data) setKpisAdmin(kpiAdminRes.data);
-        setLoadingKpis(false);
+        try {
+            const [kpiRes, kpiAdminRes] = await Promise.all([
+                // SEGURANÇA: Passa _escola_id para a RPC (assumindo que a RPC foi corrigida para aceitar)
+                // Se a RPC não aceitar parâmetros, o RLS do banco deve bloquear dados de outras escolas.
+                // Mas o ideal é passar o ID.
+                supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
+                supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
+            ]);
+            
+            if (kpiRes.data) setKpis(kpiRes.data);
+            else setKpis({ taxa_presenca_geral: 0, total_alunos: 0 }); // Fallback seguro
+
+            if (kpiAdminRes.data) setKpisAdmin(kpiAdminRes.data);
+            else setKpisAdmin({ atestados_pendentes: 0, justificativas_a_rever: 0 }); // Fallback seguro
+
+        } catch (err) {
+            console.error("Erro ao buscar KPIs:", err);
+        } finally {
+            setLoadingKpis(false);
+        }
     }
 
     async function fetchCharts() {
         setLoadingCharts(true);
-        // Busca Comparativo de Turmas (RPC precisa filtrar internamente ou pelo JWT/RLS)
-        // Se a RPC não usa o _escola_id, o RLS em 'turmas' deve ser suficiente, mas o ideal é que a RPC aceite o ID.
-        // Assumindo RLS em Turmas.
-        const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas');
-        if (turmaRes) setRawTurmaData(turmaRes);
+        try {
+             // SEGURANÇA: RPC deve filtrar por escolaId internamente
+            const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas', { _escola_id: escolaId });
+            if (turmaRes) setRawTurmaData(turmaRes);
 
-        // CORREÇÃO: Busca Presenças Recentes (Filtro direto na tabela)
-        const dataLimite = subDays(new Date(), 15).toISOString();
-        const { data: presencasRes } = await supabase
-            .from('presencas')
-            .select('data_chamada, presente, turma_id')
-            .eq('escola_id', escolaId) 
-            .gte('data_chamada', dataLimite);
-        
-        if (presencasRes) setRawPresencasRecentes(presencasRes);
-        
-        setLoadingCharts(false);
+            // SEGURANÇA: Filtro direto na tabela
+            const dataLimite = subDays(new Date(), 15).toISOString();
+            const { data: presencasRes } = await supabase
+                .from('presencas')
+                .select('data_chamada, presente, turma_id')
+                .eq('escola_id', escolaId) // Filtro Obrigatório
+                .gte('data_chamada', dataLimite);
+            
+            if (presencasRes) setRawPresencasRecentes(presencasRes);
+        } catch (err) {
+            console.error("Erro ao buscar gráficos:", err);
+        } finally {
+             setLoadingCharts(false);
+        }
     }
 
     async function fetchLists() {
         setLoadingLists(true);
-        const [riscoRes, consecRes, obsRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id para todas as RPCs
-            supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
-            supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
-            supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
-        ]);
-        if (riscoRes.data) setRawAlunosRisco(riscoRes.data);
-        if (consecRes.data) setRawAlunosConsecutivos(consecRes.data);
-        if (obsRes.data) setUltimasObservacoes(obsRes.data);
-        setLoadingLists(false);
+        try {
+            const [riscoRes, consecRes, obsRes] = await Promise.all([
+                // SEGURANÇA: Passa _escola_id para todas as RPCs
+                supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
+                supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
+                supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
+            ]);
+            if (riscoRes.data) setRawAlunosRisco(riscoRes.data);
+            if (consecRes.data) setRawAlunosConsecutivos(consecRes.data);
+            if (obsRes.data) setUltimasObservacoes(obsRes.data);
+        } catch (err) {
+             console.error("Erro ao buscar listas:", err);
+        } finally {
+             setLoadingLists(false);
+        }
     }
 
     fetchKpis();
     fetchCharts();
     fetchLists();
-  }, [filtroAno, user?.escola_id]);
+  }, [filtroAno, user?.escola_id]); // Dependência crucial
 
-  // --- 3. LÓGICA DE FILTRAGEM (Mantida) ---
+  // --- 3. LÓGICA DE FILTRAGEM (Client-Side) ---
   
   const activeTurmas = useMemo(() => {
     let filtered = turmasDisponiveis;
@@ -234,6 +260,7 @@ export default function DashboardGestorPage() {
   }, [rawTurmaData, activeTurmaNomes]);
 
   const chartAusenciasSemana = useMemo(() => {
+    // Filtra apenas presenças das turmas ativas
     const presencasFiltradas = rawPresencasRecentes.filter(p => activeTurmaIds.includes(p.turma_id));
     
     const diasMap = new Map<string, { total: number; faltas: number }>();
@@ -271,7 +298,7 @@ export default function DashboardGestorPage() {
     return rawAlunosConsecutivos.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawAlunosConsecutivos, activeTurmaNomes]);
 
-  // Paginação das listas filtradas
+  // Paginação
   const paginatedRisco = useMemo(() => {
     const start = (riscoCurrentPage - 1) * ITEMS_PER_PAGE;
     return filteredAlunosRisco.slice(start, start + ITEMS_PER_PAGE);
@@ -408,6 +435,7 @@ export default function DashboardGestorPage() {
         {/* GRÁFICO 3: Desempenho Acadêmico (Recebe IDs para filtrar dentro do componente) */}
         <section className="grid grid-cols-1 gap-6">
             <div className="w-full">
+                {/* Este componente também deve implementar o filtro por turma internamente */}
                 <DesempenhoAcademicoChart turmasIds={activeTurmaIds} />
             </div>
         </section>
