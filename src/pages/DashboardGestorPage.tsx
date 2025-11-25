@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { subDays, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useAuth } from '@/contexts/AuthContext'; // IMPORTANTE: Adicionado useAuth
+import { useAuth } from '@/contexts/AuthContext'; 
 
 // --- Tipagens ---
 interface KpiAdminData { atestados_pendentes: number; justificativas_a_rever: number; }
@@ -43,7 +43,7 @@ interface TurmaMetadata { id: string; nome: string; turno: string | null; }
 
 const ITEMS_PER_PAGE = 5;
 
-// --- Subcomponentes (mantidos) ---
+// --- Subcomponentes ---
 const SummaryCard = ({ title, value, icon: Icon, colorClass, loading }: { title: string; value: string | number; icon: React.ElementType; colorClass: string; loading: boolean; }) => {
   if (loading) return <Skeleton className="h-28 w-full rounded-xl" />;
   return (
@@ -65,8 +65,6 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   useEffect(() => {
     let isMounted = true;
     async function fetchPresencas() {
-      // Nota: As RPCs do tipo get_ultimas_presencas_aluno já devem filtrar internamente
-      // para garantir a segurança, mas vou assumir que ela pega o dado e o RLS da tabela 'presencas' filtra.
       // @ts-ignore
       const { data } = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
       if (isMounted && data) setUltimasPresencas(data.slice(0, 3));
@@ -113,7 +111,7 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 }
 
 export default function DashboardGestorPage() {
-  const { user } = useAuth(); // Obtém o usuário logado
+  const { user } = useAuth();
   
   // --- ESTADOS ---
   const [kpis, setKpis] = useState<KpiData | null>(null);
@@ -145,7 +143,7 @@ export default function DashboardGestorPage() {
   useEffect(() => {
     async function fetchTurmas() {
       if (!user?.escola_id) return;
-      // Filtro explícito para garantir a segregação
+      // CORREÇÃO: Filtro explícito na tabela 'turmas'
       const { data } = await supabase.from('turmas').select('id, nome, turno').eq('escola_id', user.escola_id).order('nome');
       if (data) setTurmasDisponiveis(data);
     }
@@ -166,7 +164,7 @@ export default function DashboardGestorPage() {
     async function fetchKpis() {
         setLoadingKpis(true);
         const [kpiRes, kpiAdminRes] = await Promise.all([
-            // Passa o escola_id explicitamente para as RPCs
+            // CORREÇÃO: Passa o escola_id explicitamente para todas as RPCs
             supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
             supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
         ]);
@@ -177,16 +175,18 @@ export default function DashboardGestorPage() {
 
     async function fetchCharts() {
         setLoadingCharts(true);
-        // Busca Comparativo de Turmas (RPC deve usar o escola_id do JWT ou passado)
+        // Busca Comparativo de Turmas (RPC precisa filtrar internamente ou pelo JWT/RLS)
+        // Se a RPC não usa o _escola_id, o RLS em 'turmas' deve ser suficiente, mas o ideal é que a RPC aceite o ID.
+        // Assumindo RLS em Turmas.
         const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas');
         if (turmaRes) setRawTurmaData(turmaRes);
 
-        // Busca Presenças Recentes (Filtro direto na tabela)
+        // CORREÇÃO: Busca Presenças Recentes (Filtro direto na tabela)
         const dataLimite = subDays(new Date(), 15).toISOString();
         const { data: presencasRes } = await supabase
             .from('presencas')
             .select('data_chamada, presente, turma_id')
-            .eq('escola_id', escolaId) // Filtro adicionado
+            .eq('escola_id', escolaId) 
             .gte('data_chamada', dataLimite);
         
         if (presencasRes) setRawPresencasRecentes(presencasRes);
@@ -197,7 +197,7 @@ export default function DashboardGestorPage() {
     async function fetchLists() {
         setLoadingLists(true);
         const [riscoRes, consecRes, obsRes] = await Promise.all([
-            // Passa o escola_id explicitamente
+            // CORREÇÃO: Passa o escola_id para todas as RPCs
             supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
             supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
             supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
@@ -211,7 +211,7 @@ export default function DashboardGestorPage() {
     fetchKpis();
     fetchCharts();
     fetchLists();
-  }, [filtroAno, user?.escola_id]); // Depende do escola_id do usuário
+  }, [filtroAno, user?.escola_id]);
 
   // --- 3. LÓGICA DE FILTRAGEM (Mantida) ---
   
