@@ -19,11 +19,11 @@ import { format, parseISO } from "date-fns";
 import { BoletimAluno } from "@/components/notas/BoletimAluno";
 
 // Ícones
-import { 
-  ClipboardList, 
-  FileText, 
-  LogOut, 
-  QrCode, 
+import {
+  ClipboardList,
+  FileText,
+  LogOut,
+  QrCode,
   Bell,
   GraduationCap,
   ChevronRight,
@@ -36,7 +36,7 @@ const AttendanceRing = ({ percentage }: { percentage: number }) => {
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
-  
+
   const color = percentage >= 75 ? "text-green-500" : percentage >= 60 ? "text-yellow-500" : "text-red-500";
 
   return (
@@ -88,17 +88,17 @@ const PortalAlunoPage: React.FC = () => {
   const { config: escolaConfig } = useEscolaConfig();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  
+
   // Estados para controle da UI
   const [isJustifyDialogOpen, setIsJustifyDialogOpen] = useState(false);
   const [showCarteirinha, setShowCarteirinha] = useState(false);
   const [isBoletimOpen, setIsBoletimOpen] = useState(false); // Estado para o Boletim
-  
+
   // Estado para visualização segura de atestados
   const [isMeusAtestadosOpen, setIsMeusAtestadosOpen] = useState(false);
   const [meusAtestados, setMeusAtestados] = useState<MeusAtestados[]>([]);
   const [loadingAtestados, setLoadingAtestados] = useState(false);
-  
+
   // Estado para dados reais do aluno
   const [studentData, setStudentData] = useState({
     turma: "Carregando...",
@@ -141,23 +141,26 @@ const PortalAlunoPage: React.FC = () => {
 
         // 2. Busca dados de Presença para calcular frequência
         if (alunoInfo?.turma_id) {
-          const { data: chamadasData } = await supabase
+          // Otimização: Buscar apenas o total de registros do próprio aluno
+          const { count: totalAulasRegistradas, error: errorTotal } = await supabase
             .from('presencas')
-            .select('data_chamada')
-            .eq('turma_id', alunoInfo.turma_id);
-          
-          const uniqueDates = new Set(chamadasData?.map(c => c.data_chamada));
-          const totalAulas = uniqueDates.size;
+            .select('id', { count: 'exact', head: true })
+            .eq('aluno_id', user.aluno_id);
 
-          const { count: totalFaltas } = await supabase
+          if (errorTotal) throw errorTotal;
+
+          const { count: totalFaltasRegistradas, error: errorFaltas } = await supabase
             .from('presencas')
             .select('id', { count: 'exact', head: true })
             .eq('aluno_id', user.aluno_id)
             .eq('presente', false);
 
-          const faltas = totalFaltas || 0;
-          const aulas = totalAulas || 1; 
-          const freq = Math.round(((aulas - faltas) / aulas) * 100);
+          if (errorFaltas) throw errorFaltas;
+
+          const aulas = totalAulasRegistradas || 0;
+          const faltas = totalFaltasRegistradas || 0;
+
+          const freq = aulas > 0 ? Math.round(((aulas - faltas) / aulas) * 100) : 100;
 
           let statusText = "Excelente";
           if (freq < 75) statusText = "Crítico";
@@ -233,8 +236,8 @@ const PortalAlunoPage: React.FC = () => {
         <Skeleton className="h-20 w-full rounded-xl" />
         <Skeleton className="h-40 w-full rounded-xl" />
         <div className="grid grid-cols-2 gap-4">
-           <Skeleton className="h-32 w-full rounded-xl" />
-           <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
         </div>
       </div>
     );
@@ -268,7 +271,7 @@ const PortalAlunoPage: React.FC = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-lg sm:max-w-4xl">
-        
+
         {/* CARD DE VISÃO GERAL */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="bg-white shadow-sm border-none overflow-hidden relative ring-1 ring-gray-100">
@@ -311,7 +314,7 @@ const PortalAlunoPage: React.FC = () => {
                 </div>
               </div>
             </DialogTrigger>
-            
+
             <DialogContent className="sm:max-w-md border-none bg-transparent shadow-none p-0 flex justify-center items-center">
               <div className="w-full max-w-[320px] bg-white rounded-3xl overflow-hidden shadow-2xl border border-gray-100">
                 <div className="bg-purple-700 p-6 text-center text-white relative overflow-hidden">
@@ -344,10 +347,10 @@ const PortalAlunoPage: React.FC = () => {
         <section>
           <h3 className="text-sm font-semibold text-gray-500 mb-3 px-1">Serviços Acadêmicos</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            
+
             {/* 1. Consultar Faltas */}
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
               onClick={() => navigate('/student-query')}
             >
@@ -363,8 +366,8 @@ const PortalAlunoPage: React.FC = () => {
             {/* 2. Boletim Escolar (NOVO) */}
             <Dialog open={isBoletimOpen} onOpenChange={setIsBoletimOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
                 >
                   <div className="p-3 bg-pink-50 rounded-2xl text-pink-600 group-hover:scale-110 transition-transform">
@@ -420,8 +423,8 @@ const PortalAlunoPage: React.FC = () => {
             {/* 4. Meus Atestados */}
             <Dialog open={isMeusAtestadosOpen} onOpenChange={setIsMeusAtestadosOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
                 >
                   <div className="p-3 bg-purple-50 rounded-2xl text-purple-600 group-hover:scale-110 transition-transform">
@@ -479,8 +482,8 @@ const PortalAlunoPage: React.FC = () => {
             </Dialog>
 
             {/* 5. Pesquisas (Em Breve) */}
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white opacity-70 cursor-not-allowed hover:bg-white"
               disabled
             >
@@ -504,7 +507,7 @@ const PortalAlunoPage: React.FC = () => {
           <div>
             <h4 className="text-sm font-semibold text-blue-900">Mantenha sua frequência!</h4>
             <p className="text-xs text-blue-700 mt-1 leading-relaxed">
-              Lembre-se: para ser aprovado, você precisa de no mínimo <strong>75% de presença</strong>. 
+              Lembre-se: para ser aprovado, você precisa de no mínimo <strong>75% de presença</strong>.
               Acompanhe suas faltas regularmente.
             </p>
           </div>

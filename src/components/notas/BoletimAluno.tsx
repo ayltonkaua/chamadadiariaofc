@@ -10,12 +10,22 @@ import { AlertTriangle, Trophy } from "lucide-react";
 interface BoletimItem {
   disciplina: string;
   notas: {
+    [key: number]: number | null; // Index signature para acesso dinâmico seguro
     1: number | null;
     2: number | null;
     3: number | null;
   };
   mediaFinal?: number;
   situacao?: string;
+}
+
+// Interface para o retorno do Supabase
+interface NotaResponse {
+  valor: number;
+  semestre: number;
+  disciplina: {
+    nome: string;
+  } | null;
 }
 
 // Aceita alunoId opcional. Se não vier, tenta pegar do usuário logado.
@@ -33,53 +43,57 @@ export function BoletimAluno({ alunoId }: { alunoId?: string }) {
         setLoading(false);
         return;
       }
-      
+
       setLoading(true);
 
       try {
+        // Cast para 'any' para evitar erro de tipo se a tabela 'notas' não estiver no gerador de tipos
         const { data, error } = await supabase
-          .from("notas")
+          .from("notas" as any)
           .select(`
             valor,
             semestre,
             disciplina:disciplinas(nome)
           `)
-          .eq("aluno_id", targetId); // Usa o ID resolvido
+          .eq("aluno_id", targetId)
+          .returns<NotaResponse[]>();
 
         if (error) throw error;
 
         if (data) {
           const notasMap = new Map<string, BoletimItem>();
 
-          data.forEach((nota: any) => {
+          data.forEach((nota) => {
             // Garante que disciplina tenha nome, caso venha nulo (ex: disciplina deletada)
             const discNome = nota.disciplina?.nome || "Disciplina Removida";
-            
+
             if (!notasMap.has(discNome)) {
-              notasMap.set(discNome, { 
-                disciplina: discNome, 
-                notas: { 1: null, 2: null, 3: null } 
+              notasMap.set(discNome, {
+                disciplina: discNome,
+                notas: { 1: null, 2: null, 3: null }
               });
             }
-            
+
             const item = notasMap.get(discNome)!;
-            // @ts-ignore
-            item.notas[nota.semestre] = Number(nota.valor);
+            // Acesso seguro graças ao index signature na interface
+            if (nota.semestre >= 1 && nota.semestre <= 3) {
+              item.notas[nota.semestre] = Number(nota.valor);
+            }
           });
 
           const boletimArray = Array.from(notasMap.values()).map(item => {
-              const notasValidas = Object.values(item.notas).filter(n => n !== null) as number[];
-              const soma = notasValidas.reduce((a, b) => a + b, 0);
-              const media = notasValidas.length > 0 ? parseFloat((soma / notasValidas.length).toFixed(1)) : undefined;
-              
-              let situacao = "-";
-              if (media !== undefined) {
-                  if (media >= 6) situacao = "Aprovado";
-                  else if (media >= 4) situacao = "Recuperação";
-                  else situacao = "Reprovado";
-              }
+            const notasValidas = Object.values(item.notas).filter((n): n is number => n !== null);
+            const soma = notasValidas.reduce((a, b) => a + b, 0);
+            const media = notasValidas.length > 0 ? parseFloat((soma / notasValidas.length).toFixed(1)) : undefined;
 
-              return { ...item, mediaFinal: media, situacao };
+            let situacao = "-";
+            if (media !== undefined) {
+              if (media >= 6) situacao = "Aprovado";
+              else if (media >= 4) situacao = "Recuperação";
+              else situacao = "Reprovado";
+            }
+
+            return { ...item, mediaFinal: media, situacao };
           });
 
           // Ordena por nome da disciplina
@@ -135,23 +149,23 @@ export function BoletimAluno({ alunoId }: { alunoId?: string }) {
           {boletim.map((item) => (
             <TableRow key={item.disciplina} className="hover:bg-slate-50/50 transition-colors">
               <TableCell className="font-medium text-xs sm:text-sm text-gray-800">{item.disciplina}</TableCell>
-              {[1, 2, 3].map(sem => (
-                <TableCell key={sem} className="text-center">
-                  {/* @ts-ignore */}
-                  {item.notas[sem] !== null ? (
-                    // @ts-ignore
-                    <span className={`font-medium ${item.notas[sem] < 6 ? "text-red-500" : "text-slate-700"}`}>
-                      {/* @ts-ignore */}
-                      {item.notas[sem].toFixed(1)}
-                    </span>
-                  ) : <span className="text-gray-300 text-xs">-</span>}
-                </TableCell>
-              ))}
+              {[1, 2, 3].map((sem) => {
+                const nota = item.notas[sem];
+                return (
+                  <TableCell key={sem} className="text-center">
+                    {nota !== null ? (
+                      <span className={`font-medium ${nota < 6 ? "text-red-500" : "text-slate-700"}`}>
+                        {nota.toFixed(1)}
+                      </span>
+                    ) : <span className="text-gray-300 text-xs">-</span>}
+                  </TableCell>
+                );
+              })}
               <TableCell className="text-right">
                 {item.mediaFinal !== undefined && (
                   <div className="flex items-center justify-end gap-2">
                     <span className={`font-bold ${item.mediaFinal >= 6 ? "text-green-600" : "text-red-600"}`}>
-                        {item.mediaFinal}
+                      {item.mediaFinal}
                     </span>
                     {item.mediaFinal >= 9 && <Trophy className="h-3 w-3 text-yellow-500" />}
                   </div>

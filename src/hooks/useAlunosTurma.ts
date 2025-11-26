@@ -24,9 +24,9 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
 
   const fetchAlunos = async () => {
     if (!turmaId) return;
-    
+
     setLoading(true);
-    
+
     try {
       // 1. Garante que 'user_id' e 'turma_id' sempre sejam buscados, 
       //    mesmo que a página não tenha pedido explicitamente.
@@ -40,7 +40,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
         .select("id, nome, numero_sala")
         .eq("id", turmaId)
         .single();
-      
+
       if (turmaError || !turmaData) {
         throw turmaError || new Error("Turma não encontrada");
       }
@@ -51,7 +51,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
         .select(camposParaBuscar.join(", ")) // Usa a lista combinada
         .eq("turma_id", turmaId)
         .order("nome");
-      
+
       if (alunosError) {
         throw alunosError;
       }
@@ -66,24 +66,37 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
       const datasUnicas = new Set(datasChamada?.map(p => p.data_chamada) || []);
       const totalAulas = datasUnicas.size || 0;
 
+      // Fetch all absences for the class in one go
+      const { data: todasFaltas, error: errorFaltas } = await supabase
+        .from("presencas")
+        .select("aluno_id")
+        .eq("turma_id", turmaId)
+        .eq("presente", false);
+
+      if (errorFaltas) {
+        console.error("Erro ao buscar faltas:", errorFaltas);
+        throw errorFaltas;
+      }
+
+      // Map absences count by student ID
+      const faltasMap = new Map<string, number>();
+      todasFaltas?.forEach((falta) => {
+        const current = faltasMap.get(falta.aluno_id) || 0;
+        faltasMap.set(falta.aluno_id, current + 1);
+      });
+
       // Process students with attendance data
-      const processedAlunos = await Promise.all(
-        alunosData.map(async (aluno) => {
-          const { count: totalFaltas } = await supabase
-            .from("presencas")
-            .select("id", { count: "exact", head: true })
-            .eq("aluno_id", aluno.id)
-            .eq("presente", false);
-          
-          return {
-            ...aluno,
-            faltas: totalFaltas || 0,
-            frequencia: totalAulas > 0 ? 
-              Math.round(((totalAulas - (totalFaltas || 0)) / totalAulas) * 100) : 
-              100
-          };
-        })
-      );
+      const processedAlunos = alunosData.map((aluno) => {
+        const totalFaltas = faltasMap.get(aluno.id) || 0;
+
+        return {
+          ...aluno,
+          faltas: totalFaltas,
+          frequencia: totalAulas > 0 ?
+            Math.round(((totalAulas - totalFaltas) / totalAulas) * 100) :
+            100
+        };
+      });
 
       setTurmaInfo(turmaData);
       setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)) as Aluno[]);

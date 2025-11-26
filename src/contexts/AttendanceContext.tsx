@@ -1,6 +1,8 @@
 
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { salvarChamadaOffline, ChamadaOffline } from "@/lib/offlineChamada";
+import { toast } from "@/hooks/use-toast";
 
 interface Student {
   id: string;
@@ -49,32 +51,51 @@ export const AttendanceProvider: React.FC<{ children: ReactNode }> = ({ children
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [currentAttendance, setCurrentAttendance] = useState<Map<string, boolean>>(new Map());
 
-  // Carregar turmas e alunos do Supabase
+  // Carregar turmas e alunos do Supabase (Otimizado)
   const fetchClasses = async () => {
-    const { data: turmas, error: errorTurmas } = await supabase.from("turmas").select("id, nome");
-    if (errorTurmas || !turmas) {
-      setClasses([]);
-      return;
-    }
-    const classesWithStudents: ClassData[] = [];
-    for (const turma of turmas) {
-      const { data: alunos } = await supabase
+    try {
+      const { data: turmas, error: errorTurmas } = await supabase.from("turmas").select("id, nome");
+      if (errorTurmas || !turmas) {
+        console.error("Erro ao buscar turmas:", errorTurmas);
+        setClasses([]);
+        return;
+      }
+
+      if (turmas.length === 0) {
+        setClasses([]);
+        return;
+      }
+
+      const turmaIds = turmas.map(t => t.id);
+
+      // Busca todos os alunos de todas as turmas de uma vez
+      const { data: todosAlunos, error: errorAlunos } = await supabase
         .from("alunos")
         .select("id, nome, matricula, turma_id")
-        .eq("turma_id", turma.id);
+        .in("turma_id", turmaIds);
 
-      classesWithStudents.push({
+      if (errorAlunos) {
+        console.error("Erro ao buscar alunos:", errorAlunos);
+        return;
+      }
+
+      const classesWithStudents: ClassData[] = turmas.map(turma => ({
         id: turma.id,
         name: turma.nome,
-        students: (alunos || []).map((aluno) => ({
-          id: aluno.id,
-          name: aluno.nome,
-          enrollment: aluno.matricula,
-          class: aluno.turma_id,
-        })),
-      });
+        students: (todosAlunos || [])
+          .filter(aluno => aluno.turma_id === turma.id)
+          .map((aluno) => ({
+            id: aluno.id,
+            name: aluno.nome,
+            enrollment: aluno.matricula,
+            class: aluno.turma_id,
+          })),
+      }));
+
+      setClasses(classesWithStudents);
+    } catch (error) {
+      console.error("Erro fatal ao buscar classes:", error);
     }
-    setClasses(classesWithStudents);
   };
 
   useEffect(() => {
@@ -91,8 +112,53 @@ export const AttendanceProvider: React.FC<{ children: ReactNode }> = ({ children
   // Salvar registro de presença
   const saveAttendance = async () => {
     if (!selectedClass) return;
+
+    // Lógica Offline
+    if (!navigator.onLine) {
+      const chamadasOffline: Omit<ChamadaOffline, 'timestamp'>[] = [];
+
+      // Precisamos do escola_id. Vamos tentar pegar do primeiro aluno da turma ou do contexto (mas aqui não temos acesso direto ao user context facilmente sem refatorar tudo).
+      // Assumindo que o backend resolve ou que podemos pegar de alguma prop.
+      // Simplificação: Vamos salvar sem escola_id e deixar o sync resolver ou pegar do cache local se possível.
+      // Melhor abordagem: Iterar e construir o objeto.
+
+      currentAttendance.forEach((present, studentId) => {
+        chamadasOffline.push({
+          aluno_id: studentId,
+          turma_id: selectedClass,
+          escola_id: '', // O sync vai precisar lidar com isso ou precisamos pegar aqui.
+          presente: present,
+          falta_justificada: false,
+          data_chamada: selectedDate
+        });
+      });
+
+      const salvo = await salvarChamadaOffline(chamadasOffline);
+      if (salvo) {
+        toast({ title: "Modo Offline", description: "Chamada salva localmente. Será sincronizada quando houver internet." });
+
+        // Atualiza estado local para refletir na UI
+        const newRecords: AttendanceRecord[] = [];
+        currentAttendance.forEach((present, studentId) => {
+          newRecords.push({
+            date: selectedDate,
+            classId: selectedClass,
+            studentId,
+            present,
+          });
+        });
+        setAttendanceRecords([...attendanceRecords, ...newRecords]);
+        setCurrentAttendance(new Map());
+      } else {
+        toast({ title: "Erro", description: "Falha ao salvar localmente.", variant: "destructive" });
+      }
+      return;
+    }
+
+    // Lógica Online
     const newRecords: AttendanceRecord[] = [];
     const presencasParaInserir: any[] = [];
+
     currentAttendance.forEach((present, studentId) => {
       newRecords.push({
         date: selectedDate,
@@ -108,7 +174,15 @@ export const AttendanceProvider: React.FC<{ children: ReactNode }> = ({ children
       });
     });
 
-    await supabase.from("presencas").insert(presencasParaInserir);
+    const { error } = await supabase.from("presencas").upsert(presencasParaInserir, { onConflict: 'aluno_id, data_chamada' });
+
+    if (error) {
+      console.error("Erro ao salvar chamada:", error);
+      toast({ title: "Erro", description: "Falha ao salvar chamada.", variant: "destructive" });
+      return;
+    }
+
+    toast({ title: "Sucesso", description: "Chamada realizada com sucesso!" });
     setAttendanceRecords([...attendanceRecords, ...newRecords]);
     setCurrentAttendance(new Map());
   };

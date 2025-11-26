@@ -32,7 +32,7 @@ import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 import RelatoriosPage from "@/pages/RelatoriosPage";
 import PortalAlunoPage from "@/pages/PortalAlunoPage";
 import DashboardGestorPage from "@/pages/DashboardGestorPage";
-import { getChamadasPendentes, limparChamadasPendentes } from "@/lib/offlineChamada";
+import { getChamadasPendentes, limparChamadasPendentes, sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 
@@ -44,7 +44,26 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    // ... sua lógica de sincronização offline
+    const syncOfflineData = async () => {
+      if (navigator.onLine) {
+        const { success, count, error } = await sincronizarChamadasOffline();
+        if (success && count && count > 0) {
+          toast({
+            title: "Sincronização Concluída",
+            description: `${count} chamadas offline foram enviadas com sucesso.`,
+          });
+        } else if (!success) {
+          console.error("Erro na sincronização automática:", error);
+        }
+      }
+    };
+
+    window.addEventListener('online', syncOfflineData);
+    syncOfflineData(); // Tenta sincronizar ao carregar se estiver online
+
+    return () => {
+      window.removeEventListener('online', syncOfflineData);
+    };
   }, []);
 
   return (
@@ -68,7 +87,7 @@ const App = () => {
                     <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
                     <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
                     <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
-                    
+
                     {/* Páginas autenticadas (com sidebar) */}
                     <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
                     <Route path="/portal-aluno" element={<Layout><PortalAlunoPage /></Layout>} /> {/* ROTA ADICIONADA */}
@@ -85,7 +104,7 @@ const App = () => {
                     <Route path="/turmas/:turmaId/chamada" element={<Layout><ChamadaPage /></Layout>} />
                     <Route path="/consultar-faltas" element={<Layout><ConsultarFaltasPage /></Layout>} />
                     <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
-            
+
                     {/* Rotas do módulo de pesquisa */}
                     <Route path="/pesquisas" element={<Layout><PesquisasListPage /></Layout>} />
                     <Route path="/pesquisas/nova" element={<Layout><PesquisaCreatePage /></Layout>} />

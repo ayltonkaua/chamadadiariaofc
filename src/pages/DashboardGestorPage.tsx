@@ -33,11 +33,11 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // --- Tipagens ---
 interface KpiAdminData { atestados_pendentes: number; justificativas_a_rever: number; }
-interface UltimaObservacaoData { aluno_nome: string; aluno_matricula: string; titulo: string; descricao: string; created_at?: string; }
+interface UltimaObservacaoData { aluno_nome: string; aluno_matricula?: string; titulo: string; descricao: string; created_at?: string; }
 interface KpiData { taxa_presenca_geral: number; total_alunos: number; }
 interface TurmaComparisonData { turma_nome: string; taxa_presenca: number; turma_id?: string; }
 interface AlunoRiscoData { aluno_id: string; aluno_nome: string; turma_nome: string; total_faltas: number; }
-interface AlunoFaltasConsecutivasData { aluno_id: string; aluno_nome: string; turma_nome: string; ultima_falta: string; contagem_faltas_consecutivas: number; }
+interface AlunoFaltasConsecutivasData { aluno_id: string; aluno_nome: string; turma_nome: string; ultima_falta?: string; contagem_faltas_consecutivas: number; }
 interface UltimaPresenca { data_chamada: string; presente: boolean; }
 interface TurmaMetadata { id: string; nome: string; turno: string | null; }
 
@@ -52,7 +52,9 @@ const SummaryCard = ({ title, value, icon: Icon, colorClass, loading }: { title:
         <CardTitle className="text-sm font-medium opacity-90">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-bold">{value}</div>
+        <div className="text-3xl font-bold">
+          {typeof value === 'number' ? value : value}
+        </div>
         <Icon className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
       </CardContent>
     </Card>
@@ -65,24 +67,33 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   useEffect(() => {
     let isMounted = true;
     async function fetchPresencas() {
-      // @ts-ignore
-      const { data } = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
-      if (isMounted && data) setUltimasPresencas(data.slice(0, 3));
+      try {
+        // @ts-ignore - rpc params named conforme seu banco, adapte se necessário
+        const resp = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
+        if (!isMounted) return;
+        if ((resp as any).error) {
+          // console.warn('rpc error', (resp as any).error);
+          return;
+        }
+        const data = (resp as any).data ?? [];
+        setUltimasPresencas(data.slice(0, 3));
+      } catch (err) {
+        // console.error(err);
+      }
     }
     // @ts-ignore
     if (aluno.aluno_id) fetchPresencas();
-    return () => { isMounted = false };
-    // @ts-ignore
+    return () => { isMounted = false; };
   }, [aluno.aluno_id]);
-  
+
   const getBadgeInfo = () => {
     switch (tipo) {
       case 'risco':
         // @ts-ignore
-        return { text: `${aluno.total_faltas} Faltas`, variant: 'destructive', className: 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200' };
+        return { text: `${(aluno as AlunoRiscoData).total_faltas} Faltas`, variant: 'destructive', className: 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200' };
       case 'consecutivo':
         // @ts-ignore
-        return { text: `${aluno.contagem_faltas_consecutivas} Seguidas`, variant: 'secondary', className: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' };
+        return { text: `${(aluno as AlunoFaltasConsecutivasData).contagem_faltas_consecutivas} Seguidas`, variant: 'secondary', className: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' };
       default:
         return { text: '', variant: 'default', className: '' };
     }
@@ -142,10 +153,26 @@ export default function DashboardGestorPage() {
   // --- 1. FETCH METADADOS ---
   useEffect(() => {
     async function fetchTurmas() {
-      if (!user?.escola_id) return;
-      // CORREÇÃO: Filtro explícito na tabela 'turmas'
-      const { data } = await supabase.from('turmas').select('id, nome, turno').eq('escola_id', user.escola_id).order('nome');
-      if (data) setTurmasDisponiveis(data);
+      if (!user?.escola_id) {
+        setTurmasDisponiveis([]);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('turmas')
+          .select('id, nome, turno')
+          .eq('escola_id', user.escola_id)
+          .order('nome', { ascending: true });
+        if (error) {
+          // console.warn('fetchTurmas error', error);
+          setTurmasDisponiveis([]);
+          return;
+        }
+        setTurmasDisponiveis(data ?? []);
+      } catch (err) {
+        // console.error(err);
+        setTurmasDisponiveis([]);
+      }
     }
     fetchTurmas();
   }, [user?.escola_id]);
@@ -153,6 +180,14 @@ export default function DashboardGestorPage() {
   // --- 2. FETCH DADOS (Progressivo) ---
   useEffect(() => {
     if (!user?.escola_id) {
+        // Sem escola: limpa estados e desativa loaders
+        setKpis(null);
+        setKpisAdmin(null);
+        setRawTurmaData([]);
+        setRawAlunosRisco([]);
+        setRawAlunosConsecutivos([]);
+        setRawPresencasRecentes([]);
+        setUltimasObservacoes([]);
         setLoadingKpis(false); 
         setLoadingCharts(false);
         setLoadingLists(false);
@@ -163,49 +198,104 @@ export default function DashboardGestorPage() {
 
     async function fetchKpis() {
         setLoadingKpis(true);
-        const [kpiRes, kpiAdminRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id explicitamente para todas as RPCs
-            supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
-            supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
-        ]);
-        if (kpiRes.data) setKpis(kpiRes.data);
-        if (kpiAdminRes.data) setKpisAdmin(kpiAdminRes.data);
-        setLoadingKpis(false);
+        try {
+            // RPCs: supabase.rpc retorna { data, error }
+            const kpiResp = await supabase.rpc('get_escola_kpis', { _escola_id: escolaId });
+            const kpiAdminResp = await supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId });
+
+            if ((kpiResp as any).error) {
+              // console.warn('get_escola_kpis error', (kpiResp as any).error);
+              setKpis(null);
+            } else {
+              setKpis((kpiResp as any).data ?? null);
+            }
+
+            if ((kpiAdminResp as any).error) {
+              // console.warn('get_kpis_administrativos error', (kpiAdminResp as any).error);
+              setKpisAdmin(null);
+            } else {
+              setKpisAdmin((kpiAdminResp as any).data ?? null);
+            }
+        } catch (err) {
+            // console.error(err);
+            setKpis(null);
+            setKpisAdmin(null);
+        } finally {
+            setLoadingKpis(false);
+        }
     }
 
     async function fetchCharts() {
         setLoadingCharts(true);
-        // Busca Comparativo de Turmas (RPC precisa filtrar internamente ou pelo JWT/RLS)
-        // Se a RPC não usa o _escola_id, o RLS em 'turmas' deve ser suficiente, mas o ideal é que a RPC aceite o ID.
-        // Assumindo RLS em Turmas.
-        const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas');
-        if (turmaRes) setRawTurmaData(turmaRes);
+        try {
+            // Buscando comparativo de turmas via RPC (passando escola)
+            const turmaResp = await supabase.rpc('get_comparativo_turmas', { _escola_id: escolaId });
+            if ((turmaResp as any).error) {
+              // console.warn('get_comparativo_turmas error', (turmaResp as any).error);
+              setRawTurmaData([]);
+            } else {
+              setRawTurmaData((turmaResp as any).data ?? []);
+            }
 
-        // CORREÇÃO: Busca Presenças Recentes (Filtro direto na tabela)
-        const dataLimite = subDays(new Date(), 15).toISOString();
-        const { data: presencasRes } = await supabase
-            .from('presencas')
-            .select('data_chamada, presente, turma_id')
-            .eq('escola_id', escolaId) 
-            .gte('data_chamada', dataLimite);
-        
-        if (presencasRes) setRawPresencasRecentes(presencasRes);
-        
-        setLoadingCharts(false);
+            // Presenças recentes (últimos 15 dias) filtrando por escola
+            const dataLimite = subDays(new Date(), 15).toISOString();
+            const { data: presencasRes, error: presError } = await supabase
+                .from('presencas')
+                .select('data_chamada, presente, turma_id, escola_id')
+                .eq('escola_id', escolaId) 
+                .gte('data_chamada', dataLimite);
+
+            if (presError) {
+              // console.warn('presencas error', presError);
+              setRawPresencasRecentes([]);
+            } else {
+              setRawPresencasRecentes(presencasRes ?? []);
+            }
+
+        } catch (err) {
+            // console.error(err);
+            setRawTurmaData([]);
+            setRawPresencasRecentes([]);
+        } finally {
+            setLoadingCharts(false);
+        }
     }
 
     async function fetchLists() {
         setLoadingLists(true);
-        const [riscoRes, consecRes, obsRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id para todas as RPCs
-            supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
-            supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
-            supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
-        ]);
-        if (riscoRes.data) setRawAlunosRisco(riscoRes.data);
-        if (consecRes.data) setRawAlunosConsecutivos(consecRes.data);
-        if (obsRes.data) setUltimasObservacoes(obsRes.data);
-        setLoadingLists(false);
+        try {
+            const riscoResp = await supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId });
+            const consecResp = await supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId });
+            const obsResp = await supabase.rpc('get_ultimas_observacoes', { limite: 10, _escola_id: escolaId });
+
+            if ((riscoResp as any).error) {
+              // console.warn('risco rpc error', (riscoResp as any).error);
+              setRawAlunosRisco([]);
+            } else {
+              setRawAlunosRisco((riscoResp as any).data ?? []);
+            }
+
+            if ((consecResp as any).error) {
+              // console.warn('consec rpc error', (consecResp as any).error);
+              setRawAlunosConsecutivos([]);
+            } else {
+              setRawAlunosConsecutivos((consecResp as any).data ?? []);
+            }
+
+            if ((obsResp as any).error) {
+              // console.warn('obs rpc error', (obsResp as any).error);
+              setUltimasObservacoes([]);
+            } else {
+              setUltimasObservacoes((obsResp as any).data ?? []);
+            }
+        } catch (err) {
+            // console.error(err);
+            setRawAlunosRisco([]);
+            setRawAlunosConsecutivos([]);
+            setUltimasObservacoes([]);
+        } finally {
+            setLoadingLists(false);
+        }
     }
 
     fetchKpis();
@@ -230,44 +320,60 @@ export default function DashboardGestorPage() {
   const activeTurmaNomes = useMemo(() => activeTurmas.map(t => t.nome), [activeTurmas]);
 
   const filteredTurmaData = useMemo(() => {
+    if (!rawTurmaData || rawTurmaData.length === 0) return [];
+    // Se o RPC já retorna somente turmas da escola, apenas filtramos por selecionadas
+    if (activeTurmaNomes.length === 0) return rawTurmaData;
     return rawTurmaData.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawTurmaData, activeTurmaNomes]);
 
   const chartAusenciasSemana = useMemo(() => {
-    const presencasFiltradas = rawPresencasRecentes.filter(p => activeTurmaIds.includes(p.turma_id));
-    
+    // Queremos garantir todos os dias da semana, mesmo que sem dados
+    const presencasFiltradas = rawPresencasRecentes.filter(p => {
+      // quando não houver filtro de turma, traz tudo da escola
+      if (!activeTurmaIds || activeTurmaIds.length === 0) return true;
+      return activeTurmaIds.includes(p.turma_id);
+    });
+
     const diasMap = new Map<string, { total: number; faltas: number }>();
-    
-    presencasFiltradas.forEach(p => {
-        const data = parseISO(p.data_chamada);
-        const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', '');
-        const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1);
-        
-        if (!diasMap.has(diaCapitalized)) {
-            diasMap.set(diaCapitalized, { total: 0, faltas: 0 });
-        }
-        const entry = diasMap.get(diaCapitalized)!;
-        entry.total++;
-        if (!p.presente) entry.faltas++;
-    });
-
+    // inicializa com todos os dias (abreviação em ptBR)
     const ordemDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-    const result = Array.from(diasMap.entries()).map(([dia, dados]) => ({
-        dia_semana_nome: dia,
-        percentual_faltas: dados.total > 0 ? parseFloat(((dados.faltas / dados.total) * 100).toFixed(1)) : 0
-    }));
+    ordemDias.forEach(d => diasMap.set(d, { total: 0, faltas: 0 }));
 
-    return result.sort((a, b) => {
-        return ordemDias.indexOf(a.dia_semana_nome.substring(0,3)) - ordemDias.indexOf(b.dia_semana_nome.substring(0,3));
+    presencasFiltradas.forEach(p => {
+        try {
+          const data = typeof p.data_chamada === 'string' ? parseISO(p.data_chamada) : new Date(p.data_chamada);
+          const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', ''); // Ex: 'seg.'
+          const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1);
+          const chave = diaCapitalized.substring(0,3); // 'Seg'...
+          if (!diasMap.has(chave)) diasMap.set(chave, { total: 0, faltas: 0 });
+          const entry = diasMap.get(chave)!;
+          entry.total++;
+          if (!p.presente) entry.faltas++;
+        } catch (err) {
+          // skip parse errors
+        }
     });
 
+    const result = ordemDias.map(chave => {
+      const dados = diasMap.get(chave) ?? { total: 0, faltas: 0 };
+      return {
+        dia_semana_nome: chave,
+        percentual_faltas: dados.total > 0 ? parseFloat(((dados.faltas / dados.total) * 100).toFixed(1)) : 0
+      };
+    });
+
+    return result;
   }, [rawPresencasRecentes, activeTurmaIds]);
 
   const filteredAlunosRisco = useMemo(() => {
+    if (!rawAlunosRisco) return [];
+    if (activeTurmaNomes.length === 0) return rawAlunosRisco;
     return rawAlunosRisco.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawAlunosRisco, activeTurmaNomes]);
 
   const filteredAlunosConsecutivos = useMemo(() => {
+    if (!rawAlunosConsecutivos) return [];
+    if (activeTurmaNomes.length === 0) return rawAlunosConsecutivos;
     return rawAlunosConsecutivos.filter(item => activeTurmaNomes.includes(item.turma_nome));
   }, [rawAlunosConsecutivos, activeTurmaNomes]);
 
@@ -281,6 +387,17 @@ export default function DashboardGestorPage() {
     const start = (consecutivasCurrentPage - 1) * ITEMS_PER_PAGE;
     return filteredAlunosConsecutivos.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredAlunosConsecutivos, consecutivasCurrentPage]);
+
+  // Util helpers para exibição segura de números
+  const formatPercent = (num?: number | null) => {
+    if (typeof num !== 'number') return '0%';
+    return `${num.toFixed(1)}%`;
+  };
+
+  const formatNumber = (num?: number | null) => {
+    if (typeof num !== 'number') return '0';
+    return num.toString();
+  };
 
   return (
     <Sidebar>
@@ -330,7 +447,7 @@ export default function DashboardGestorPage() {
                             <CommandList>
                                 <CommandEmpty>Nenhuma turma.</CommandEmpty>
                                 <CommandGroup>
-                                    {activeTurmas.map((turma) => (
+                                    {turmasDisponiveis.map((turma) => (
                                         <CommandItem
                                             key={turma.id}
                                             value={turma.nome}
@@ -356,10 +473,10 @@ export default function DashboardGestorPage() {
         
         {/* KPI Cards */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard title="Presença Geral" value={`${kpis?.taxa_presenca_geral?.toFixed(1) ?? '0'}%`} icon={TrendingUp} colorClass="bg-gradient-to-br from-blue-500 to-blue-600" loading={loadingKpis} />
-            <SummaryCard title="Total de Alunos" value={kpis?.total_alunos ?? '0'} icon={Users} colorClass="bg-gradient-to-br from-emerald-500 to-emerald-600" loading={loadingKpis} />
-            <SummaryCard title="Atestados Pendentes" value={kpisAdmin?.atestados_pendentes ?? '0'} icon={FileText} colorClass="bg-gradient-to-br from-rose-500 to-rose-600" loading={loadingKpis} />
-            <SummaryCard title="Justificativas" value={kpisAdmin?.justificativas_a_rever ?? '0'} icon={BookCopy} colorClass="bg-gradient-to-br from-amber-500 to-amber-600" loading={loadingKpis} />
+            <SummaryCard title="Presença Geral" value={kpis ? formatPercent(kpis.taxa_presenca_geral) : '0%'} icon={TrendingUp} colorClass="bg-gradient-to-br from-blue-500 to-blue-600" loading={loadingKpis} />
+            <SummaryCard title="Total de Alunos" value={kpis ? formatNumber(kpis.total_alunos) : '0'} icon={Users} colorClass="bg-gradient-to-br from-emerald-500 to-emerald-600" loading={loadingKpis} />
+            <SummaryCard title="Atestados Pendentes" value={kpisAdmin ? formatNumber(kpisAdmin.atestados_pendentes) : '0'} icon={FileText} colorClass="bg-gradient-to-br from-rose-500 to-rose-600" loading={loadingKpis} />
+            <SummaryCard title="Justificativas" value={kpisAdmin ? formatNumber(kpisAdmin.justificativas_a_rever) : '0'} icon={BookCopy} colorClass="bg-gradient-to-br from-amber-500 to-amber-600" loading={loadingKpis} />
         </section>
         
         {/* GRÁFICOS 1 e 2 (Filtram dinamicamente) */}
