@@ -77,6 +77,16 @@ const Login: React.FC = () => {
                 required
               />
             </div>
+            <div className="text-right">
+              <Button
+                variant="link"
+                className="px-0 font-normal text-xs text-blue-600 h-auto"
+                onClick={() => navigate("/forgot-password")}
+                type="button"
+              >
+                Esqueceu a senha?
+              </Button>
+            </div>
             {error && (
               <div className="text-sm font-medium text-red-500">
                 {error}

@@ -32,6 +32,8 @@ import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 import RelatoriosPage from "@/pages/RelatoriosPage";
 import PortalAlunoPage from "@/pages/PortalAlunoPage";
 import DashboardGestorPage from "@/pages/DashboardGestorPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import { getChamadasPendentes, limparChamadasPendentes, sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -86,6 +88,8 @@ const App = () => {
                     <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
                     <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
                     <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
+                    <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
+                    <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
                     <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
 
                     {/* Páginas autenticadas (com sidebar) */}

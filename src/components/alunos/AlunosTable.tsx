@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, Trash2, History, MoreVertical, GraduationCap } from "lucide-react";
+import { Edit, Trash2, History, MoreVertical, GraduationCap, ArrowRightLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-// Importe o componente de Boletim que criamos anteriormente
 import { BoletimAluno } from "@/components/notas/BoletimAluno";
+// Importe o novo componente
+import { TransferStudentDialog } from "@/components/turmas/TransferStudentDialog";
 
 interface Aluno {
   id: string;
@@ -38,12 +40,14 @@ interface AlunosTableProps {
   alunos: Aluno[];
   onEdit: (id: string) => void;
   onRemove: (aluno: Aluno) => void;
+  // Adicionar callback para quando transferir (para recarregar a lista)
+  onTransferSuccess?: () => void;
 }
 
-const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
+const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
-  // Estado para controlar qual aluno teve o boletim aberto
   const [alunoBoletimId, setAlunoBoletimId] = useState<string | null>(null);
+  const [alunoTransferencia, setAlunoTransferencia] = useState<Aluno | null>(null);
 
   const filteredAlunos = alunos.filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,7 +66,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
         />
       </div>
 
-      {/* NOVO: Layout de Cards para Mobile (visível apenas em telas pequenas) */}
+      {/* --- MODO MOBILE (CARD) --- */}
       <div className="sm:hidden space-y-3">
         {filteredAlunos.map((aluno) => (
           <Card key={aluno.id} className="w-full">
@@ -81,6 +85,9 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                   <DropdownMenuItem onClick={() => setAlunoBoletimId(aluno.id)}>
                     <GraduationCap className="mr-2 h-4 w-4" /> Ver Notas
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAlunoTransferencia(aluno)}>
+                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir Turma
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
                     <Edit className="mr-2 h-4 w-4" /> Editar
                   </DropdownMenuItem>
@@ -89,6 +96,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                       <History className="mr-2 h-4 w-4" /> Histórico
                     </Link>
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onRemove(aluno)} className="text-red-600">
                     <Trash2 className="mr-2 h-4 w-4" /> Remover
                   </DropdownMenuItem>
@@ -96,26 +104,21 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
               </DropdownMenu>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground px-4 pb-4 space-y-2">
-              <div><strong>Responsável:</strong> {aluno.nome_responsavel || "-"}</div>
-              <div><strong>Telefone:</strong> {aluno.telefone_responsavel || "-"}</div>
-              <div className="flex justify-between items-center pt-2">
-                <span><strong>Faltas:</strong> {aluno.faltas ?? 'N/A'}</span>
-                <span><strong>Frequência:</strong> {aluno.frequencia ?? 'N/A'}%</span>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="w-full mt-2 text-blue-600 border-blue-200 hover:bg-blue-50"
-                onClick={() => setAlunoBoletimId(aluno.id)}
+              <div><strong>Frequência:</strong> {aluno.frequencia ?? 'N/A'}%</div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => setAlunoTransferencia(aluno)}
               >
-                <GraduationCap className="mr-2 h-4 w-4" /> Boletim Escolar
+                <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
               </Button>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Layout de Tabela para Desktop (oculto em telas pequenas) */}
+      {/* --- MODO DESKTOP (TABLE) --- */}
       <div className="hidden sm:block overflow-x-auto">
         <Table className="min-w-[800px] w-full text-sm">
           <TableHeader>
@@ -123,7 +126,6 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
               <TableHead>Nome</TableHead>
               <TableHead>Matrícula</TableHead>
               <TableHead>Responsável</TableHead>
-              <TableHead>Telefone</TableHead>
               <TableHead>Faltas</TableHead>
               <TableHead>Frequência</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -135,7 +137,6 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                 <TableCell className="font-medium">{aluno.nome}</TableCell>
                 <TableCell>{aluno.matricula}</TableCell>
                 <TableCell>{aluno.nome_responsavel || "-"}</TableCell>
-                <TableCell>{aluno.telefone_responsavel || "-"}</TableCell>
                 <TableCell>
                   <span className={aluno.faltas && aluno.faltas > 10 ? "font-bold text-red-600" : ""}>
                     {aluno.faltas ?? 'N/A'}
@@ -156,9 +157,19 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setAlunoTransferencia(aluno)}
+                      title="Transferir de Turma"
+                      className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                    >
+                      <ArrowRightLeft className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       onClick={() => setAlunoBoletimId(aluno.id)}
                       title="Ver Notas (Boletim)"
@@ -170,11 +181,11 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
                         <History className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button onClick={() => onEdit(aluno.id)} variant="outline" size="icon" className="h-8 w-8 border-purple-300 text-purple-700" title="Editar Aluno">
-                      <Edit size={14}/> 
+                    <Button onClick={() => onEdit(aluno.id)} variant="ghost" size="icon" title="Editar Aluno">
+                      <Edit className="h-4 w-4" />
                     </Button>
-                    <Button onClick={() => onRemove(aluno)} variant="outline" size="icon" className="h-8 w-8 border-red-300 text-red-600" title="Remover Aluno">
-                      <Trash2 size={14}/> 
+                    <Button onClick={() => onRemove(aluno)} variant="ghost" size="icon" className="text-red-600" title="Remover Aluno">
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </TableCell>
@@ -193,12 +204,18 @@ const AlunosTable = ({ alunos, onEdit, onRemove }: AlunosTableProps) => {
               Boletim Escolar
             </DialogTitle>
           </DialogHeader>
-          
-          {/* Renderiza o componente de boletim passando o ID do aluno selecionado */}
           {alunoBoletimId && <BoletimAluno alunoId={alunoBoletimId} />}
-          
         </DialogContent>
       </Dialog>
+
+      {/* --- MODAL DE TRANSFERÊNCIA --- */}
+      <TransferStudentDialog
+        aluno={alunoTransferencia}
+        onClose={() => setAlunoTransferencia(null)}
+        onSuccess={() => {
+          if (onTransferSuccess) onTransferSuccess();
+        }}
+      />
     </div>
   );
 };
