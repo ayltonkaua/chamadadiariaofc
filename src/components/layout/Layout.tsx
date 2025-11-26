@@ -2,6 +2,7 @@ import React from 'react';
 import Sidebar from './Sidebar';
 import { MobileNav } from './MobileNav'; // Certifique-se que o caminho está correto
 import { useAuth } from '@/contexts/AuthContext';
+import { usePresence } from "@/hooks/usePresence";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,6 +10,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
+  usePresence(); // <--- Hook de presença adicionado
   const { user, loadingUser } = useAuth();
 
   // 1. Lógica para Sidebar de Admin
@@ -47,7 +49,7 @@ const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
       <main className="h-full overflow-y-auto">
         {children}
       </main>
-      
+
       {/* Renderização Condicional Corrigida */}
       {shouldShowMobileNav && <MobileNav />}
     </div>

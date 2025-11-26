@@ -19,7 +19,8 @@ import {
   Plus,
   Search,
   UserCheck,
-  LineChart // Ícone modificado/adicionado
+  LineChart,
+  Shield // Ícone adicionado
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -84,10 +85,10 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     },
     {
       title: 'Relatórios de Gestão',
-      icon: LineChart, 
+      icon: LineChart,
       href: '/gestor/dashboard',
       description: 'Visão estratégica para gestores',
-      roles: ['admin', 'diretor'] 
+      roles: ['admin', 'diretor']
     },
     {
       title: 'Atestados',
@@ -109,18 +110,25 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       description: 'Informações da escola',
       roles: ['admin'] // Exemplo de permissão
     },
+    {
+      title: 'Usuários e Acesso',
+      icon: Shield,
+      href: '/gestao-acesso',
+      description: 'Gerenciar equipe e acessos',
+      roles: ['admin']
+    },
   ];
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
-        return location.pathname === href;
+      return location.pathname === href;
     }
     return location.pathname.startsWith(href);
   };
 
   const getDynamicClasses = (isActive: boolean) => {
     const primaryColor = config?.cor_primaria || '#7c3aed';
-    
+
     if (isActive) {
       return {
         backgroundColor: `${primaryColor}20`,
@@ -128,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         borderColor: primaryColor
       };
     }
-    
+
     return {
       color: 'inherit', // Cor padrão do texto para itens não ativos
       '&:hover': {
@@ -187,7 +195,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
                 <item.icon className="h-5 w-5" />
                 <span>{item.title}</span>
               </Link>
-              
+
               {item.subItems && (
                 <div className="ml-8 mt-1 space-y-1">
                   {item.subItems.map((subItem) => (
@@ -207,7 +215,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
                 </div>
               )}
             </div>
-        ))}
+          ))}
       </nav>
 
       <div className="p-4 border-t">

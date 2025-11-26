@@ -32,20 +32,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loadUserSession = async (sessionUser: any): Promise<User | null> => {
     try {
-      // 1. PRIMEIRO, verifica se o usuário está vinculado a um perfil de ALUNO.
-      // Correção: Usei .maybeSingle() em vez de .single() para evitar o erro 406
-      const { data: alunoData } = await supabase
+      console.log("Carregando sessão para:", sessionUser.email);
+
+      // 1. Tenta carregar como ALUNO
+      const { data: alunoData, error: alunoError } = await supabase
         .from('alunos')
         .select('id, nome, turmas(escola_id)')
         .eq('user_id', sessionUser.id)
-        .maybeSingle(); 
+        .maybeSingle();
 
       if (alunoData) {
+        // Correção Robusta: Garante que pega o escola_id seja objeto ou array
+        let escolaIdFound = undefined;
+        const turmasAny = alunoData.turmas as any;
+
+        if (turmasAny) {
+          if (Array.isArray(turmasAny) && turmasAny.length > 0) {
+            escolaIdFound = turmasAny[0]?.escola_id;
+          } else if (typeof turmasAny === 'object') {
+            escolaIdFound = turmasAny.escola_id;
+          }
+        }
+
+        console.log("Aluno detectado. Escola ID:", escolaIdFound);
+
         const alunoUser: User = {
           id: sessionUser.id,
           username: alunoData.nome,
           email: sessionUser.email || "",
-          escola_id: (alunoData.turmas as any)?.escola_id,
+          escola_id: escolaIdFound,
           type: 'aluno',
           aluno_id: alunoData.id,
         };
@@ -53,8 +68,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return alunoUser;
       }
 
-      // 2. SE NÃO FOR ALUNO, verifica se tem uma role de ADMIN/PROFESSOR.
-      // Correção: .maybeSingle() aqui também
+      // 2. Tenta carregar como STAFF (Admin/Prof)
       const { data: roleData } = await supabase
         .from('user_roles')
         .select('escola_id, role')
@@ -62,6 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .maybeSingle();
 
       if (roleData) {
+        console.log("Staff detectado. Escola ID:", roleData.escola_id);
         const adminUser: User = {
           id: sessionUser.id,
           username: sessionUser.user_metadata?.username || "",
@@ -74,12 +89,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return adminUser;
       }
 
-      // 3. Se não for nenhum dos dois, é um usuário sem vínculo.
+      // 3. Usuário sem vínculo
+      console.log("Usuário sem vínculo detectado.");
       const unlinkedUser: User = {
-          id: sessionUser.id,
-          username: sessionUser.user_metadata?.username || "Usuário",
-          email: sessionUser.email || "",
-          type: 'indefinido',
+        id: sessionUser.id,
+        username: sessionUser.user_metadata?.username || "Usuário",
+        email: sessionUser.email || "",
+        type: 'indefinido',
       };
       setUser(unlinkedUser);
       return unlinkedUser;
@@ -92,33 +108,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (username: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Tenta criar o usuário no Auth
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { 
+      options: {
         data: { username },
-        emailRedirectTo: undefined // Evita problemas com redirecionamento local se não configurado
       },
     });
 
     if (error) {
-      console.error("Erro no registro:", error);
       let errorMsg = error.message;
       if (error.message.includes("User already registered")) errorMsg = "E-mail já cadastrado.";
-      if (error.message.includes("Database error")) errorMsg = "Erro interno no servidor. Contate o suporte.";
-      
       return { success: false, error: errorMsg };
     }
-    
+
     return { success: true };
   };
 
   const login = async (email: string, password: string): Promise<User | null> => {
     const { data: sessionData, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !sessionData.user) {
-        return null;
-    }
+    if (error || !sessionData.user) return null;
     return await loadUserSession(sessionData.user);
   };
 
@@ -127,11 +136,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
   };
 
+  const refreshUserData = async () => {
+    const { data: { user: sessionUser } } = await supabase.auth.getUser();
+    if (sessionUser) {
+      await loadUserSession(sessionUser);
+    }
+  };
+
   useEffect(() => {
     const getSession = async () => {
       setLoadingUser(true);
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session?.user) {
         await loadUserSession(session.user);
       } else {
@@ -139,12 +155,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       setLoadingUser(false);
     };
-    
+
     getSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        // Pequeno delay para garantir que triggers (se existirem e estiverem corretos) completem
         setTimeout(() => loadUserSession(session.user), 100);
       } else {
         setUser(null);
@@ -157,13 +172,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  const refreshUserData = async () => {
-    const { data: { user: sessionUser } } = await supabase.auth.getUser();
-    if (sessionUser) {
-      await loadUserSession(sessionUser);
-    }
-  };
-  
   const isAuthenticated = !!user;
 
   return (

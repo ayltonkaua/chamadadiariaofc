@@ -34,6 +34,7 @@ import PortalAlunoPage from "@/pages/PortalAlunoPage";
 import DashboardGestorPage from "@/pages/DashboardGestorPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
+import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import { getChamadasPendentes, limparChamadasPendentes, sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -94,7 +95,7 @@ const App = () => {
 
                     {/* Páginas autenticadas (com sidebar) */}
                     <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-                    <Route path="/portal-aluno" element={<Layout><PortalAlunoPage /></Layout>} /> {/* ROTA ADICIONADA */}
+                    <Route path="/portal-aluno" element={<Layout><PortalAlunoPage /></Layout>} />
                     <Route path="/chamadas/:turmaId" element={<Layout><ChamadaPage /></Layout>} />
                     <Route path="/gerenciar-alunos/:turmaId" element={<Layout><GerenciarAlunosPage /></Layout>} />
                     <Route path="/historico-chamada/:turmaId" element={<Layout><HistoricoChamadaPage /></Layout>} />
@@ -117,6 +118,9 @@ const App = () => {
                     <Route path="/relatorios" element={<Layout><RelatoriosPage /></Layout>} />
 
                     <Route path="/perfil-escola" element={<Layout><PerfilEscolaPage /></Layout>} />
+
+                    {/* Rotas de Gestão */}
+                    <Route path="/gestao-acesso" element={<Layout><GerenciarAcessoPage /></Layout>} />
 
                     <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
                   </Routes>
