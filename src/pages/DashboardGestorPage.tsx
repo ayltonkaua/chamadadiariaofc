@@ -67,7 +67,6 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   useEffect(() => {
     let isMounted = true;
     async function fetchPresencas() {
-<<<<<<< HEAD
       try {
         // @ts-ignore - rpc params named conforme seu banco, adapte se necessário
         const resp = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
@@ -81,9 +80,6 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
       } catch (err) {
         // console.error(err);
       }
-      // @ts-ignore
-      const { data } = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
-      if (isMounted && data) setUltimasPresencas(data.slice(0, 3));
     }
     // @ts-ignore
     if (aluno.aluno_id) fetchPresencas();
@@ -157,7 +153,6 @@ export default function DashboardGestorPage() {
   // --- 1. FETCH METADADOS ---
   useEffect(() => {
     async function fetchTurmas() {
-<<<<<<< HEAD
       if (!user?.escola_id) {
         setTurmasDisponiveis([]);
         return;
@@ -178,12 +173,6 @@ export default function DashboardGestorPage() {
         // console.error(err);
         setTurmasDisponiveis([]);
       }
-=======
-      if (!user?.escola_id) return;
-      // CORREÇÃO: Filtro explícito na tabela 'turmas'
-      const { data } = await supabase.from('turmas').select('id, nome, turno').eq('escola_id', user.escola_id).order('nome');
-      if (data) setTurmasDisponiveis(data);
->>>>>>> 736fdee (correção v1 dashboard gestor)
     }
     fetchTurmas();
   }, [user?.escola_id]);
@@ -209,7 +198,6 @@ export default function DashboardGestorPage() {
 
     async function fetchKpis() {
         setLoadingKpis(true);
-<<<<<<< HEAD
         try {
             // RPCs: supabase.rpc retorna { data, error }
             const kpiResp = await supabase.rpc('get_escola_kpis', { _escola_id: escolaId });
@@ -235,21 +223,10 @@ export default function DashboardGestorPage() {
         } finally {
             setLoadingKpis(false);
         }
-=======
-        const [kpiRes, kpiAdminRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id explicitamente para todas as RPCs
-            supabase.rpc('get_escola_kpis', { _escola_id: escolaId }).select().single(),
-            supabase.rpc('get_kpis_administrativos', { _escola_id: escolaId }).select().single(),
-        ]);
-        if (kpiRes.data) setKpis(kpiRes.data);
-        if (kpiAdminRes.data) setKpisAdmin(kpiAdminRes.data);
-        setLoadingKpis(false);
->>>>>>> 736fdee (correção v1 dashboard gestor)
     }
 
     async function fetchCharts() {
         setLoadingCharts(true);
-<<<<<<< HEAD
         try {
             // Buscando comparativo de turmas via RPC (passando escola)
             const turmaResp = await supabase.rpc('get_comparativo_turmas', { _escola_id: escolaId });
@@ -282,30 +259,10 @@ export default function DashboardGestorPage() {
         } finally {
             setLoadingCharts(false);
         }
-=======
-        // Busca Comparativo de Turmas (RPC precisa filtrar internamente ou pelo JWT/RLS)
-        // Se a RPC não usa o _escola_id, o RLS em 'turmas' deve ser suficiente, mas o ideal é que a RPC aceite o ID.
-        // Assumindo RLS em Turmas.
-        const { data: turmaRes } = await supabase.rpc('get_comparativo_turmas');
-        if (turmaRes) setRawTurmaData(turmaRes);
-
-        // CORREÇÃO: Busca Presenças Recentes (Filtro direto na tabela)
-        const dataLimite = subDays(new Date(), 15).toISOString();
-        const { data: presencasRes } = await supabase
-            .from('presencas')
-            .select('data_chamada, presente, turma_id')
-            .eq('escola_id', escolaId) 
-            .gte('data_chamada', dataLimite);
-        
-        if (presencasRes) setRawPresencasRecentes(presencasRes);
-        
-        setLoadingCharts(false);
->>>>>>> 736fdee (correção v1 dashboard gestor)
     }
 
     async function fetchLists() {
         setLoadingLists(true);
-<<<<<<< HEAD
         try {
             const riscoResp = await supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId });
             const consecResp = await supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId });
@@ -339,18 +296,6 @@ export default function DashboardGestorPage() {
         } finally {
             setLoadingLists(false);
         }
-=======
-        const [riscoRes, consecRes, obsRes] = await Promise.all([
-            // CORREÇÃO: Passa o escola_id para todas as RPCs
-            supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
-            supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
-            supabase.rpc('get_ultimas_observacoes', {limite: 10, _escola_id: escolaId }),
-        ]);
-        if (riscoRes.data) setRawAlunosRisco(riscoRes.data);
-        if (consecRes.data) setRawAlunosConsecutivos(consecRes.data);
-        if (obsRes.data) setUltimasObservacoes(obsRes.data);
-        setLoadingLists(false);
->>>>>>> 736fdee (correção v1 dashboard gestor)
     }
 
     fetchKpis();
