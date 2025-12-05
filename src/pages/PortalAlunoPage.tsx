@@ -17,6 +17,7 @@ import { format, parseISO } from "date-fns";
 
 // Componente de Boletim (Importação Nova)
 import { BoletimAluno } from "@/components/notas/BoletimAluno";
+import { DadosCadastraisTab } from "@/components/aluno/DadosCadastraisTab";
 
 // Ícones
 import {
@@ -28,7 +29,9 @@ import {
   GraduationCap,
   ChevronRight,
   ListChecks,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  User,
+  AlertTriangle
 } from 'lucide-react';
 
 // --- Componente Visual: Gráfico de Frequência ---
@@ -52,7 +55,7 @@ const AttendanceRing = ({ percentage }: { percentage: number }) => {
           cy="40"
         />
         <circle
-          className={`${color} transition-all duration-1000 ease-out`}
+          className={`${color} transition - all duration - 1000 ease - out`}
           strokeWidth="6"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -65,7 +68,7 @@ const AttendanceRing = ({ percentage }: { percentage: number }) => {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className={`text-sm font-bold ${color}`}>{Math.round(percentage)}%</span>
+        <span className={`text - sm font - bold ${color} `}>{Math.round(percentage)}%</span>
         <span className="text-[8px] text-gray-400 uppercase">Freq.</span>
       </div>
     </div>
@@ -98,6 +101,10 @@ const PortalAlunoPage: React.FC = () => {
   const [isMeusAtestadosOpen, setIsMeusAtestadosOpen] = useState(false);
   const [meusAtestados, setMeusAtestados] = useState<MeusAtestados[]>([]);
   const [loadingAtestados, setLoadingAtestados] = useState(false);
+
+  // Estado para Meus Dados
+  const [isMeusDadosOpen, setIsMeusDadosOpen] = useState(false);
+  const [showUpdateAlert, setShowUpdateAlert] = useState(false);
 
   // Estado para dados reais do aluno
   const [studentData, setStudentData] = useState({
@@ -133,7 +140,7 @@ const PortalAlunoPage: React.FC = () => {
         // 1. Busca dados do Aluno e da Turma
         const { data: alunoInfo, error: alunoError } = await supabase
           .from('alunos')
-          .select('matricula, turma_id, turmas(nome)')
+          .select('matricula, turma_id, turmas(nome), nome_responsavel, telefone_responsavel, endereco')
           .eq('id', user.aluno_id)
           .single();
 
@@ -175,6 +182,12 @@ const PortalAlunoPage: React.FC = () => {
             totalAulas: aulas,
             totalFaltas: faltas
           });
+
+          // VERIFICAÇÃO DE DADOS CADASTRAIS
+          const dadosIncompletos = !alunoInfo.nome_responsavel || !alunoInfo.telefone_responsavel || !alunoInfo.endereco;
+          if (dadosIncompletos) {
+            setShowUpdateAlert(true);
+          }
         }
       } catch (error) {
         console.error("Erro ao carregar dados do aluno:", error);
@@ -275,13 +288,13 @@ const PortalAlunoPage: React.FC = () => {
         {/* CARD DE VISÃO GERAL */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className="bg-white shadow-sm border-none overflow-hidden relative ring-1 ring-gray-100">
-            <div className={`absolute top-0 left-0 w-1.5 h-full ${studentData.frequencia >= 75 ? "bg-green-500" : "bg-red-500"}`}></div>
+            <div className={`absolute top - 0 left - 0 w - 1.5 h - full ${studentData.frequencia >= 75 ? "bg-green-500" : "bg-red-500"} `}></div>
             <CardContent className="p-5 flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Situação Atual</p>
                 <h2 className="text-xl font-bold text-gray-800">{studentData.turma}</h2>
                 <div className="flex gap-2 mt-2">
-                  <Badge variant="secondary" className={`${studentData.frequencia >= 75 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                  <Badge variant="secondary" className={`${studentData.frequencia >= 75 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"} `}>
                     {studentData.status}
                   </Badge>
                   <span className="text-xs text-gray-400 flex items-center">
@@ -362,6 +375,34 @@ const PortalAlunoPage: React.FC = () => {
                 <span className="text-[10px] text-gray-400 font-normal">Ver frequência</span>
               </div>
             </Button>
+
+            {/* 1.5 Meus Dados (NOVO) */}
+            <Dialog open={isMeusDadosOpen} onOpenChange={setIsMeusDadosOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
+                >
+                  <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
+                    <User className="h-6 w-6" />
+                  </div>
+                  <div className="text-center">
+                    <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Meus Dados</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Atualizar cadastro</span>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DadosCadastraisTab
+                  alunoId={user?.aluno_id || ""}
+                  onUpdate={() => {
+                    setIsMeusDadosOpen(false);
+                    // Recarrega dados para atualizar estado local se necessário
+                    window.location.reload();
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
 
             {/* 2. Boletim Escolar (NOVO) */}
             <Dialog open={isBoletimOpen} onOpenChange={setIsBoletimOpen}>
@@ -514,6 +555,30 @@ const PortalAlunoPage: React.FC = () => {
         </section>
 
       </main>
+
+      {/* --- ALERTA MODAL BLOQUEANTE --- */}
+      <Dialog open={showUpdateAlert} onOpenChange={setShowUpdateAlert}>
+        <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertTriangle className="h-5 w-5" /> Atualização Necessária
+            </DialogTitle>
+            <DialogDescription>
+              Seus dados cadastrais estão incompletos. Por favor, atualize as informações abaixo para continuar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4 border-t pt-4">
+            <DadosCadastraisTab
+              alunoId={user?.aluno_id || ""}
+              onUpdate={() => {
+                setShowUpdateAlert(false);
+                window.location.reload();
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

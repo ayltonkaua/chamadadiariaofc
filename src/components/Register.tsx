@@ -1,19 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Building2, GraduationCap, User, Mail, Lock, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast"; // Importe o toast para feedback visual melhor
 
 type AccountType = "aluno" | "escola";
 
 export default function Register() {
-  const { register } = useAuth(); // register vem do contexto
+  const { register } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [accountType, setAccountType] = useState<AccountType>("aluno");
   const [name, setName] = useState("");
@@ -24,6 +26,14 @@ export default function Register() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Limpa qualquer sessão antiga ao entrar na página de registro
+  useEffect(() => {
+    const clearSession = async () => {
+      await supabase.auth.signOut();
+    };
+    clearSession();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,46 +49,81 @@ export default function Register() {
       if (!name.trim()) throw new Error(accountType === "escola" ? "Informe o nome da escola." : "Informe seu nome completo.");
       if (password.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
-      // 2. Criar Usuário
+      // 2. Criar Usuário (O Supabase loga automaticamente se o email confirm for desligado)
       const response = await register(name, email, password);
-      if (!response.success) throw new Error(response.error || "Erro ao criar conta de usuário.");
 
-      // 3. Configurar Perfil
+      if (!response.success) {
+        throw new Error(response.error || "Erro ao criar conta.");
+      }
+
+      // Pequeno delay para garantir que a sessão foi estabelecida (se auto-confirm)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. Chamar a RPC para vincular
       let rpcName = "";
       let rpcParams = {};
 
       if (accountType === "aluno") {
         rpcName = "vincular_aluno_usuario";
-        rpcParams = { p_matricula: matricula, p_email: email };
+        rpcParams = {
+          p_matricula: matricula.trim(),
+          p_email: email.trim().toLowerCase()
+        };
       } else {
         rpcName = "registrar_escola_admin";
-        rpcParams = { nome_escola: name };
+        rpcParams = {
+          nome_escola: name.trim()
+        };
       }
 
-      const { data: rpcData, error: rpcError } = await supabase.rpc(rpcName as any, rpcParams);
+      // Chama a RPC. Se o usuário não estiver logado (email pendente), a RPC roda como 'anon',
+      // mas como demos permissão GRANT EXECUTE TO anon, vai funcionar.
+      // @ts-ignore
+      const { data: rpcData, error: rpcError } = await supabase.rpc(rpcName, rpcParams);
 
-      if (rpcError || (rpcData && !(rpcData as any).success)) {
-        console.error("Erro no vínculo:", rpcError || rpcData);
-        throw new Error((rpcData as any)?.message || "Usuário criado, mas houve erro ao configurar o perfil.");
+      if (rpcError) {
+        console.error("Erro RPC Detalhado:", rpcError);
+        // Se o erro for 403, é permissão. Se for outro, é lógica.
+        if (rpcError.code === '42501' || rpcError.code === 'PGRST301') {
+          throw new Error("Erro de permissão no servidor. Contate o suporte.");
+        }
+        throw new Error(rpcError.message || "Erro ao vincular perfil.");
       }
 
-      // --- MUDANÇA AQUI ---
-      // O Supabase pode ter logado o usuário automaticamente.
-      // Nós forçamos o logout imediatamente para ele não ir pro dashboard.
+      if (rpcData && (rpcData as any).success === false) {
+        throw new Error((rpcData as any).message || "Falha lógica ao vincular.");
+      }
+
+      // 4. Sucesso e Logout de Segurança
+      setSuccess("Conta criada e vinculada! Redirecionando...");
+
+      // Forçamos logout para que o usuário faça login limpo e carregue os novos vínculos (roles/aluno_id)
       await supabase.auth.signOut();
-      // --------------------
 
-      setSuccess("Cadastro realizado com sucesso! Faça login para continuar.");
+      toast({
+        title: "Cadastro realizado!",
+        description: "Sua conta foi criada. Faça login para entrar.",
+        duration: 4000,
+      });
 
-      setTimeout(() => navigate("/login"), 2000);
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
 
     } catch (err: any) {
+      console.error("Erro no registro:", err);
       let msg = err.message;
-      if (msg.includes("duplicate key")) msg = "Já existe uma escola ou usuário com este e-mail.";
-      setError(msg || "Ocorreu um erro inesperado.");
+      if (msg.includes("duplicate key") || msg.includes("User already registered")) {
+        msg = "Este e-mail ou matrícula já estão cadastrados.";
+      }
+      setError(msg);
+      toast({
+        title: "Erro no cadastro",
+        description: msg,
+        variant: "destructive"
+      });
     } finally {
-      // Se deu sucesso, mantemos o loading visual até redirecionar
-      if (!success) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -179,13 +224,13 @@ export default function Register() {
             )}
 
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1">
+              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 border border-red-100">
                 <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
             {success && (
-              <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1">
+              <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 border border-green-100">
                 <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
                 <span>{success}</span>
               </div>
