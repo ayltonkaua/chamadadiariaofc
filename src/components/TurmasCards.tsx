@@ -1,245 +1,302 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Users,
+  History,
+  GraduationCap,
+  ClipboardList,
+  WifiOff,
+  FileSpreadsheet,
+  Edit,
+  Trash2,
+  RefreshCw
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "@/hooks/use-toast";
-import { TurmaCard } from "./turmas/TurmaCard";
-import { DeleteTurmaDialog } from "./turmas/DeleteTurmaDialog";
-import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
-import { ImportTurmasDialog } from "./turmas/ImportTurmasDialog";
-import { EmptyTurmasState } from "./turmas/EmptyTurmasState";
-import { Button } from "./ui/button";
-import { FileSpreadsheet, WifiOff } from "lucide-react";
-// Importações da lógica Offline/Híbrida
-import { buscarTurmasHibrido, getDadosEscolaOffline } from "@/lib/offlineChamada";
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext"; // Seu contexto original
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
+// Modais
+import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
+import { DeleteTurmaDialog } from "./turmas/DeleteTurmaDialog";
+import { ImportTurmasDialog } from "./turmas/ImportTurmasDialog";
+
+// Interface
 interface Turma {
   id: string;
   nome: string;
-  numero_sala: string;
-  alunos: number;
-  user_id?: string; // Adicionado para tipagem correta
+  escola_id: string;
+  numero_sala?: string;
+  turno?: string;
+  _count?: { alunos: number };
+  alunos?: number;
+  user_id?: string;
+}
+
+interface TurmasCardsProps {
+  turmas?: Turma[];
+  loading?: boolean;
+  onRefresh?: () => void;
   turno?: string;
 }
 
-const TurmasCards: React.FC<{ turno: 'Manhã' | 'Tarde' | 'Noite' }> = ({ turno }) => {
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
-  
-  // Estados dos modais
-  const [turmaParaRemover, setTurmaParaRemover] = useState<Turma | null>(null);
+// --- SUB-COMPONENTE: CARD VISUAL ---
+const TurmaCardItem = ({
+  turma,
+  onEdit,
+  onDeleteRequest,
+  corPrimaria
+}: {
+  turma: Turma;
+  onEdit: (t: Turma) => void;
+  onDeleteRequest: (t: Turma) => void;
+  corPrimaria: string;
+}) => {
+  const navigate = useNavigate();
+  const qtdAlunos = turma._count?.alunos ?? turma.alunos ?? 0;
+
+  // Estilos dinâmicos baseados na cor da escola
+  const borderStyle = { borderLeftColor: corPrimaria, borderLeftWidth: '6px' };
+  const buttonStyle = { backgroundColor: corPrimaria };
+  const iconStyle = { color: corPrimaria };
+
+  return (
+    <Card
+      className="flex flex-col h-full shadow-sm hover:shadow-lg transition-all duration-200 bg-white"
+      style={borderStyle}
+    >
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 px-4 pt-4">
+        <div className="space-y-1 w-[75%]">
+          <CardTitle className="text-xl font-bold text-gray-800 line-clamp-1 leading-tight" title={turma.nome}>
+            {turma.nome}
+          </CardTitle>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {turma.numero_sala && (
+              <span className="bg-slate-100 px-2 py-1 rounded-md font-medium text-slate-600">
+                Sala {turma.numero_sala}
+              </span>
+            )}
+            {turma.turno && (
+              <Badge variant="secondary" className="px-2 py-0.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
+                {turma.turno}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Ações no Topo (Editar/Excluir) */}
+        <div className="flex -mr-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 text-blue-600 hover:bg-blue-50 rounded-full"
+            onClick={() => onEdit(turma)}
+          >
+            <Edit className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 text-red-500 hover:bg-red-50 rounded-full"
+            onClick={() => onDeleteRequest(turma)}
+          >
+            <Trash2 className="h-5 w-5" />
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-grow flex flex-col justify-center px-4 py-2">
+        <div className="flex items-center gap-4 my-2 p-3 bg-slate-50/80 rounded-lg border border-slate-100">
+          <div className="bg-white p-2 rounded-full shadow-sm">
+            <Users className="h-6 w-6" style={iconStyle} />
+          </div>
+          <div>
+            <span className="text-3xl font-bold text-slate-800 block leading-none">{qtdAlunos}</span>
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Alunos</span>
+          </div>
+        </div>
+      </CardContent>
+
+      <CardFooter className="grid grid-cols-2 gap-3 p-4 pt-0">
+        <Button
+          className="col-span-2 w-full h-12 text-base font-bold text-white shadow-md active:scale-95 transition-transform hover:opacity-90"
+          style={buttonStyle}
+          onClick={() => navigate(`/turmas/${turma.id}/chamada`)}
+        >
+          <ClipboardList className="mr-2 h-5 w-5" />
+          REALIZAR CHAMADA
+        </Button>
+
+        <Button
+          variant="outline"
+          className="w-full h-10 text-sm border-slate-300 hover:bg-slate-50 text-slate-600"
+          onClick={() => navigate(`/turmas/${turma.id}/alunos`)}
+        >
+          <GraduationCap className="mr-2 h-4 w-4" />
+          Alunos
+        </Button>
+
+        <Button
+          variant="outline"
+          className="w-full h-10 text-sm border-slate-300 hover:bg-slate-50 text-slate-600"
+          onClick={() => navigate(`/historico-chamada/${turma.id}`)}
+        >
+          <History className="mr-2 h-4 w-4" />
+          Histórico
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
+export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh, turno }: TurmasCardsProps) {
+  const { user, escolaId } = useAuth();
+
+  // --- ADAPTAÇÃO AO SEU CONTEXTO ORIGINAL ---
+  // Seu contexto retorna { config, loading, ... }
+  const { config } = useEscolaConfig();
+
+  // Pega a cor do objeto 'config' ou usa fallback
+  const corPrimaria = config?.cor_primaria || "#6D28D9";
+
+  // Estados locais
+  const [localTurmas, setLocalTurmas] = useState<Turma[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
+
+  // Controle de Modais
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
+  const [turmaParaRemover, setTurmaParaRemover] = useState<Turma | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
-  
-  const { user } = useAuth();
 
-  const fetchTurmas = async () => {
-    setLoading(true);
-    
-    // Verificação de segurança: precisamos do ID do usuário e da escola
-    if (!user?.id || !user?.escola_id) {
-      console.log("Usuário ou Escola ID ausente");
-      setTurmas([]);
-      setLoading(false);
-      return;
-    }
+  const turmasExibidas = turmasPai || localTurmas;
+  const isLoading = loadingPai !== undefined ? loadingPai : localLoading;
 
+  const fetchTurmasLocal = async () => {
+    if (turmasPai) return;
+    setLocalLoading(true);
     try {
-      // 1. Busca Híbrida (Tenta Online -> Falha -> Busca Offline)
-      const { data: dadosMist, fonte } = await buscarTurmasHibrido(user.escola_id);
-      
-      setIsOfflineMode(fonte === 'offline');
+      if (!escolaId) return;
+      const { data, error } = await supabase
+        .from('turmas')
+        .select(`id, nome, numero_sala, turno, escola_id, alunos:alunos(count)`)
+        .eq('escola_id', escolaId)
+        .eq('turno', turno)
+        .order('nome');
 
-      if (!dadosMist) {
-        setTurmas([]);
-        setLoading(false);
-        return;
-      }
+      if (error) throw error;
 
-      // 2. Filtragem Inicial (Turno e Dono da Turma)
-      // Filtramos pelo user_id para garantir que o prof só veja as turmas dele, mesmo offline
-      let turmasFiltradas = dadosMist.filter((t: any) => 
-        t.turno === turno && t.user_id === user.id
-      );
-
-      // 3. Processamento da contagem de alunos
-      let turmasComContagem: Turma[] = [];
-
-      if (fonte === 'online') {
-        // --- CENÁRIO ONLINE: Buscamos a contagem precisa no banco ---
-        // (Fazemos isso para garantir a contagem exata do banco)
-        const turmasIds = turmasFiltradas.map((t: any) => t.id);
-        
-        // Se não houver turmas, paramos aqui
-        if (turmasIds.length === 0) {
-           setTurmas([]);
-           setLoading(false);
-           return;
-        }
-
-        // Refazemos a query específica para garantir os counts (como no seu original)
-        // Ou, para otimizar, buscamos apenas os counts das turmas já filtradas
-        turmasComContagem = await Promise.all(
-          turmasFiltradas.map(async (turma: any) => {
-            const { count } = await supabase
-              .from("alunos")
-              .select("id", { count: "exact", head: true })
-              .eq("turma_id", turma.id);
-
-            return {
-              ...turma,
-              alunos: count ?? 0,
-            };
-          })
-        );
-
-      } else {
-        // --- CENÁRIO OFFLINE: Contamos baseado no cache local ---
-        const dadosOffline = await getDadosEscolaOffline();
-        const todosAlunos = dadosOffline?.alunos || [];
-
-        turmasComContagem = turmasFiltradas.map((turma: any) => {
-          // Conta quantos alunos neste array local pertencem a esta turma
-          const qtdAlunos = todosAlunos.filter((a: any) => a.turma_id === turma.id).length;
-          return {
-            ...turma,
-            alunos: qtdAlunos
-          };
-        });
-      }
-
-      // 4. Ordenação
-      turmasComContagem.sort((a, b) => a.nome.localeCompare(b.nome));
-      setTurmas(turmasComContagem);
-
-    } catch (error: any) {
-      console.error("Erro ao processar turmas:", error);
-      toast({
-        title: "Erro ao carregar",
-        description: "Não foi possível carregar a lista de turmas.",
-        variant: "destructive",
-      });
+      const formatadas = (data || []).map((t: any) => ({
+        id: t.id,
+        nome: t.nome,
+        escola_id: t.escola_id,
+        numero_sala: t.numero_sala,
+        turno: t.turno,
+        _count: { alunos: t.alunos?.[0]?.count || 0 },
+        alunos: t.alunos?.[0]?.count || 0
+      }));
+      setLocalTurmas(formatadas);
+    } catch (error) {
+      console.error("Erro fetch local:", error);
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
-  // Recarrega quando muda o turno ou o usuário
   useEffect(() => {
-    fetchTurmas();
-    
-    // Opcional: Recarregar se a conexão voltar
-    const handleOnline = () => fetchTurmas();
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [user?.id, turno, user?.escola_id]);
+    fetchTurmasLocal();
+    const handleStatus = () => setIsOfflineMode(!navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
+  }, [escolaId, turno, turmasPai]);
 
-  // --- Funções de Manipulação (Iguais ao original) ---
-
-  const handleEditarTurma = (turma: Turma) => {
-    setTurmaParaEditar(turma);
+  const handleRefreshGlobal = () => {
+    if (onRefresh) onRefresh();
+    fetchTurmasLocal();
   };
 
-  const handleRemoverTurma = async () => {
-    if (turmaParaRemover) {
-      try {
-        // Se estiver offline, avisa que não pode deletar
-        if (!navigator.onLine) {
-            toast({ 
-                title: "Sem conexão", 
-                description: "Você precisa de internet para excluir turmas.",
-                variant: "destructive" 
-            });
-            return;
-        }
-
-        await supabase.from("alunos").delete().eq("turma_id", turmaParaRemover.id);
-        await supabase.from("presencas").delete().eq("turma_id", turmaParaRemover.id);
-        await supabase.from("turmas").delete().eq("id", turmaParaRemover.id);
-        
-        setTurmas((prev) => prev.filter((t) => t.id !== turmaParaRemover.id));
-        toast({
-          title: "Turma removida",
-          description: `A turma ${turmaParaRemover.nome} foi removida com sucesso.`,
-        });
-        
-        setTurmaParaRemover(null);
-      } catch (error) {
-        toast({
-          title: "Erro ao remover turma",
-          description: "Ocorreu um erro ao tentar remover a turma.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  if (loading) {
-    return <div className="text-center py-10 text-gray-500">A carregar turmas do turno da {turno.toLowerCase()}...</div>;
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse p-2">
+        {[1, 2, 3].map((i) => <div key={i} className="h-64 bg-slate-100 rounded-lg"></div>)}
+      </div>
+    );
   }
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 px-1 gap-4">
         <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-gray-800">Turmas do Turno da {turno}</h2>
-            {isOfflineMode && (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center gap-1 border border-yellow-200">
-                    <WifiOff size={12} /> Modo Offline
-                </span>
-            )}
+          {turno && !turmasPai && <h2 className="text-2xl font-bold text-gray-800">Turmas {turno}</h2>}
+          {isOfflineMode && (
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full flex items-center gap-2 border border-yellow-200 font-medium">
+              <WifiOff size={14} /> Modo Offline
+            </span>
+          )}
         </div>
-        
-        <Button onClick={() => setShowImportDialog(true)} variant="outline" className="flex items-center gap-2">
-          <FileSpreadsheet size={20} /> Importar Excel
-        </Button>
+
+        {!turmasPai && (
+          <Button onClick={() => setShowImportDialog(true)} variant="outline" className="w-full sm:w-auto flex items-center gap-2 border-dashed border-2 h-10">
+            <FileSpreadsheet size={18} className="text-green-600" />
+            <span>Importar Turmas (Excel)</span>
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-        {turmas.map((turma) => (
-          <TurmaCard
-            key={turma.id}
-            turma={turma}
-            onEdit={handleEditarTurma}
-            onDelete={(turma) => setTurmaParaRemover(turma)}
-          />
-        ))}
-      </div>
+      {turmasExibidas.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg bg-slate-50 mx-1">
+          <RefreshCw className="w-10 h-10 text-gray-300 mb-2" />
+          <p className="text-gray-500 font-medium">Nenhuma turma encontrada.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 animate-in fade-in pb-20">
+          {turmasExibidas.map((turma) => (
+            <TurmaCardItem
+              key={turma.id}
+              turma={turma}
+              onEdit={setTurmaParaEditar}
+              onDeleteRequest={setTurmaParaRemover}
+              corPrimaria={corPrimaria} // Passando a cor lida corretamente
+            />
+          ))}
+        </div>
+      )}
 
-      {turmas.length === 0 && !loading && (
-        <EmptyTurmasState />
+      {/* --- MODAIS --- */}
+      {turmaParaEditar && (
+        <EditTurmaDialog
+          open={!!turmaParaEditar}
+          onOpenChange={(open) => !open && setTurmaParaEditar(null)}
+          turma={turmaParaEditar}
+          onSuccess={handleRefreshGlobal}
+        />
       )}
 
       {turmaParaRemover && (
         <DeleteTurmaDialog
+          open={!!turmaParaRemover}
+          onOpenChange={(open) => !open && setTurmaParaRemover(null)}
           turma={turmaParaRemover}
-          onClose={() => setTurmaParaRemover(null)}
-          onConfirm={handleRemoverTurma}
-        />
-      )}
-
-      {turmaParaEditar && (
-        <EditTurmaDialog
-          turma={turmaParaEditar}
-          onClose={() => setTurmaParaEditar(null)}
-          onTurmaUpdated={() => {
-            fetchTurmas();
-            setTurmaParaEditar(null);
-          }}
+          onSuccess={handleRefreshGlobal}
         />
       )}
 
       {showImportDialog && (
         <ImportTurmasDialog
-          onClose={() => setShowImportDialog(false)}
           onSuccess={() => {
-            fetchTurmas();
+            handleRefreshGlobal();
             setShowImportDialog(false);
           }}
         />
       )}
     </>
   );
-};
-
-export default TurmasCards;
+}

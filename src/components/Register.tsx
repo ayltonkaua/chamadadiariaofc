@@ -239,8 +239,8 @@ export default function Register() {
             <Button
               type="submit"
               className={`w-full h-11 text-base font-medium shadow-lg transition-all hover:scale-[1.02] ${accountType === "escola"
-                  ? "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
-                  : "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+                ? "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
+                : "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
                 }`}
               disabled={isLoading}
             >

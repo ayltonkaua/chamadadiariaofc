@@ -12,7 +12,7 @@ const defaultConfig: EscolaConfig = {
   endereco: null,
   email: "",
   telefone: null,
-  url_logo: null, 
+  url_logo: null,
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
 };
@@ -59,7 +59,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!loadingUser) {
-        fetchConfig();
+      fetchConfig();
     }
   }, [user?.escola_id, loadingUser, fetchConfig]);
 
@@ -82,7 +82,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       } else {
         const { error } = await supabase.rpc('criar_escola_e_associar_admin', {
-            config_data: newConfig as unknown as TablesInsert<'escola_configuracao'>
+          config_data: newConfig as unknown as TablesInsert<'escola_configuracao'>
         });
 
         if (error) throw error;

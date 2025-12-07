@@ -8,7 +8,7 @@ const CACHE_ESCOLA_KEY = 'cache_dados_escola';
 export interface ChamadaOffline {
   aluno_id: string;
   turma_id: string;
-  escola_id: string; 
+  escola_id: string;
   presente: boolean;
   falta_justificada: boolean;
   data_chamada: string;
@@ -25,7 +25,7 @@ export interface ChamadaSession {
 interface DadosEscolaOffline {
   timestamp: number;
   turmas: any[];
-  alunos: any[]; 
+  alunos: any[];
   escola_id: string;
 }
 
@@ -36,7 +36,7 @@ interface DadosEscolaOffline {
 export async function baixarDadosEscola(escolaId: string) {
   try {
     console.log("Iniciando download de dados para offline...");
-    
+
     // 1. Buscar todas as turmas
     const { data: turmas, error: turmasError } = await supabase
       .from('turmas')
@@ -67,7 +67,7 @@ export async function baixarDadosEscola(escolaId: string) {
     };
 
     await set(CACHE_ESCOLA_KEY, pacoteOffline);
-    
+
     console.log(`Dados baixados: ${turmas?.length} turmas e ${alunos?.length} alunos.`);
     return { success: true, turmasCount: turmas?.length, alunosCount: alunos?.length };
 
@@ -106,9 +106,9 @@ export async function buscarTurmasHibrido(escolaId: string) {
     try {
       const { data, error } = await supabase
         .from('turmas')
-        .select('*')
+        .select('*, escola_id')
         .eq('escola_id', escolaId);
-      
+
       if (!error && data) {
         // Se deu certo online, atualiza o cache em background para garantir que o offline esteja fresco
         // Não esperamos o await aqui para não travar a UI
@@ -123,7 +123,7 @@ export async function buscarTurmasHibrido(escolaId: string) {
   // 2. Se falhou ou está offline, busca do Cache
   console.log("Buscando turmas do cache offline...");
   const dadosOffline = await getDadosEscolaOffline();
-  
+
   if (dadosOffline && dadosOffline.turmas) {
     return { data: dadosOffline.turmas, fonte: 'offline' };
   }
@@ -200,10 +200,10 @@ export async function getSessaoChamada(): Promise<ChamadaSession | null> {
   try {
     const session = await get(CHAMADA_SESSION_KEY);
     if (!session) return null;
-    
+
     const agora = Date.now();
     const vinteQuatroHoras = 24 * 60 * 60 * 1000;
-    
+
     if (agora - session.timestamp > vinteQuatroHoras) {
       await del(CHAMADA_SESSION_KEY);
       return null;
@@ -237,28 +237,28 @@ export async function sincronizarChamadasOffline() {
     console.log(`Iniciando sincronização MANUAL de ${pendentes.length} registros...`);
 
     const payload = pendentes.map(p => ({
-       aluno_id: p.aluno_id,
-       turma_id: p.turma_id,
-       escola_id: p.escola_id, 
-       data_chamada: p.data_chamada,
-       presente: p.presente,
-       falta_justificada: p.falta_justificada ?? false 
+      aluno_id: p.aluno_id,
+      turma_id: p.turma_id,
+      escola_id: p.escola_id,
+      data_chamada: p.data_chamada,
+      presente: p.presente,
+      falta_justificada: p.falta_justificada ?? false
     }));
 
     const { error } = await supabase
       .from('presencas')
-      .upsert(payload, { 
+      .upsert(payload, {
         onConflict: 'escola_id, aluno_id, data_chamada',
-        ignoreDuplicates: false 
+        ignoreDuplicates: false
       });
 
     if (error) {
       console.error('Erro Detalhado do Supabase:', JSON.stringify(error, null, 2));
       throw error;
     }
-    
+
     await limparChamadasPendentes();
-    
+
     console.log('Sincronização concluída com sucesso!');
     return { success: true, count: pendentes.length };
   } catch (error: any) {

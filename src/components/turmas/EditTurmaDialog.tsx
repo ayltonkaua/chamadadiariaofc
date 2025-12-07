@@ -1,85 +1,110 @@
-
-import React, { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter, // Adicionado
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Users, Settings, Calendar } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { GerenciarProfessoresTurma } from "./GerenciarProfessoresTurma";
+import { GradeHorariaAvancada } from "./grade/GradeHorariaAvancada";
 
 interface EditTurmaDialogProps {
-  turma?: {
+  turma: {
     id: string;
     nome: string;
-    numero_sala: string;
-  };
-  onClose: () => void;
-  onTurmaUpdated: () => void;
+    escola_id: string;
+  } | null;
+  open: boolean;           // Novo: Controlado pelo pai
+  onOpenChange: (open: boolean) => void; // Novo: Controlado pelo pai
+  onSuccess: () => void;
 }
 
-export function EditTurmaDialog({ turma, onClose, onTurmaUpdated }: EditTurmaDialogProps) {
-  const [nomeTurma, setNomeTurma] = useState(turma?.nome || "");
-  const [numeroSala, setNumeroSala] = useState(turma?.numero_sala || "");
+export function EditTurmaDialog({ turma, open, onOpenChange, onSuccess }: EditTurmaDialogProps) {
+  const [nome, setNome] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSave = async () => {
-    if (!turma?.id || !nomeTurma || !numeroSala) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos",
-        variant: "destructive",
-      });
-      return;
-    }
+  // Atualiza o nome quando a turma muda
+  useEffect(() => {
+    if (turma) setNome(turma.nome);
+  }, [turma]);
 
+  if (!turma) return null;
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    const { error } = await supabase
-      .from("turmas")
-      .update({ nome: nomeTurma, numero_sala: numeroSala })
-      .eq("id", turma.id);
 
-    setLoading(false);
+    try {
+      const { error } = await supabase
+        .from("turmas")
+        .update({ nome })
+        .eq("id", turma.id);
 
-    if (error) {
-      toast({
-        title: "Erro ao atualizar turma",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
+      if (error) throw error;
+
+      toast({ title: "Turma atualizada!" });
+      onSuccess();
+      onOpenChange(false); // Fecha o modal
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao atualizar" });
+    } finally {
+      setLoading(false);
     }
-
-    toast({
-      title: "Turma atualizada",
-      description: "Os dados da turma foram atualizados com sucesso.",
-    });
-    
-    onTurmaUpdated();
-    onClose();
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Turma</DialogTitle>
+          <DialogTitle>Gerenciar Turma: {turma.nome}</DialogTitle>
+          <DialogDescription>
+            Alterar nome ou professores vinculados.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Nome da Turma</Label>
-            <Input value={nomeTurma} onChange={e => setNomeTurma(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Número da Sala</Label>
-            <Input value={numeroSala} onChange={e => setNumeroSala(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Salvando..." : "Salvar"}
-          </Button>
-        </DialogFooter>
+
+        <Tabs defaultValue="detalhes" className="w-full mt-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="detalhes"><Settings className="w-4 h-4 mr-2" /> Detalhes</TabsTrigger>
+            <TabsTrigger value="professores"><Users className="w-4 h-4 mr-2" /> Professores</TabsTrigger>
+            <TabsTrigger value="grade"><Calendar className="w-4 h-4 mr-2" /> Grade</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="detalhes" className="py-4 space-y-4">
+            <form onSubmit={handleUpdate}>
+              <div className="space-y-2">
+                <Label>Nome da Turma</Label>
+                <Input value={nome} onChange={(e) => setNome(e.target.value)} />
+              </div>
+              <DialogFooter className="pt-4">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Salvando..." : "Salvar Alterações"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="professores">
+            <GerenciarProfessoresTurma
+              turmaId={turma.id}
+              escolaId={turma.escola_id}
+            />
+          </TabsContent>
+
+          <TabsContent value="grade">
+            <GradeHorariaAvancada turmaId={turma.id} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

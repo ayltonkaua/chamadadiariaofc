@@ -20,7 +20,8 @@ import {
   Search,
   UserCheck,
   LineChart,
-  Shield // Ícone adicionado
+  Shield, // Ícone adicionado
+  BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -71,6 +72,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         { title: 'Gerenciar Alunos', href: '/dashboard', icon: Users },
         { title: 'Consultar Faltas', href: '/consultar-faltas', icon: Search },
       ]
+    },
+    {
+      title: 'Disciplinas',
+      icon: BookOpen,
+      href: '/disciplinas',
+      description: 'Grade curricular'
     },
     {
       title: 'Pesquisas',
