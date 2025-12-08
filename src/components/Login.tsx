@@ -27,10 +27,11 @@ const Login: React.FC = () => {
 
       if (user) {
         // 2. A lógica de redirecionamento é baseada no tipo de usuário retornado
-        if (user.type === 'admin') {
-          navigate("/dashboard", { replace: true });
-        } else if (user.type === 'aluno') {
+        if (user.type === 'aluno') {
           navigate("/portal-aluno", { replace: true });
+        } else if (user.type === 'staff' && user.role) {
+          // Staff (admin, professor, diretor, coordenador, secretario)
+          navigate("/dashboard", { replace: true });
         } else {
           setError("Sua conta não está vinculada a um perfil. Contate o suporte.");
         }

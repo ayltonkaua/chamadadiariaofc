@@ -12,6 +12,7 @@ interface Professor {
     id: string;
     nome: string;
     email: string;
+    role: string;
 }
 
 interface GerenciarProfessoresTurmaProps {
@@ -26,129 +27,138 @@ export function GerenciarProfessoresTurma({ turmaId, escolaId }: GerenciarProfes
     const [todosProfessores, setTodosProfessores] = useState<Professor[]>([]);
     const [selectedProfId, setSelectedProfId] = useState<string>("");
 
-    // Função isolada e memoizada para evitar loops
     const fetchData = useCallback(async () => {
         if (!turmaId || !escolaId) return;
 
         setLoading(true);
         try {
-            // 1. Buscar todos os professores da escola
-            const { data: allProfs, error: errorProfs } = await supabase
-                .from('dados_usuarios_view' as any)
-                .select('*')
-                .eq('escola_id', escolaId)
-                .in('role', ['professor', 'coordenador']);
+            // CORREÇÃO 1: Usar RPC segura em vez de View inexistente
+            // A função get_school_users já filtra por escola e segurança
+            const { data: usersData, error: errorUsers } = await supabase
+                .rpc('get_school_users', { _escola_id: escolaId });
 
-            if (errorProfs) throw errorProfs;
+            if (errorUsers) throw errorUsers;
+
+            // Filtrar apenas quem é professor ou coordenador
+            // Mapear user_id (do RPC) para id (do frontend)
+            const listaProfessores = (usersData || [])
+                .filter((u: any) => ['professor', 'coordenador'].includes(u.role))
+                .map((u: any) => ({
+                    id: u.user_id, // RPC retorna user_id
+                    nome: u.nome,
+                    email: u.email,
+                    role: u.role
+                }));
 
             // 2. Buscar vínculos atuais desta turma
             const { data: links, error: errorLinks } = await supabase
-                .from('turma_professores' as any)
+                .from('turma_professores')
                 .select('professor_id')
                 .eq('turma_id', turmaId);
 
             if (errorLinks) throw errorLinks;
 
-            // Filtrar quem já está vinculado
-            const idsVinculados = links.map((l: any) => l.professor_id);
+            const idsVinculados = links.map((l) => l.professor_id);
 
-            setTodosProfessores(allProfs || []);
+            setTodosProfessores(listaProfessores);
             setProfessoresVinculados(
-                (allProfs || []).filter((p: any) => idsVinculados.includes(p.id))
+                listaProfessores.filter((p) => idsVinculados.includes(p.id))
             );
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Erro ao carregar professores:", error);
             toast({
                 variant: "destructive",
                 title: "Erro ao carregar",
-                description: "Não foi possível buscar a lista de professores.",
+                description: error.message || "Não foi possível buscar a lista de professores.",
             });
         } finally {
             setLoading(false);
         }
     }, [turmaId, escolaId, toast]);
 
-    // Efeito que chama a busca
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    // Adicionar Professor
     const handleAddProfessor = async () => {
         if (!selectedProfId) return;
 
         try {
+            // CORREÇÃO 2: Remover 'as any' para garantir tipagem se possível
             const { error } = await supabase
-                .from('turma_professores' as any)
+                .from('turma_professores')
                 .insert({
                     turma_id: turmaId,
                     professor_id: selectedProfId,
                     escola_id: escolaId
                 });
 
-            if (error) throw error;
+            if (error) {
+                // Tratamento específico para duplicidade
+                if (error.code === '23505') throw new Error("Professor já está na turma.");
+                throw error;
+            }
 
-            toast({ title: "Professor adicionado com sucesso!" });
+            toast({ title: "Professor vinculado com sucesso!", className: "bg-green-600 text-white" });
             setSelectedProfId("");
-            fetchData(); // Recarrega a lista
-        } catch (error) {
+            fetchData();
+        } catch (error: any) {
             toast({
                 variant: "destructive",
                 title: "Erro ao vincular",
-                description: "Talvez este professor já esteja vinculado.",
+                description: error.message || "Ocorreu um erro ao tentar vincular.",
             });
         }
     };
 
-    // Remover Professor
     const handleRemoveProfessor = async (profId: string) => {
         try {
             const { error } = await supabase
-                .from('turma_professores' as any)
+                .from('turma_professores')
                 .delete()
                 .eq('turma_id', turmaId)
                 .eq('professor_id', profId);
 
             if (error) throw error;
 
-            toast({ title: "Professor removido da turma." });
+            toast({ title: "Vínculo removido." });
             fetchData();
         } catch (error) {
             toast({ variant: "destructive", title: "Erro ao remover" });
         }
     };
 
-    if (loading) return <Skeleton className="h-[200px] w-full" />;
+    if (loading) return <Skeleton className="h-[200px] w-full rounded-xl" />;
 
     const disponiveisParaAdicionar = todosProfessores.filter(
         p => !professoresVinculados.some(v => v.id === p.id)
     );
 
     return (
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 animate-in fade-in">
             {/* Área de Adicionar */}
-            <div className="flex gap-2 items-end bg-slate-50 p-4 rounded-lg border">
-                <div className="flex-1 space-y-2">
-                    <label className="text-sm font-medium">Adicionar Professor à Turma</label>
+            <div className="flex flex-col sm:flex-row gap-3 items-end bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-sm">
+                <div className="flex-1 space-y-2 w-full">
+                    <label className="text-sm font-semibold text-slate-700">Adicionar Professor à Turma</label>
                     <Select value={selectedProfId} onValueChange={setSelectedProfId}>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-white">
                             <SelectValue placeholder="Selecione um professor..." />
                         </SelectTrigger>
                         <SelectContent>
                             {disponiveisParaAdicionar.length === 0 ? (
-                                <SelectItem value="empty" disabled>Nenhum professor disponível</SelectItem>
+                                <SelectItem value="empty" disabled>Nenhum disponível</SelectItem>
                             ) : (
                                 disponiveisParaAdicionar.map((prof) => (
                                     <SelectItem key={prof.id} value={prof.id}>
-                                        {prof.nome || prof.email}
+                                        {prof.nome} <span className="text-xs text-muted-foreground">({prof.role})</span>
                                     </SelectItem>
                                 ))
                             )}
                         </SelectContent>
                     </Select>
                 </div>
-                <Button onClick={handleAddProfessor} disabled={!selectedProfId}>
+                <Button onClick={handleAddProfessor} disabled={!selectedProfId} className="w-full sm:w-auto">
                     <UserPlus className="w-4 h-4 mr-2" />
                     Vincular
                 </Button>
@@ -156,37 +166,41 @@ export function GerenciarProfessoresTurma({ turmaId, escolaId }: GerenciarProfes
 
             {/* Lista de Vinculados */}
             <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-muted-foreground">Professores Vinculados ({professoresVinculados.length})</h4>
+                <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Professores Vinculados ({professoresVinculados.length})</h4>
 
                 {professoresVinculados.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                        <ShieldAlert className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>Nenhum professor vinculado a esta turma.</p>
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                        <ShieldAlert className="w-10 h-10 mb-2 opacity-20" />
+                        <p className="text-sm font-medium">Nenhum professor vinculado.</p>
+                        <p className="text-xs">Esta turma não aparecerá no painel de nenhum professor.</p>
                     </div>
                 ) : (
-                    professoresVinculados.map((prof) => (
-                        <Card key={prof.id} className="overflow-hidden">
-                            <CardContent className="p-3 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Avatar className="h-8 w-8">
-                                        <AvatarFallback>{prof.nome?.substring(0, 2).toUpperCase() || "PR"}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="text-sm font-medium leading-none">{prof.nome}</p>
-                                        <p className="text-xs text-muted-foreground">{prof.email}</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {professoresVinculados.map((prof) => (
+                            <Card key={prof.id} className="overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                <CardContent className="p-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <Avatar className="h-9 w-9 border-2 border-white shadow-sm bg-purple-100 text-purple-700">
+                                            <AvatarFallback>{prof.nome?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-slate-800 truncate">{prof.nome}</p>
+                                            <p className="text-xs text-slate-500 truncate">{prof.email}</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => handleRemoveProfessor(prof.id)}
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ))
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                                        onClick={() => handleRemoveProfessor(prof.id)}
+                                        title="Remover acesso"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
                 )}
             </div>
         </div>

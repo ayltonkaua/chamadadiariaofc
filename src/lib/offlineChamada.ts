@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 const CHAMADA_KEY = 'chamadas_pendentes';
 const CHAMADA_SESSION_KEY = 'chamada_session';
 const CACHE_ESCOLA_KEY = 'cache_dados_escola';
+const CACHE_USER_KEY = 'cache_user_id';
+const CACHE_VERSION = '2.0.0-rls'; // Versão do cache para invalidar dados antigos
 
 export interface ChamadaOffline {
   aluno_id: string;
@@ -27,6 +29,8 @@ interface DadosEscolaOffline {
   turmas: any[];
   alunos: any[];
   escola_id: string;
+  cache_version?: string;
+  user_id?: string;
 }
 
 // ==============================================================================
@@ -58,12 +62,13 @@ export async function baixarDadosEscola(escolaId: string) {
 
     if (alunosError) throw alunosError;
 
-    // 3. Salvar no IndexedDB
+    // 3. Salvar no IndexedDB com versão e user_id
     const pacoteOffline: DadosEscolaOffline = {
       timestamp: Date.now(),
       escola_id: escolaId,
       turmas: turmas || [],
-      alunos: alunos || []
+      alunos: alunos || [],
+      cache_version: CACHE_VERSION
     };
 
     await set(CACHE_ESCOLA_KEY, pacoteOffline);
@@ -77,18 +82,39 @@ export async function baixarDadosEscola(escolaId: string) {
   }
 }
 
-export async function getDadosEscolaOffline() {
+export async function getDadosEscolaOffline(userId?: string) {
   try {
     const dados = await get<DadosEscolaOffline>(CACHE_ESCOLA_KEY);
-    return dados || null;
+    
+    if (!dados) return null;
+
+    // Validação de versão: se o cache não tem versão ou versão antiga, invalida
+    if (!dados.cache_version || dados.cache_version !== CACHE_VERSION) {
+      console.warn("Cache com versão antiga detectado. Limpando cache...");
+      await del(CACHE_ESCOLA_KEY);
+      return null;
+    }
+
+    // Validação de segurança: se userId fornecido, verifica se o cache pertence ao usuário
+    if (userId) {
+      const cachedUserId = await get<string>(CACHE_USER_KEY);
+      if (cachedUserId && cachedUserId !== userId) {
+        console.warn("Cache pertence a outro usuário. Limpando cache...");
+        await del(CACHE_ESCOLA_KEY);
+        await del(CACHE_USER_KEY);
+        return null;
+      }
+    }
+
+    return dados;
   } catch (error) {
     console.error("Erro ao ler cache offline:", error);
     return null;
   }
 }
 
-export async function getAlunosDaTurmaOffline(turmaId: string) {
-  const dados = await getDadosEscolaOffline();
+export async function getAlunosDaTurmaOffline(turmaId: string, userId?: string) {
+  const dados = await getDadosEscolaOffline(userId);
   if (!dados) return [];
   return dados.alunos.filter(a => a.turma_id === turmaId);
 }
@@ -98,10 +124,11 @@ export async function getAlunosDaTurmaOffline(turmaId: string) {
 // ==============================================================================
 /**
  * Tenta buscar turmas online. Se falhar (offline), busca do cache local.
+ * NETWORK FIRST: Sempre tenta Supabase primeiro se estiver online.
  * Use isso no seu TurmasCards ao invés de chamar o supabase direto.
  */
-export async function buscarTurmasHibrido(escolaId: string) {
-  // 1. Tentar Online primeiro
+export async function buscarTurmasHibrido(escolaId: string, userId?: string) {
+  // 1. NETWORK FIRST: Se estiver online, FORÇA busca no Supabase
   if (navigator.onLine) {
     try {
       const { data, error } = await supabase
@@ -111,18 +138,26 @@ export async function buscarTurmasHibrido(escolaId: string) {
 
       if (!error && data) {
         // Se deu certo online, atualiza o cache em background para garantir que o offline esteja fresco
+        // Salva o user_id no cache para validação futura
+        if (userId) {
+          await set(CACHE_USER_KEY, userId);
+        }
         // Não esperamos o await aqui para não travar a UI
         baixarDadosEscola(escolaId).then(() => console.log("Cache atualizado em background"));
         return { data, fonte: 'online' };
       }
+      
+      // Se houve erro, lança para cair no catch
+      if (error) throw error;
     } catch (err) {
       console.warn("Falha ao buscar online, tentando cache...", err);
+      // Continua para o fallback de cache
     }
   }
 
-  // 2. Se falhou ou está offline, busca do Cache
+  // 2. FALLBACK: Se falhou online ou está offline, busca do Cache
   console.log("Buscando turmas do cache offline...");
-  const dadosOffline = await getDadosEscolaOffline();
+  const dadosOffline = await getDadosEscolaOffline(userId);
 
   if (dadosOffline && dadosOffline.turmas) {
     return { data: dadosOffline.turmas, fonte: 'offline' };

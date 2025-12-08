@@ -7,9 +7,8 @@ import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-// Interface para definir a estrutura de um alerta gerado dinamicamente
 interface AlertaGerado {
-  id: string; // Usaremos o id do aluno como chave
+  id: string;
   alunoNome: string;
   turmaNome: string;
   mensagem: string;
@@ -35,51 +34,43 @@ const AlertasPage: React.FC = () => {
 
       setLoading(true);
       try {
-        // 1. Busca alunos e suas presenças. A RLS no Supabase já filtra pela escola do usuário.
-        const { data: alunos, error } = await supabase
-          .from("alunos")
-          .select("id, nome, turmas(nome), presencas(presente)");
+        // Chama a função segura (RPC) que filtra por professor automaticamente
+        const { data: stats, error } = await supabase
+          .rpc('get_alertas_frequencia', { _escola_id: user.escola_id });
 
         if (error) throw error;
-        
+
         const alertasGerados: AlertaGerado[] = [];
+        const LIMITE_FALTAS_PCT = 25; // Define o limite crítico (25%)
 
-        // 2. Processa cada aluno para verificar a taxa de faltas
-        for (const aluno of alunos) {
-          const presencas = aluno.presencas;
-          const totalAulas = presencas.length;
+        if (stats) {
+          stats.forEach((stat: any) => {
+            const taxa = Number(stat.percentual_faltas);
 
-          if (totalAulas > 5) { // Gera alerta apenas se houver um número mínimo de aulas
-            const totalFaltas = presencas.filter(p => !p.presente).length;
-            const taxaFaltas = Math.round((totalFaltas / totalAulas) * 100);
-
-            // 3. Gera um alerta se a taxa de faltas for >= 80%
-            if (taxaFaltas >= 80) {
+            if (taxa >= LIMITE_FALTAS_PCT) {
               alertasGerados.push({
-                id: aluno.id,
-                alunoNome: aluno.nome,
-                turmaNome: (aluno.turmas as { nome: string })?.nome || "Não informada",
-                mensagem: `O(A) aluno(a) atingiu ${taxaFaltas}% de faltas.`,
+                id: stat.aluno_id,
+                alunoNome: stat.nome,
+                turmaNome: stat.turma_nome || "Turma",
+                mensagem: `O(A) aluno(a) atingiu ${taxa}% de faltas.`,
                 tipo: 'Faltas Elevadas',
                 dadosAdicionais: {
-                  totalAulas,
-                  totalFaltas,
-                  taxaFaltas,
+                  totalAulas: Number(stat.total_aulas),
+                  totalFaltas: Number(stat.total_faltas),
+                  taxaFaltas: taxa,
                 },
               });
             }
-          }
+          });
         }
-        
-        // Ordena os alertas pelo nome do aluno
-        alertasGerados.sort((a, b) => a.alunoNome.localeCompare(b.alunoNome));
-        setAlertas(alertasGerados);
+
+        setAlertas(alertasGerados.sort((a, b) => a.alunoNome.localeCompare(b.alunoNome)));
 
       } catch (err: any) {
-        console.error("Erro ao gerar alertas:", err);
+        console.error("Erro alertas:", err);
         toast({
-          title: "Erro ao carregar alertas",
-          description: err.message,
+          title: "Erro ao carregar",
+          description: "Não foi possível carregar os alertas de frequência.",
           variant: "destructive",
         });
       } finally {
@@ -87,9 +78,7 @@ const AlertasPage: React.FC = () => {
       }
     };
 
-    if (user?.escola_id) {
-        gerarAlertasDeFaltas();
-    }
+    gerarAlertasDeFaltas();
   }, [user?.escola_id]);
 
   if (loading) {
@@ -100,44 +89,56 @@ const AlertasPage: React.FC = () => {
     );
   }
 
+  // Verifica se é professor para mostrar aviso visual
+  const isProfessor = user?.type === 'professor' || user?.role === 'professor';
+
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-in fade-in">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Central de Alertas</h1>
+
+      {isProfessor && (
+        <div className="bg-blue-50 text-blue-700 px-4 py-3 rounded-lg mb-6 text-sm border border-blue-200 flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4" />
+          <span>Mostrando apenas alunos vinculados às suas turmas.</span>
+        </div>
+      )}
+
       {alertas.length > 0 ? (
         <div className="space-y-4">
           {alertas.map((alerta) => (
-            <Alert key={alerta.id} variant="destructive" className="flex flex-col sm:flex-row sm:items-center">
-              <div className="flex-shrink-0 hidden sm:block">
-                <ShieldAlert className="h-5 w-5" />
+            <Alert key={alerta.id} variant="destructive" className="flex flex-col sm:flex-row sm:items-center bg-white border-l-4 border-l-red-500 border-y border-r shadow-sm">
+              <div className="flex-shrink-0 hidden sm:block p-2">
+                <ShieldAlert className="h-6 w-6 text-red-600" />
               </div>
-              <div className="flex-grow sm:ml-4">
-                <AlertTitle className="font-bold">{alerta.tipo}: {alerta.alunoNome}</AlertTitle>
-                <AlertDescription>
-                  <p className="text-sm">{alerta.mensagem}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Turma: {alerta.turmaNome} | Faltas: {alerta.dadosAdicionais.totalFaltas} de {alerta.dadosAdicionais.totalAulas} aulas.
+              <div className="flex-grow sm:ml-4 py-2">
+                <AlertTitle className="font-bold text-gray-800 flex items-center gap-2">
+                  {alerta.alunoNome}
+                  <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                    {alerta.dadosAdicionais.taxaFaltas}% Faltas
+                  </span>
+                </AlertTitle>
+                <AlertDescription className="text-gray-600 mt-1">
+                  <p className="text-sm">
+                    Turma: <strong>{alerta.turmaNome}</strong> • {alerta.dadosAdicionais.totalFaltas} faltas em {alerta.dadosAdicionais.totalAulas} aulas registradas.
                   </p>
                 </AlertDescription>
               </div>
               <div className="mt-3 sm:mt-0 sm:ml-4 flex-shrink-0">
-                {/* CORREÇÃO: Link ajustado para a rota correta e estilizado como um botão */}
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/alunos/${alerta.id}`}>
-                    Ver Histórico
-                  </Link>
+                <Button asChild size="sm" variant="outline" className="w-full sm:w-auto border-red-200 text-red-700 hover:bg-red-50">
+                  <Link to={`/turmas/${alerta.id}/alunos`}>Ver Aluno</Link>
                 </Button>
               </div>
             </Alert>
           ))}
         </div>
       ) : (
-        <div className="text-center py-10 px-4 border-2 border-dashed rounded-lg">
-            <div className="mx-auto h-12 w-12 text-gray-400">
-                <Bell size={48} />
-            </div>
-          <h3 className="mt-2 text-sm font-semibold text-gray-900">Nenhum alerta no momento</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Tudo parece estar em ordem. Novos alertas sobre alunos com altas taxas de falta aparecerão aqui.
+        <div className="text-center py-16 px-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/30">
+          <div className="mx-auto h-12 w-12 text-gray-300 mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+            <Bell size={24} />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">Tudo tranquilo por aqui</h3>
+          <p className="text-gray-500 max-w-sm mx-auto mt-2">
+            Nenhum aluno atingiu o limite crítico de faltas (25%) recentemente.
           </p>
         </div>
       )}

@@ -25,7 +25,7 @@ interface Turma {
 }
 
 const Dashboard: React.FC = () => {
-  const { user, escolaId } = useAuth(); // AuthContext pode estar vazio offline
+  const { user } = useAuth(); // AuthContext pode estar vazio offline
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState("turmas");
   const [loading, setLoading] = useState(true);
@@ -57,24 +57,16 @@ const Dashboard: React.FC = () => {
 
     // 2. ESTRATÉGIA ONLINE COM FALLBACK
     try {
-      // Tenta identificar a escola
-      let activeEscolaId = escolaId || user?.escola_id;
-
-      // Se não tem ID no contexto (comum ao recarregar), tenta buscar rapidinho
-      if (!activeEscolaId && user) {
-        const { data } = await supabase.from('user_roles').select('escola_id').eq('user_id', user.id).maybeSingle();
-        activeEscolaId = data?.escola_id;
+      // Verifica se usuário está autenticado
+      if (!user) {
+        throw new Error("Usuário não autenticado");
       }
 
-      // Se mesmo assim não achou (ex: token expirado ou sem net real), força offline
-      if (!activeEscolaId) {
-        throw new Error("Escola não identificada online");
-      }
-
+      // RLS já filtra por escola e role automaticamente
+      // Staff vê todas as turmas da escola, Professor vê apenas suas turmas, Aluno vê apenas sua turma
       const { data, error } = await supabase
         .from('turmas')
         .select(`id, nome, numero_sala, turno, escola_id, alunos:alunos(count)`)
-        .eq('escola_id', activeEscolaId)
         .order('nome');
 
       if (error) throw error;
@@ -97,13 +89,13 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, escolaId]);
+  }, [user]);
 
   // Função auxiliar para ler do IndexedDB
   const carregarDadosOffline = async () => {
     try {
       console.log("Lendo IndexedDB...");
-      const dadosOffline = await getDadosEscolaOffline();
+      const dadosOffline = await getDadosEscolaOffline(user?.id);
 
       if (dadosOffline && dadosOffline.turmas && dadosOffline.turmas.length > 0) {
         const turmasOffline = dadosOffline.turmas.map((t: any) => {

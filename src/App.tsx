@@ -1,20 +1,16 @@
 import { useEffect, useState } from "react";
+import { clear } from 'idb-keyval'; // Importe isso no topo
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter as Router, Routes, Route, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AttendanceProvider } from "@/contexts/AttendanceContext";
 import { EscolaConfigProvider } from "@/contexts/EscolaConfigContext";
 import EscolaThemeProvider from "@/components/EscolaThemeProvider";
 import Layout from "@/components/layout/Layout";
-
-// --- REFINE IMPORTS ---
-import { Refine } from "@refinedev/core";
-import routerBindings, { UnsavedChangesNotifier, DocumentTitleHandler } from "@refinedev/react-router-v6";
-import { databaseProvider } from "@/providers/data-provider";
-import { supabase } from "@/integrations/supabase/client"; // Usado para auth no Refine
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 // Importações de Páginas
 import LoginPage from "@/pages/LoginPage";
@@ -73,10 +69,38 @@ const OfflineBanner = () => {
 };
 
 const App = () => {
+  // NOVO: Limpeza de Cache de Segurança
+  useEffect(() => {
+    const checkSecurityVersion = async () => {
+      const CURRENT_VERSION = 'v2_secure_rls'; // Mudamos a versão
+      const storedVersion = localStorage.getItem('app_version');
+
+      if (storedVersion !== CURRENT_VERSION) {
+        console.warn("Versão de segurança antiga detectada. Limpando cache local...");
+
+        // 1. Limpa o IndexedDB (onde as turmas antigas estão escondidas)
+        await clear();
+
+        // 2. Limpa LocalStorage
+        localStorage.clear();
+
+        // 3. Define nova versão
+        localStorage.setItem('app_version', CURRENT_VERSION);
+
+        // 4. Recarrega a página para garantir estado limpo
+        window.location.reload();
+      }
+    };
+
+    checkSecurityVersion();
+  }, []);
   useEffect(() => {
     const syncOfflineData = async () => {
       if (navigator.onLine) {
         try {
+          // Invalida todas as queries para forçar recarregamento dos dados
+          queryClient.invalidateQueries();
+
           const { success, count, error } = await sincronizarChamadasOffline();
           if (success && count && count > 0) {
             toast({
@@ -89,9 +113,16 @@ const App = () => {
         }
       }
     };
-    window.addEventListener('online', syncOfflineData);
+
+    const handleOnline = () => {
+      // Quando a conexão volta, invalida queries e sincroniza
+      queryClient.invalidateQueries();
+      syncOfflineData();
+    };
+
+    window.addEventListener('online', handleOnline);
     syncOfflineData();
-    return () => window.removeEventListener('online', syncOfflineData);
+    return () => window.removeEventListener('online', handleOnline);
   }, []);
 
   return (
@@ -106,73 +137,22 @@ const App = () => {
                 <Sonner />
 
                 <Router>
-                  {/* O Refine deve ficar DENTRO do Router mas FORA das Routes */}
-                  <Refine
-                    dataProvider={databaseProvider}
-                    routerProvider={routerBindings}
-                    authProvider={{
-                      // Auth Provider Simples do Refine conectado ao Supabase
-                      login: async ({ email, password }) => {
-                        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-                        if (error) return { success: false, error };
-                        return { success: true, redirectTo: "/dashboard" };
-                      },
-                      logout: async () => {
-                        await supabase.auth.signOut();
-                        return { success: true, redirectTo: "/login" };
-                      },
-                      onError: async (error) => { console.error(error); return { error }; },
-                      check: async () => {
-                        const { data } = await supabase.auth.getSession();
-                        return { authenticated: !!data.session };
-                      },
-                      getPermissions: async () => null,
-                    }}
-                    resources={[
-                      // Aqui definimos as "Tabelas" que o Refine vai gerenciar
-                      // O "name" deve bater com o nome da tabela no Supabase (ou RxDB futuro)
-                      {
-                        name: "turmas",
-                        list: "/dashboard", // Quando pedir para listar turmas, ele sabe que é no dashboard (exemplo)
-                        show: "/turmas/:turmaId/alunos",
-                      },
-                      {
-                        name: "alunos",
-                        list: "/gerenciar-alunos/:turmaId",
-                        show: "/turmas/:turmaId/alunos/:alunoId",
-                      },
-                      {
-                        name: "chamadas",
-                        list: "/historico-chamada/:turmaId",
-                        create: "/chamadas/:turmaId"
-                      }
-                    ]}
-                    options={{
-                      syncWithLocation: true,
-                      warnWhenUnsavedChanges: true,
-                    }}
-                  >
-                    <Routes>
-                      {/* --- Rotas Públicas --- */}
-                      <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
-                      <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
-                      <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
-                      <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
-                      <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
-                      <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
+                  <Routes>
+                    {/* --- Rotas Públicas --- */}
+                    <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
+                    <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
+                    <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
+                    <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
+                    <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
+                    <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
+                    <Route path="/student-query" element={<StudentQueryPage />} />
 
-                      {/* --- Rotas Autenticadas --- */}
-                      {/* Usamos o Outlet do Refine para injetar funcionalidades extras se necessário, mas mantemos seu Layout */}
-                      <Route
-                        element={
-                          <Layout>
-                            <Outlet /> {/* O conteúdo das páginas renderiza aqui */}
-                          </Layout>
-                        }
-                      >
+                    {/* --- Rotas Autenticadas (Todas/Comum) --- */}
+                    <Route element={<ProtectedRoute />}>
+                      <Route element={<Layout><Outlet /></Layout>}>
                         <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/portal-aluno" element={<PortalAlunoPage />} />
 
+                        {/* Funcionalidades Comuns */}
                         <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
                         <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
                         <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
@@ -182,41 +162,35 @@ const App = () => {
                         <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
                         <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
                         <Route path="/atestados" element={<AtestadosPage />} />
-                        <Route path="/relatorios" element={<RelatoriosPage />} />
-                        <Route path="/disciplinas" element={<DisciplinasPage />} />
                         <Route path="/alertas" element={<AlertasPage />} />
-                        <Route path="/student-query" element={<StudentQueryPage />} />
+                        <Route path="/disciplinas" element={<DisciplinasPage />} />
                         <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
-                        <Route path="/notificacoes" element={<NotificacoesPage />} />
 
                         {/* Pesquisas */}
                         <Route path="/pesquisas" element={<PesquisasListPage />} />
                         <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
                         <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
 
-                        {/* Gestão */}
-                        <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
+                        {/* Perfil */}
                         <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
-                        <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
+
+                        {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
+                        <Route path="/portal-aluno" element={<PortalAlunoPage />} />
                       </Route>
+                    </Route>
 
-                      <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
-                    </Routes>
+                    {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
+                    <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
+                      <Route element={<Layout><Outlet /></Layout>}>
+                        <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
+                        <Route path="/relatorios" element={<RelatoriosPage />} />
+                        <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
+                        <Route path="/notificacoes" element={<NotificacoesPage />} />
+                      </Route>
+                    </Route>
 
-                    <UnsavedChangesNotifier />
-                    <DocumentTitleHandler
-                      handler={({ resource, action, params }) => {
-                        // Se estivermos em uma página específica (ex: Turmas), mostra "Turmas | Chamada Diária"
-                        if (resource?.label || resource?.name) {
-                          // Capitaliza a primeira letra do recurso
-                          const pageName = (resource.label ?? resource.name ?? "").charAt(0).toUpperCase() + (resource.label ?? resource.name ?? "").slice(1);
-                          return `${pageName} | Chamada Diária`;
-                        }
-                        // Se for a home ou indefinido, mostra apenas o nome do app
-                        return "Chamada Diária";
-                      }}
-                    />
-                  </Refine>
+                    <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
+                  </Routes>
                 </Router>
               </TooltipProvider>
             </AttendanceProvider>

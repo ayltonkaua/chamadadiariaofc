@@ -1,6 +1,6 @@
 import React from 'react';
 import Sidebar from './Sidebar';
-import { MobileNav } from './MobileNav'; // Certifique-se que o caminho está correto
+import { MobileNav } from './MobileNav';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePresence } from "@/hooks/usePresence";
 
@@ -10,47 +10,40 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, showSidebar = true }) => {
-  usePresence(); // <--- Hook de presença adicionado
+  usePresence();
   const { user, loadingUser } = useAuth();
 
-  // 1. Lógica para Sidebar de Admin
-  const shouldShowAdminSidebar = showSidebar && user?.type === 'admin';
+  // Lista de quem pode ver a Sidebar
+  const authorizedTypes = ['admin', 'staff', 'professor', 'diretor', 'coordenador', 'secretario'];
+  const shouldShowAdminSidebar = showSidebar && user && (authorizedTypes.includes(user.type) || authorizedTypes.includes(user.role || ''));
 
-  // 2. CORREÇÃO DO BUG:
-  // A barra mobile só aparece se:
-  // - O usuário EXISTIR (estiver logado)
-  // - E o tipo for 'aluno' (ou 'indefinido', se preferir)
-  // Isso evita que ela apareça na tela de Login (onde user é null)
+  // Barra mobile apenas para alunos
   const shouldShowMobileNav = !!user && user.type === 'aluno';
 
   if (loadingUser) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
-        <p>Carregando...</p>
+        <p className="text-slate-500 animate-pulse">Carregando sistema...</p>
       </div>
     );
   }
 
-  // Layout do Admin (Desktop/Mobile com Sidebar)
+  // Layout com Sidebar (Equipe/Professores)
   if (shouldShowAdminSidebar) {
+    // CORREÇÃO: Removemos a div envolvente. O Sidebar já é o layout completo.
     return (
-      <div className="flex h-screen">
-        <Sidebar>
-          <main className="flex-1 overflow-y-auto">{children}</main>
-        </Sidebar>
-      </div>
+      <Sidebar>
+        {children}
+      </Sidebar>
     );
   }
 
   // Layout Padrão (Aluno / Público)
   return (
-    // Adicionamos 'pb-20' apenas se a MobileNav for exibida, para o conteúdo não ficar escondido atrás dela
     <div className={`min-h-screen bg-gray-50 ${shouldShowMobileNav ? 'pb-20 sm:pb-0' : ''}`}>
       <main className="h-full overflow-y-auto">
         {children}
       </main>
-
-      {/* Renderização Condicional Corrigida */}
       {shouldShowMobileNav && <MobileNav />}
     </div>
   );

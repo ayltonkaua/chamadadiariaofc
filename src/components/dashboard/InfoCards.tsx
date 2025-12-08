@@ -7,8 +7,9 @@ import { getDadosEscolaOffline } from "@/lib/offlineChamada";
 import { useNavigate } from "react-router-dom";
 
 export function InfoCards() {
-  const { escolaId } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const isProfessor = user?.role === 'professor';
   const [stats, setStats] = useState({
     totalAlunos: 0,
     totalTurmas: 0,
@@ -17,17 +18,19 @@ export function InfoCards() {
   useEffect(() => {
     const fetchStats = async () => {
       // 1. TENTA ONLINE
-      if (navigator.onLine && escolaId) {
+      // RLS já filtra automaticamente por escola e role
+      // Segurança: só busca se tiver escola_id
+      if (navigator.onLine && user?.escola_id) {
         try {
           const { count: turmasCount } = await supabase
             .from("turmas")
             .select("id", { count: "exact", head: true })
-            .eq("escola_id", escolaId);
+            .eq("escola_id", user.escola_id);
 
           const { count: alunosCount } = await supabase
             .from("alunos")
             .select("id", { count: "exact", head: true })
-            .eq("escola_id", escolaId);
+            .eq("escola_id", user.escola_id);
 
           setStats({
             totalAlunos: alunosCount || 0,
@@ -41,7 +44,7 @@ export function InfoCards() {
 
       // 2. FALLBACK OFFLINE
       try {
-        const dadosOffline = await getDadosEscolaOffline();
+        const dadosOffline = await getDadosEscolaOffline(user?.id);
         if (dadosOffline) {
           setStats({
             totalAlunos: dadosOffline.alunos.length,
@@ -54,13 +57,15 @@ export function InfoCards() {
     };
 
     fetchStats();
-  }, [escolaId]);
+  }, [user?.escola_id]);
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total de Alunos</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            {isProfessor ? "Meus Alunos" : "Total de Alunos"}
+          </CardTitle>
           <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -70,7 +75,9 @@ export function InfoCards() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Turmas Ativas</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            {isProfessor ? "Minhas Turmas" : "Turmas Ativas"}
+          </CardTitle>
           <GraduationCap className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>

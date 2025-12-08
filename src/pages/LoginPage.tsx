@@ -6,30 +6,29 @@ import { Navigate } from "react-router-dom";
 const LoginPage: React.FC = () => {
   const { user, loadingUser } = useAuth();
 
-  // Enquanto o contexto está carregando a sessão, não faça nada para evitar piscar a tela.
+  // Enquanto carrega, não mostra nada (ou Spinner)
   if (loadingUser) {
-    return null; // ou um componente de Spinner/Loading
+    return null;
   }
 
-  // Se, após o carregamento, o usuário já estiver logado, redirecione para o local correto.
+  // Se já estiver logado, redireciona conforme o TIPO
   if (user) {
-    if (user.type === 'admin') {
+    // 1. Redireciona TODA a equipe para o Dashboard
+    if (['admin', 'staff', 'professor', 'diretor', 'coordenador', 'secretario'].includes(user.type || user.role || '')) {
       return <Navigate to="/dashboard" replace />;
     }
+    // 2. Redireciona Aluno
     if (user.type === 'aluno') {
       return <Navigate to="/portal-aluno" replace />;
     }
-    // Se o tipo for 'indefinido', ele permanecerá na tela de login,
-    // e o componente Login exibirá a mensagem de erro apropriada.
   }
 
-  // Se não houver usuário logado, mostre o formulário de login.
   return (
     <div>
       <Login />
       <div className="flex justify-center mt-2">
         <p className="text-sm text-gray-700">
-          Entre em contato com @chamada_diaria
+          Entre em contato com a secretaria se não conseguir acessar.
         </p>
       </div>
     </div>

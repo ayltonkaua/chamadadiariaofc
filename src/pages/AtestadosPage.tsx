@@ -61,7 +61,7 @@ const AtestadosPage: React.FC = () => {
   const [formData, setFormData] = useState({ aluno_id: "", data_inicio: "", data_fim: "", descricao: "" });
   
   const fetchAtestados = useCallback(async () => {
-    if (!user?.escola_id) {
+    if (!user) {
         setLoading(false);
         return;
     };
@@ -71,10 +71,11 @@ const AtestadosPage: React.FC = () => {
       const from = (currentPage - 1) * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
+      // RLS já filtra por escola e role automaticamente
+      // Staff vê todos os atestados da escola, Professor vê apenas de suas turmas, Aluno vê apenas os seus
       let query = supabase
         .from("atestados")
-        .select("*, alunos!inner(nome, turmas(nome))", { count: 'exact' })
-        .eq("escola_id", user.escola_id);
+        .select("*, alunos!inner(nome, turmas(nome))", { count: 'exact' });
 
       query = query.eq('status', activeTab);
 
@@ -100,7 +101,7 @@ const AtestadosPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.escola_id, currentPage, activeTab, searchTerm, dateRange, toast]);
+  }, [user, currentPage, activeTab, searchTerm, dateRange, toast]);
 
   useEffect(() => {
     fetchAtestados();
@@ -108,14 +109,15 @@ const AtestadosPage: React.FC = () => {
   
   useEffect(() => {
     const fetchAlunos = async () => {
-        if(!user?.escola_id) return;
-        const { data } = await supabase.from('alunos').select('id, nome, matricula').eq('escola_id', user.escola_id).order('nome');
+        if(!user) return;
+        // RLS já filtra por escola e role automaticamente
+        const { data } = await supabase.from('alunos').select('id, nome, matricula').order('nome');
         setAlunos(data || []);
     };
     if (showFormDialog) {
         fetchAlunos();
     }
-  }, [user?.escola_id, showFormDialog]);
+  }, [user, showFormDialog]);
 
   const totalPages = useMemo(() => Math.ceil(totalCount / ITEMS_PER_PAGE), [totalCount]);
   
@@ -146,6 +148,7 @@ const AtestadosPage: React.FC = () => {
         data_inicio: formData.data_inicio,
         data_fim: formData.data_fim,
         descricao: formData.descricao,
+        // escola_id será preenchido automaticamente pela RLS ou trigger, mas podemos manter para garantir
         escola_id: user?.escola_id,
         status: editingAtestado?.status || 'pendente'
       };

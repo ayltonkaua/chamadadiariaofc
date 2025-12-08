@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext"; // Seu contexto original
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getDadosEscolaOffline } from "@/lib/offlineChamada";
+import { get, set, del } from "idb-keyval";
 
 // Modais
 import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
@@ -48,12 +50,14 @@ const TurmaCardItem = ({
   turma,
   onEdit,
   onDeleteRequest,
-  corPrimaria
+  corPrimaria,
+  canEdit
 }: {
   turma: Turma;
   onEdit: (t: Turma) => void;
   onDeleteRequest: (t: Turma) => void;
   corPrimaria: string;
+  canEdit: boolean;
 }) => {
   const navigate = useNavigate();
   const qtdAlunos = turma._count?.alunos ?? turma.alunos ?? 0;
@@ -87,25 +91,27 @@ const TurmaCardItem = ({
           </div>
         </div>
 
-        {/* Ações no Topo (Editar/Excluir) */}
-        <div className="flex -mr-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 text-blue-600 hover:bg-blue-50 rounded-full"
-            onClick={() => onEdit(turma)}
-          >
-            <Edit className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 text-red-500 hover:bg-red-50 rounded-full"
-            onClick={() => onDeleteRequest(turma)}
-          >
-            <Trash2 className="h-5 w-5" />
-          </Button>
-        </div>
+        {/* Ações no Topo (Editar/Excluir) - Apenas se tiver permissão */}
+        {canEdit && (
+          <div className="flex -mr-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 text-blue-600 hover:bg-blue-50 rounded-full"
+              onClick={() => onEdit(turma)}
+            >
+              <Edit className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 text-red-500 hover:bg-red-50 rounded-full"
+              onClick={() => onDeleteRequest(turma)}
+            >
+              <Trash2 className="h-5 w-5" />
+            </Button>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="flex-grow flex flex-col justify-center px-4 py-2">
@@ -154,7 +160,8 @@ const TurmaCardItem = ({
 
 // --- COMPONENTE PRINCIPAL ---
 export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh, turno }: TurmasCardsProps) {
-  const { user, escolaId } = useAuth();
+  const { user } = useAuth();
+  const escolaId = user?.escola_id;
 
   // --- ADAPTAÇÃO AO SEU CONTEXTO ORIGINAL ---
   // Seu contexto retorna { config, loading, ... }
@@ -176,32 +183,82 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
   const turmasExibidas = turmasPai || localTurmas;
   const isLoading = loadingPai !== undefined ? loadingPai : localLoading;
 
+  const CACHE_USER_KEY = 'cache_user_id';
+
   const fetchTurmasLocal = async () => {
     if (turmasPai) return;
     setLocalLoading(true);
     try {
-      if (!escolaId) return;
-      const { data, error } = await supabase
-        .from('turmas')
-        .select(`id, nome, numero_sala, turno, escola_id, alunos:alunos(count)`)
-        .eq('escola_id', escolaId)
-        .eq('turno', turno)
-        .order('nome');
+      if (!user?.id) return;
 
-      if (error) throw error;
+      // NETWORK FIRST: Sempre tenta Supabase primeiro se estiver online
+      // RLS já filtra por escola e role automaticamente
+      if (navigator.onLine) {
+        try {
+          let query = supabase
+            .from('turmas')
+            .select(`id, nome, numero_sala, turno, escola_id, alunos:alunos(count)`)
+            .order('nome');
 
-      const formatadas = (data || []).map((t: any) => ({
-        id: t.id,
-        nome: t.nome,
-        escola_id: t.escola_id,
-        numero_sala: t.numero_sala,
-        turno: t.turno,
-        _count: { alunos: t.alunos?.[0]?.count || 0 },
-        alunos: t.alunos?.[0]?.count || 0
-      }));
-      setLocalTurmas(formatadas);
+          // Filtro de turno é opcional e pode ser aplicado se necessário
+          if (turno) {
+            query = query.eq('turno', turno);
+          }
+
+          const { data, error } = await query;
+
+          if (error) throw error;
+
+          const formatadas = (data || []).map((t: any) => ({
+            id: t.id,
+            nome: t.nome,
+            escola_id: t.escola_id,
+            numero_sala: t.numero_sala,
+            turno: t.turno,
+            _count: { alunos: t.alunos?.[0]?.count || 0 },
+            alunos: t.alunos?.[0]?.count || 0
+          }));
+
+          setLocalTurmas(formatadas);
+          setIsOfflineMode(false);
+
+          // Salva o user_id atual no cache para validação futura
+          await set(CACHE_USER_KEY, user.id);
+
+          return; // Sucesso, não precisa tentar cache
+        } catch (error) {
+          console.warn("Erro ao buscar turmas online, tentando cache...", error);
+          // Continua para o fallback de cache
+        }
+      }
+
+      // FALLBACK: Cache offline apenas se online falhou ou está offline
+      console.log("Buscando turmas do cache offline...");
+      const dadosOffline = await getDadosEscolaOffline(user.id);
+
+      if (dadosOffline && dadosOffline.turmas) {
+        // Filtra turmas por turno (escola_id já está no cache offline)
+        const turmasFiltradas = dadosOffline.turmas
+          .filter((t: any) => (!turno || t.turno === turno))
+          .map((t: any) => ({
+            id: t.id,
+            nome: t.nome,
+            escola_id: t.escola_id,
+            numero_sala: t.numero_sala,
+            turno: t.turno,
+            _count: { alunos: 0 }, // Cache não tem contagem
+            alunos: 0
+          }));
+
+        setLocalTurmas(turmasFiltradas);
+        setIsOfflineMode(true);
+      } else {
+        setLocalTurmas([]);
+        setIsOfflineMode(true);
+      }
     } catch (error) {
       console.error("Erro fetch local:", error);
+      setLocalTurmas([]);
     } finally {
       setLocalLoading(false);
     }
@@ -216,7 +273,7 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
       window.removeEventListener('online', handleStatus);
       window.removeEventListener('offline', handleStatus);
     };
-  }, [escolaId, turno, turmasPai]);
+  }, [user, turno, turmasPai]);
 
   const handleRefreshGlobal = () => {
     if (onRefresh) onRefresh();
@@ -231,6 +288,11 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
     );
   }
 
+  // Verificação de permissão para mostrar botões administrativos
+  // Staff (admin, diretor, coordenador, secretario, super_admin) pode gerenciar
+  // Professores NÃO devem ver botões de editar/excluir/importar
+  const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin'].includes(user?.role || '');
+
   return (
     <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 px-1 gap-4">
@@ -243,7 +305,7 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
           )}
         </div>
 
-        {!turmasPai && (
+        {!turmasPai && isManager && (
           <Button onClick={() => setShowImportDialog(true)} variant="outline" className="w-full sm:w-auto flex items-center gap-2 border-dashed border-2 h-10">
             <FileSpreadsheet size={18} className="text-green-600" />
             <span>Importar Turmas (Excel)</span>
@@ -253,8 +315,27 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
 
       {turmasExibidas.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg bg-slate-50 mx-1">
-          <RefreshCw className="w-10 h-10 text-gray-300 mb-2" />
-          <p className="text-gray-500 font-medium">Nenhuma turma encontrada.</p>
+          <RefreshCw className="w-10 h-10 text-gray-300 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma turma encontrada</h3>
+          <p className="text-gray-500 mb-6 max-w-sm">
+            {isManager
+              ? "Você ainda não tem turmas cadastradas ou vinculadas neste turno."
+              : "Nenhuma turma vinculada ao seu perfil. Entre em contato com a coordenação."}
+          </p>
+
+          {/* Botão de Ação Condicional */}
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleRefreshGlobal}>
+              Recarregar Página
+            </Button>
+
+            {isManager && (
+              <Button onClick={() => setShowImportDialog(true)} className="gap-2">
+                <FileSpreadsheet size={18} />
+                Importar Turmas
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 animate-in fade-in pb-20">
@@ -264,7 +345,8 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
               turma={turma}
               onEdit={setTurmaParaEditar}
               onDeleteRequest={setTurmaParaRemover}
-              corPrimaria={corPrimaria} // Passando a cor lida corretamente
+              corPrimaria={corPrimaria}
+              canEdit={isManager}
             />
           ))}
         </div>

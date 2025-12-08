@@ -10,9 +10,7 @@ import {
   Settings,
   LogOut,
   Menu,
-  X,
   FileText,
-  BarChart3,
   Bell,
   AlertTriangle,
   ClipboardList,
@@ -20,7 +18,7 @@ import {
   Search,
   UserCheck,
   LineChart,
-  Shield, // Ícone adicionado
+  Shield,
   BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -56,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     {
       title: 'Chamadas',
       icon: UserCheck,
-      href: '/dashboard', // Manter o href principal para o grupo
+      href: '/dashboard',
       description: 'Realizar chamadas',
       subItems: [
         { title: 'Fazer Chamada', href: '/dashboard', icon: Calendar },
@@ -66,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     {
       title: 'Alunos',
       icon: Users,
-      href: '/dashboard', // Manter o href principal para o grupo
+      href: '/dashboard',
       description: 'Gerenciar alunos',
       subItems: [
         { title: 'Gerenciar Alunos', href: '/dashboard', icon: Users },
@@ -108,14 +106,14 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       icon: Bell,
       href: '/notificacoes',
       description: 'Central de notificações',
-      roles: ['admin', 'diretor'] // Exemplo de permissão
+      roles: ['admin', 'diretor']
     },
     {
       title: 'Perfil da Escola',
       icon: Settings,
       href: '/perfil-escola',
       description: 'Informações da escola',
-      roles: ['admin'] // Exemplo de permissão
+      roles: ['admin']
     },
     {
       title: 'Usuários e Acesso',
@@ -145,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     }
 
     return {
-      color: 'inherit', // Cor padrão do texto para itens não ativos
+      color: 'inherit',
       '&:hover': {
         backgroundColor: `${primaryColor}10`
       }
@@ -186,7 +184,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {/* ===== LÓGICA DE FILTRAGEM ADICIONADA ===== */}
         {menuItems
           .filter(item => !item.roles || item.roles.includes(user?.role || ''))
           .map((item) => (
@@ -240,35 +237,40 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-gray-50">
+      {/* Sidebar Desktop */}
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200 shadow-sm">
           <SidebarContent />
         </div>
       </div>
 
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden fixed top-4 left-4 z-50 bg-white"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-80 p-0 bg-white">
-          <SidebarContent />
-        </SheetContent>
-      </Sheet>
-
+      {/* Área de Conteúdo Principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="md:hidden bg-white border-b border-gray-200 p-4">
-          <div className="flex items-center justify-center">
-            <h1 className="font-bold text-lg text-purple-700 text-center">Chamada Diária</h1>
+        {/* Header Mobile - CORREÇÃO: Botão integrado ao layout, não flutuante */}
+        <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center sticky top-0 z-20">
+          <Sheet open={isOpen} onOpenChange={setIsOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="mr-2 -ml-2 text-slate-700"
+              >
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[85vw] max-w-xs p-0 bg-white">
+              <SidebarContent />
+            </SheetContent>
+          </Sheet>
+
+          <div className="flex-1 flex items-center justify-center mr-8">
+            <h1 className="font-bold text-lg text-purple-700 text-center truncate">
+              {config?.nome || 'Chamada Diária'}
+            </h1>
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto bg-gray-50">
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-6">
           {children}
         </main>
       </div>

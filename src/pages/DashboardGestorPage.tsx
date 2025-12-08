@@ -108,7 +108,7 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 
 // --- PÁGINA PRINCIPAL ---
 export default function DashboardGestorPage() {
-  const { user, escolaId } = useAuth();
+  const { user } = useAuth();
 
   // --- ESTADOS ---
   const [kpis, setKpis] = useState<KpiData | null>(null);
@@ -141,26 +141,19 @@ export default function DashboardGestorPage() {
       setLoading(true);
       setStatusMsg("Identificando escola...");
 
-      // 1. TENTATIVA DE RECUPERAÇÃO DO ID DA ESCOLA
-      let activeEscolaId = escolaId;
-
-      if (!activeEscolaId && user) {
-        console.log("⚠️ Contexto lento. Buscando escola manualmente no banco...");
-        const { data } = await supabase.from('user_roles').select('escola_id').eq('user_id', user.id).maybeSingle();
-        activeEscolaId = data?.escola_id;
-      }
-
-      if (!activeEscolaId) {
+      // 1. VERIFICAÇÃO DE USUÁRIO E ESCOLA
+      if (!user?.escola_id) {
         console.log("⏳ ID da escola ainda não encontrado. Aguardando...");
         // Não setamos loading=false aqui para manter o spinner rodando até achar
         return;
       }
 
+      const activeEscolaId = user.escola_id;
       console.log("✅ Escola confirmada:", activeEscolaId, "- Iniciando download de dados...");
       setStatusMsg("Baixando dados pedagógicos...");
 
       // 2. PARALELIZAÇÃO DE REQUISIÇÕES (Melhora performance)
-      // Buscamos tudo de uma vez
+      // RLS já filtra automaticamente por escola e role
       const [
         kpiRes,
         kpiAdminRes,
@@ -177,9 +170,8 @@ export default function DashboardGestorPage() {
         supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: activeEscolaId }),
         supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: activeEscolaId }),
         supabase.rpc('get_ultimas_observacoes', { limite: 10, _escola_id: activeEscolaId }),
-        supabase.from('turmas').select('id, nome, turno').eq('escola_id', activeEscolaId).order('nome'),
+        supabase.from('turmas').select('id, nome, turno').order('nome'),
         supabase.from('presencas').select('data_chamada, presente, turma_id, escola_id')
-          .eq('escola_id', activeEscolaId)
           .gte('data_chamada', subDays(new Date(), 15).toISOString())
       ]);
 
@@ -208,7 +200,7 @@ export default function DashboardGestorPage() {
     if (user) {
       fetchAllData();
     }
-  }, [user, escolaId, filtroAno]); // Recarrega se usuário, escola ou ano mudar
+  }, [user, filtroAno]); // Recarrega se usuário ou ano mudar
 
   // --- LÓGICA DE FILTRAGEM (MEMOIZED) ---
   const activeTurmas = useMemo(() => {

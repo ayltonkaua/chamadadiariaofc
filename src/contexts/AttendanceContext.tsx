@@ -52,11 +52,20 @@ export const AttendanceProvider: React.FC<{ children: ReactNode }> = ({ children
   const [currentAttendance, setCurrentAttendance] = useState<Map<string, boolean>>(new Map());
 
   // Carregar turmas e alunos do Supabase (Otimizado)
+  // RLS já filtra automaticamente por escola e role
   const fetchClasses = async () => {
     try {
-      const { data: turmas, error: errorTurmas } = await supabase.from("turmas").select("id, nome");
-      if (errorTurmas || !turmas) {
+      const { data: turmas, error: errorTurmas } = await supabase
+        .from("turmas")
+        .select("id, nome");
+      
+      if (errorTurmas) {
         console.error("Erro ao buscar turmas:", errorTurmas);
+        setClasses([]);
+        return;
+      }
+      
+      if (!turmas || turmas.length === 0) {
         setClasses([]);
         return;
       }

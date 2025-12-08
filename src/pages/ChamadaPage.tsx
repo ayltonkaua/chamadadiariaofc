@@ -65,6 +65,7 @@ const ChamadaPage: React.FC = () => {
   // Estados de Controle
   const [date, setDate] = useState<Date>(new Date());
   const [isSaving, setIsSaving] = useState(false);
+  const isSubmittingRef = React.useRef(false); // Ref para debounce imediato
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -113,9 +114,10 @@ const ChamadaPage: React.FC = () => {
       // A) SE OFFLINE: Vai direto para o cache
       if (!navigator.onLine) {
         console.log("Modo Offline: Buscando alunos no cache...");
-        listaAlunos = await getAlunosDaTurmaOffline(turmaId);
+        listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
       }
       // B) SE ONLINE: Tenta Supabase, com fallback para cache
+      // RLS já filtra por escola e role automaticamente
       else {
         try {
           const { data, error } = await supabase
@@ -128,7 +130,7 @@ const ChamadaPage: React.FC = () => {
           listaAlunos = data || [];
         } catch (err) {
           console.warn("Erro ao buscar online. Usando cache.", err);
-          listaAlunos = await getAlunosDaTurmaOffline(turmaId);
+          listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
         }
       }
 
@@ -228,105 +230,110 @@ const ChamadaPage: React.FC = () => {
 
   // --- SALVAR CHAMADA ROBUSTO COM FALLBACK ---
   const handleSalvar = async () => {
-    // 1. Tenta obter o ID da escola de qualquer lugar possível
-    const idEscolaFinal = localEscolaId || user?.escola_id;
-
-    if (!idEscolaFinal) {
-      toast({
-        title: "Erro de Identificação",
-        description: "Não foi possível identificar a escola nos dados offline. Conecte-se para sincronizar.",
-        variant: "destructive"
-      });
-      return;
-    }
-
+    // 1. Debounce / Evitar Duplo Clique
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setIsSaving(true);
 
-    // Prepara o payload
-    const dataFormatada = format(date, "yyyy-MM-dd");
-    const payload = Object.entries(presencas).map(([alunoId, status]) => ({
-      aluno_id: alunoId,
-      turma_id: turmaId!,
-      escola_id: idEscolaFinal, // ID GARANTIDO
-      data_chamada: dataFormatada,
-      presente: status === "presente",
-      falta_justificada: status === "atestado"
-    }));
-
-    // Função auxiliar para salvar offline
-    const salvarLocalmente = async () => {
-      console.log("Salvando offline...", payload.length, "registros. Escola:", idEscolaFinal);
-      const sucesso = await salvarChamadaOffline(payload);
-
-      if (sucesso) {
-        toast({
-          title: "Salvo no Dispositivo",
-          description: "Conexão instável. Dados salvos localmente e serão enviados depois.",
-          className: "bg-yellow-100 text-yellow-800 border-yellow-300"
-        });
-        setPresencas({});
-        await limparSessaoChamada();
-        navigate("/dashboard");
-      } else {
-        throw new Error("Falha ao gravar no banco local.");
-      }
-    };
-
-    // 2. SE OFFLINE: Salva no IndexedDB direto
-    if (!navigator.onLine) {
-      try {
-        await salvarLocalmente();
-      } catch (err: any) {
-        toast({ title: "Erro ao salvar offline", description: err.message, variant: "destructive" });
-      } finally {
-        setIsSaving(false);
-      }
-      return;
-    }
-
-    // 3. SE ONLINE: Tenta Supabase com Fallback
     try {
-      // Limpa registros anteriores para evitar duplicidade
-      const { error: deleteError } = await supabase
-        .from("presencas")
-        .delete()
-        .eq("turma_id", turmaId)
-        .eq("data_chamada", dataFormatada);
+      // 2. Tenta obter o ID da escola de qualquer lugar possível
+      const idEscolaFinal = localEscolaId || user?.escola_id;
 
-      if (deleteError) throw deleteError;
-
-      if (payload.length > 0) {
-        const { error: insertError } = await supabase.from("presencas").insert(payload);
-        if (insertError) throw insertError;
+      if (!idEscolaFinal) {
+        toast({
+          title: "Erro de Identificação",
+          description: "Não foi possível identificar a escola nos dados offline. Conecte-se para sincronizar.",
+          variant: "destructive"
+        });
+        return;
       }
 
-      toast({ title: "Chamada salva!", className: "bg-green-600 text-white" });
-      await limparSessaoChamada();
-      navigate("/dashboard");
+      // Prepara o payload
+      const dataFormatada = format(date, "yyyy-MM-dd");
+      const payload = Object.entries(presencas).map(([alunoId, status]) => ({
+        aluno_id: alunoId,
+        turma_id: turmaId!,
+        escola_id: idEscolaFinal, // ID GARANTIDO
+        data_chamada: dataFormatada,
+        presente: status === "presente",
+        falta_justificada: status === "atestado"
+      }));
 
-    } catch (error: any) {
-      console.error("Erro no salvamento:", error);
+      // Função auxiliar para salvar offline
+      const salvarLocalmente = async () => {
+        console.log("Salvando offline...", payload.length, "registros. Escola:", idEscolaFinal);
+        const sucesso = await salvarChamadaOffline(payload);
 
-      // DETECÇÃO DE ERRO DE REDE PARA FALLBACK
-      const isNetworkError =
-        error.message?.includes("Failed to fetch") ||
-        error.message?.includes("network") ||
-        error.status === 503 ||
-        error.status === 504;
+        if (sucesso) {
+          toast({
+            title: "Salvo no Dispositivo",
+            description: "Conexão instável. Dados salvos localmente e serão enviados depois.",
+            className: "bg-yellow-100 text-yellow-800 border-yellow-300"
+          });
+          setPresencas({}); // Limpa estado para evitar re-salvamento do rascunho
+          await limparSessaoChamada();
+          navigate("/dashboard");
+        } else {
+          throw new Error("Falha ao gravar no banco local.");
+        }
+      };
 
-      if (isNetworkError) {
-        console.warn("Erro de rede detectado durante salvamento online. Ativando fallback offline.");
+      // 3. SE OFFLINE: Salva no IndexedDB direto
+      if (!navigator.onLine) {
         try {
           await salvarLocalmente();
-        } catch (offlineErr: any) {
-          toast({ title: "Erro Crítico", description: "Falha ao salvar online e offline: " + offlineErr.message, variant: "destructive" });
+        } catch (err: any) {
+          toast({ title: "Erro ao salvar offline", description: err.message, variant: "destructive" });
         }
-      } else {
-        // Erro de validação ou outro erro do Supabase
-        toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      // 4. SE ONLINE: Tenta Supabase com Fallback
+      try {
+        // Limpa registros anteriores para evitar duplicidade
+        const { error: deleteError } = await supabase
+          .from("presencas")
+          .delete()
+          .eq("turma_id", turmaId)
+          .eq("data_chamada", dataFormatada);
+
+        if (deleteError) throw deleteError;
+
+        if (payload.length > 0) {
+          const { error: insertError } = await supabase.from("presencas").insert(payload);
+          if (insertError) throw insertError;
+        }
+
+        toast({ title: "Chamada salva!", className: "bg-green-600 text-white" });
+        setPresencas({}); // CRUCIAL: Limpa o estado visual antes de limpar o storage
+        await limparSessaoChamada();
+        navigate("/dashboard");
+
+      } catch (error: any) {
+        console.error("Erro no salvamento:", error);
+
+        // DETECÇÃO DE ERRO DE REDE PARA FALLBACK
+        const isNetworkError =
+          error.message?.includes("Failed to fetch") ||
+          error.message?.includes("network") ||
+          error.status === 503 ||
+          error.status === 504;
+
+        if (isNetworkError) {
+          console.warn("Erro de rede detectado durante salvamento online. Ativando fallback offline.");
+          try {
+            await salvarLocalmente();
+          } catch (offlineErr: any) {
+            toast({ title: "Erro Crítico", description: "Falha ao salvar online e offline: " + offlineErr.message, variant: "destructive" });
+          }
+        } else {
+          // Erro de validação ou outro erro do Supabase
+          toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+        }
       }
     } finally {
       setIsSaving(false);
+      isSubmittingRef.current = false;
     }
   };
 
