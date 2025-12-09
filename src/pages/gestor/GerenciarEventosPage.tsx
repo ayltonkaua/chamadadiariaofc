@@ -46,7 +46,7 @@ export default function GerenciarEventosPage() {
     const [guestName, setGuestName] = useState('');
     const [guestType, setGuestType] = useState('Convidado');
     const [guestList, setGuestList] = useState<any[]>([]);
-    const [selectedGuest, setSelectedGuest] = useState<any>(null); // Para o modal de ingresso
+    const [selectedGuest, setSelectedGuest] = useState<any>(null);
 
     // Estados - Impressão
     const [printSearch, setPrintSearch] = useState('');
@@ -77,7 +77,6 @@ export default function GerenciarEventosPage() {
             .order('data_evento', { ascending: false });
 
         if (error) {
-            // Fallback se a relação count falhar
             const { data: dataFallback } = await (supabase as any)
                 .from('eventos')
                 .select('*')
@@ -178,7 +177,7 @@ export default function GerenciarEventosPage() {
         loadStaff();
     };
 
-    // ========== CONVIDADOS (NOVO) ==========
+    // ========== CONVIDADOS (MODIFICADO) ==========
     const handleAddGuest = async () => {
         if (!eventoAtivo || !guestName) {
             toast({ title: "Digite o nome do convidado", variant: "destructive" });
@@ -200,10 +199,23 @@ export default function GerenciarEventosPage() {
         }
     };
 
+    // Função de Excluir Convidado Melhorada
     const handleRemoveGuest = async (id: string) => {
-        if (!window.confirm("Remover este convidado?")) return;
-        await (supabase as any).from('eventos_convidados').delete().eq('id', id);
-        loadGuests();
+        if (!window.confirm("Remover este convidado da lista?")) return;
+
+        try {
+            const { error } = await (supabase as any).from('eventos_convidados').delete().eq('id', id);
+
+            if (error) {
+                console.error("Erro ao excluir convidado:", error);
+                toast({ title: "Erro ao excluir", description: "Verifique suas permissões ou tente novamente.", variant: "destructive" });
+            } else {
+                toast({ title: "Convidado removido" });
+                loadGuests(); // Recarrega a lista
+            }
+        } catch (err) {
+            console.error("Erro crítico:", err);
+        }
     };
 
     const downloadGuestTicket = () => {
@@ -294,7 +306,8 @@ export default function GerenciarEventosPage() {
                 )}
 
                 <Tabs defaultValue="lista" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 mb-8">
+                    {/* ALTERAÇÃO DE UI: MENU RESPONSIVO (Grid responsivo + h-auto) */}
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-5 h-auto gap-2 mb-8">
                         <TabsTrigger value="lista">Meus Eventos</TabsTrigger>
                         <TabsTrigger value="novo">Novo Evento</TabsTrigger>
                         <TabsTrigger value="staff">Staff/Monitores</TabsTrigger>
@@ -311,18 +324,18 @@ export default function GerenciarEventosPage() {
                                 {eventos.map(evento => {
                                     const checkinCount = evento.eventos_checkins ? evento.eventos_checkins[0]?.count : 0;
                                     return (
-                                        <div key={evento.id} className="flex items-center justify-between p-4 border rounded-lg mb-2 hover:shadow-md transition-shadow">
+                                        <div key={evento.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg mb-2 hover:shadow-md transition-shadow gap-3">
                                             <div>
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-wrap items-center gap-2">
                                                     <h3 className="font-bold text-lg">{evento.nome}</h3>
                                                     {evento.ativo && <Badge className="bg-green-600">Ativo</Badge>}
-                                                    <Badge variant="secondary" className="ml-2 flex gap-1 items-center">
+                                                    <Badge variant="secondary" className="flex gap-1 items-center">
                                                         <Users className="w-3 h-3" /> {checkinCount || 0} Presentes
                                                     </Badge>
                                                 </div>
                                                 <p className="text-sm text-gray-500 mt-1">{formatarData(evento.data_evento)}</p>
                                             </div>
-                                            <Button size="icon" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => handleExcluirEvento(evento.id)}>
+                                            <Button size="icon" variant="ghost" className="text-red-500 hover:bg-red-50 self-end md:self-center" onClick={() => handleExcluirEvento(evento.id)}>
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
@@ -438,6 +451,7 @@ export default function GerenciarEventosPage() {
                                                     <Button size="sm" variant="outline" onClick={() => setSelectedGuest(guest)}>
                                                         <Ticket className="w-4 h-4 mr-1" /> Ingresso
                                                     </Button>
+                                                    {/* BOTÃO EXCLUIR FUNCIONAL */}
                                                     <Button size="icon" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => handleRemoveGuest(guest.id)}>
                                                         <Trash2 className="w-4 h-4" />
                                                     </Button>
