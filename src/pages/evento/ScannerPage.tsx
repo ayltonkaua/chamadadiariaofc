@@ -145,7 +145,7 @@ export default function ScannerPage() {
                 status: 'success',
                 msg: 'ACESSO LIBERADO',
                 nome: data.nome,
-                turma: data.turma, // Para convidados isso será o Tipo (ex: Pai/Mãe)
+                turma: data.turma, // Para convidados isso será o Tipo (ex: Pai /Mãe)
                 tipo: data.tipo // 'Aluno' ou 'Convidado'
             });
         } else {
