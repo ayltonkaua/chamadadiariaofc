@@ -3,9 +3,10 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
     allowedRoles?: string[];
+    allowedTypes?: string[];
 }
 
-const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ allowedRoles, allowedTypes }: ProtectedRouteProps) => {
     const { user, loadingUser } = useAuth();
     const location = useLocation();
 
@@ -34,7 +35,7 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     }
 
     // Se houver restrição de roles/types
-    if (allowedRoles && allowedRoles.length > 0) {
+    if ((allowedRoles && allowedRoles.length > 0) || (allowedTypes && allowedTypes.length > 0)) {
         // CORREÇÃO: Verificar TANTO role QUANTO type
         const userRole = user.role || '';
         const userType = user.type || '';
@@ -42,14 +43,15 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
         // Verifica se o usuário tem a permissão necessária
         // Checa role OU type para cobrir ambos os casos
         const hasPermission =
-            allowedRoles.includes(userRole) ||
-            allowedRoles.includes(userType) ||
+            (allowedRoles ? allowedRoles.includes(userRole) || allowedRoles.includes(userType) : false) ||
+            (allowedTypes ? allowedTypes.includes(userType) || allowedTypes.includes(userRole) : false) ||
             userRole === 'super_admin';
 
         console.log("[ProtectedRoute] Verificação de permissão:", {
             userRole,
             userType,
             allowedRoles,
+            allowedTypes,
             hasPermission,
             blocked: !hasPermission
         });

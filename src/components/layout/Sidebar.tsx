@@ -22,7 +22,8 @@ import {
   BookOpen, // <--- ADICIONADO (Causava o erro)
   PartyPopper, // <--- ADICIONADO (Para Eventos)
   ScanLine,    // <--- ADICIONADO (Para Scanner)
-  Ticket       // <--- ADICIONADO (Para Ingresso)
+  Ticket,      // <--- ADICIONADO (Para Ingresso)
+  HandCoins
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -94,6 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       ]
     },
     { title: 'Relatórios', icon: LineChart, href: '/gestor/dashboard', roles: ['admin', 'diretor'] },
+    { title: 'Programas Sociais', icon: HandCoins, href: '/gestor/programas', roles: ['admin', 'diretor'] },
     { title: 'Atestados', icon: ClipboardList, href: '/atestados' },
     { title: 'Notificações', icon: Bell, href: '/notificacoes', roles: ['admin', 'diretor'] },
     { title: 'Perfil da Escola', icon: Settings, href: '/perfil-escola', roles: ['admin'] },

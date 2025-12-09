@@ -97,6 +97,7 @@ const PortalAlunoPage: React.FC = () => {
   const [isJustifyDialogOpen, setIsJustifyDialogOpen] = useState(false);
   const [showCarteirinha, setShowCarteirinha] = useState(false);
   const [isBoletimOpen, setIsBoletimOpen] = useState(false); // Estado para o Boletim
+  const [beneficios, setBeneficios] = useState<any[]>([]);
 
   // Estado para visualização segura de atestados
   const [isMeusAtestadosOpen, setIsMeusAtestadosOpen] = useState(false);
@@ -201,6 +202,27 @@ const PortalAlunoPage: React.FC = () => {
   useEffect(() => {
     fetchStudentData();
   }, [user?.aluno_id]);
+
+  const carregarBeneficios = async () => {
+    try {
+      const { data, error } = await (supabase as any).rpc('get_beneficios_aluno');
+      if (error) {
+        console.error('Erro ao buscar benefícios:', error);
+        return;
+      }
+      if (Array.isArray(data)) {
+        setBeneficios(data);
+      } else {
+        setBeneficios([]);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar benefícios:', error);
+    }
+  };
+
+  useEffect(() => {
+    carregarBeneficios();
+  }, []);
 
   // Função segura para buscar APENAS os atestados do aluno logado
   const fetchMeusAtestados = async () => {
@@ -555,6 +577,131 @@ const PortalAlunoPage: React.FC = () => {
 
           </div>
         </section>
+
+      {/* SEÇÃO BENEFÍCIOS - CORRIGIDA (Data Excel + Remoção de Processado) */}
+      <section className="mt-6">
+        <h3 className="text-sm font-semibold text-gray-500 mb-3 px-1">Benefícios e Auxílios</h3>
+        <div id="container-beneficios" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(!beneficios || beneficios.length === 0) ? (
+            <div className="col-span-full text-sm text-gray-500 bg-white border border-dashed rounded-xl p-6 text-center">
+              <p>Nenhum benefício vinculado à sua matrícula.</p>
+            </div>
+          ) : (
+            beneficios.map((beneficio: any) => {
+              
+              // 1. FORMATAÇÃO DE VALOR
+              const valorFormatado = beneficio.valor 
+                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(beneficio.valor)
+                : 'Valor não informado';
+                
+              // 2. FORMATAÇÃO DA DATA (Correção Definitiva do Erro 45876)
+              let dataPag = '--/--/----';
+              
+              if (beneficio.data_pagamento) {
+                // Se for número puro (Ex: 45876 ou "45876")
+                const dataComoNumero = Number(beneficio.data_pagamento);
+                
+                if (!isNaN(dataComoNumero) && !beneficio.data_pagamento.toString().includes('-')) {
+                  // FÓRMULA MÁGICA DO EXCEL PARA JS:
+                  // (ValorExcel - 25569) * 86.400 * 1000 = Data Timestamp
+                  const dataJs = new Date((dataComoNumero - 25569) * 86400 * 1000);
+                  // Ajuste de fuso horário simples (adiciona horas para evitar cair no dia anterior devido a GMT)
+                  dataJs.setHours(dataJs.getHours() + 12); 
+                  dataPag = format(dataJs, "dd/MM/yyyy");
+                } 
+                // Se já vier formatado do banco como data ISO (2025-08-06)
+                else if (beneficio.data_pagamento.toString().includes('-')) {
+                   dataPag = format(parseISO(beneficio.data_pagamento), "dd/MM/yyyy");
+                }
+                // Texto puro
+                else {
+                   dataPag = beneficio.data_pagamento;
+                }
+              }
+
+              // 3. RESPONSÁVEL E CPF
+              const responsavel = beneficio.nome_responsavel || 'Não informado';
+              let cpfFormatado = 'CPF pendente';
+              
+              if (beneficio.cpf_responsavel) {
+                const cpfLimpo = beneficio.cpf_responsavel.toString().replace(/\D/g, '');
+                if (cpfLimpo.length === 11) {
+                  cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+                } else {
+                  cpfFormatado = beneficio.cpf_responsavel;
+                }
+              }
+
+              // 4. DADOS BANCÁRIOS
+              const temBanco = beneficio.banco && beneficio.conta;
+              const dadosBancarios = temBanco 
+                ? `${beneficio.banco} | Ag: ${beneficio.agencia || 'S/N'} | Cc: ${beneficio.conta}`
+                : 'Dados bancários pendentes';
+
+              return (
+                <div
+                  key={beneficio.id}
+                  className="bg-white border-l-4 border-l-emerald-500 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col gap-4"
+                >
+                  {/* Cabeçalho */}
+                  <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900 leading-tight">
+                        🎁 {beneficio.programa_nome}
+                      </h3>
+                      {/* Removi o "Processado em" daqui */}
+                      <p className="text-xs text-gray-500 mt-1">Benefício Ativo</p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                      beneficio.situacao === 'Ativo' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {beneficio.situacao}
+                    </span>
+                  </div>
+
+                  {/* Grid de Informações */}
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm">
+                    
+                    {/* Valor */}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 uppercase font-semibold">Valor Recebido</span>
+                      <span className="font-bold text-lg text-emerald-600">{valorFormatado}</span>
+                    </div>
+
+                    {/* Data do Pagamento (Agora Corrigida) */}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 uppercase font-semibold">Data do Pagamento</span>
+                      <span className="font-medium text-gray-800">{dataPag}</span>
+                    </div>
+
+                    {/* Responsável e CPF */}
+                    <div className="col-span-2 flex flex-col gap-0.5 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                      <span className="text-[10px] text-gray-500 uppercase font-semibold">Responsável Autorizado</span>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-400" />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-800 uppercase leading-tight">{responsavel}</span>
+                          <span className="text-xs text-gray-500 font-mono">CPF: {cpfFormatado}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Banco */}
+                    <div className="col-span-2 flex flex-col gap-0.5 pt-1">
+                      <span className="text-[10px] text-gray-500 uppercase font-semibold">Dados Bancários</span>
+                      <span className={`text-xs ${temBanco ? 'font-mono text-gray-700 bg-emerald-50/50 p-1 rounded px-2 border border-emerald-100' : 'text-orange-500 italic'}`}>
+                        {dadosBancarios}
+                      </span>
+                    </div>
+
+                  </div>
+
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
 
         {/* ÁREA DE AVISOS */}
         <section className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex gap-3 items-start animate-in slide-in-from-bottom-4 fade-in duration-700">

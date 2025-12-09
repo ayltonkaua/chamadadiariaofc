@@ -9,7 +9,8 @@ import {
   FileText,
   Menu,
   ScanLine, // Ícone do Scanner
-  Ticket    // Ícone do Ingresso
+  Ticket,   // Ícone do Ingresso
+  Wallet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +69,19 @@ export function MobileNav() {
           />
           <span className={cn("text-[10px] mt-1 font-medium", isActive('/aluno/ingresso') ? "text-purple-600" : "text-slate-400")}>
             Ingresso
+          </span>
+        </Link>
+      )}
+
+      {/* 3. Benefícios (Só para Alunos) */}
+      {user?.type === 'aluno' && (
+        <Link to="/aluno/beneficios" className="flex flex-col items-center justify-center w-16">
+          <Wallet
+            size={24}
+            color={isActive('/aluno/beneficios') ? activeColor : '#94a3b8'}
+          />
+          <span className={cn("text-[10px] mt-1 font-medium", isActive('/aluno/beneficios') ? "text-purple-600" : "text-slate-400")}>
+            Benefícios
           </span>
         </Link>
       )}

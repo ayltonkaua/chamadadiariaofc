@@ -42,6 +42,8 @@ import DisciplinasPage from "@/pages/DisciplinasPage";
 import MeuIngressoPage from "@/pages/aluno/MeuIngressoPage";
 import ScannerPage from "@/pages/evento/ScannerPage";
 import GerenciarEventosPage from "@/pages/gestor/GerenciarEventosPage";
+import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
+import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
 
 import { sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { toast } from "@/components/ui/use-toast";
@@ -190,6 +192,11 @@ const App = () => {
                     </Route>
                   </Route>
 
+                  {/* Gestão de Programas Sociais (Novo) */}
+                  <Route element={<ProtectedRoute allowedTypes={['admin', 'diretor']} />}>
+                    <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                  </Route>
+
                   {/* --- Rotas de Eventos (SEM Layout para evitar tela branca) --- */}
                   <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor']} />}>
                     <Route path="/gestor/eventos" element={<GerenciarEventosPage />} />
@@ -201,6 +208,11 @@ const App = () => {
 
                   <Route element={<ProtectedRoute allowedRoles={['aluno']} />}>
                     <Route path="/aluno/ingresso" element={<MeuIngressoPage />} />
+                  </Route>
+
+                  {/* Benefícios do Aluno (Novo) */}
+                  <Route element={<ProtectedRoute allowedTypes={['aluno']} />}>
+                    <Route path="/aluno/beneficios" element={<MeusBeneficiosPage />} />
                   </Route>
 
                   <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
