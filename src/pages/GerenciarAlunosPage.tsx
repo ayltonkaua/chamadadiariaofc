@@ -20,9 +20,14 @@ import { useAlunosTurma } from "@/hooks/useAlunosTurma";
 import AddEditStudentDialog from "@/components/alunos/AddEditStudentDialog";
 import { ImportarNotasDialog } from "@/components/notas/ImportarNotasDialog"; // MODIFICADO: Importação adicionada
 
+import { useAuth } from "@/contexts/AuthContext";
+
 const GerenciarAlunosPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // Lógica de permissão (Professor e Aluno não são managers)
+  const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin'].includes(user?.role || '');
   const [alunoParaRemover, setAlunoParaRemover] = useState<{
     id: string;
     nome: string;
@@ -31,10 +36,10 @@ const GerenciarAlunosPage: React.FC = () => {
   const [selectedAluno, setSelectedAluno] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const { 
-    alunos, 
-    setAlunos, 
-    turmaInfo, 
+  const {
+    alunos,
+    setAlunos,
+    turmaInfo,
     loading,
     refreshAlunos
   } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id", "nome_responsavel", "telefone_responsavel"]);
@@ -113,34 +118,38 @@ const GerenciarAlunosPage: React.FC = () => {
         <div className="bg-white rounded-xl shadow-md p-3 sm:p-6">
           <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-4">
             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Lista de Alunos</h2>
-            
+
+            {/* MODIFICADO: Agrupamento dos botões de Ação */}
             {/* MODIFICADO: Agrupamento dos botões de Ação */}
             <div className="flex gap-2 w-full sm:w-auto">
-              <ImportarNotasDialog />
-              
-              <Button 
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 flex-1 sm:flex-none justify-center"
-                onClick={handleAddAluno}
-              >
-                <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Aluno</span>
-              </Button>
+              {isManager && <ImportarNotasDialog />}
+
+              {isManager && (
+                <Button
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 flex-1 sm:flex-none justify-center"
+                  onClick={handleAddAluno}
+                >
+                  <UserPlus size={20} /> <span className="hidden sm:inline">Adicionar Aluno</span>
+                </Button>
+              )}
             </div>
           </div>
-          
+
           {loading ? (
             <div className="text-center py-8 text-gray-500">Carregando alunos...</div>
           ) : alunos.length > 0 ? (
-            <AlunosTable 
+            <AlunosTable
               alunos={[...alunos].sort((a, b) => a.nome.localeCompare(b.nome))}
               onEdit={handleEditar}
               onRemove={handleRemover}
+              canEdit={isManager}
             />
           ) : (
             <div className="text-center py-10 text-gray-500">
               <p className="mb-4">Nenhum aluno cadastrado nesta turma.</p>
               <div className="flex flex-col sm:flex-row justify-center gap-3">
-                 <ImportarNotasDialog />
-                 <Button 
+                <ImportarNotasDialog />
+                <Button
                   className="bg-green-600 hover:bg-green-700"
                   onClick={handleAddAluno}
                 >

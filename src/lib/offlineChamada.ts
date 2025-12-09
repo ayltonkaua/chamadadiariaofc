@@ -85,7 +85,7 @@ export async function baixarDadosEscola(escolaId: string) {
 export async function getDadosEscolaOffline(userId?: string) {
   try {
     const dados = await get<DadosEscolaOffline>(CACHE_ESCOLA_KEY);
-    
+
     if (!dados) return null;
 
     // Validação de versão: se o cache não tem versão ou versão antiga, invalida
@@ -146,7 +146,7 @@ export async function buscarTurmasHibrido(escolaId: string, userId?: string) {
         baixarDadosEscola(escolaId).then(() => console.log("Cache atualizado em background"));
         return { data, fonte: 'online' };
       }
-      
+
       // Se houve erro, lança para cair no catch
       if (error) throw error;
     } catch (err) {
@@ -264,38 +264,64 @@ export async function limparSessaoChamada() {
 // FUNÇÃO DE SINCRONIZAÇÃO
 // ==============================================================================
 
-export async function sincronizarChamadasOffline() {
+export async function sincronizarChamadasOffline(onProgress?: (current: number, total: number) => void) {
   try {
     const pendentes = await getChamadasPendentes();
     if (pendentes.length === 0) return { success: true, count: 0 };
 
     console.log(`Iniciando sincronização MANUAL de ${pendentes.length} registros...`);
 
-    const payload = pendentes.map(p => ({
-      aluno_id: p.aluno_id,
-      turma_id: p.turma_id,
-      escola_id: p.escola_id,
-      data_chamada: p.data_chamada,
-      presente: p.presente,
-      falta_justificada: p.falta_justificada ?? false
-    }));
+    let successCount = 0;
+    const total = pendentes.length;
 
-    const { error } = await supabase
-      .from('presencas')
-      .upsert(payload, {
-        onConflict: 'escola_id, aluno_id, data_chamada',
-        ignoreDuplicates: false
-      });
+    // Processa um por um para dar feedback visual de progresso
+    for (let i = 0; i < total; i++) {
+      const p = pendentes[i];
 
-    if (error) {
-      console.error('Erro Detalhado do Supabase:', JSON.stringify(error, null, 2));
-      throw error;
+      // Notifica progresso (i+1 porque começou do 0)
+      if (onProgress) onProgress(i + 1, total);
+
+      const payload = {
+        aluno_id: p.aluno_id,
+        turma_id: p.turma_id,
+        escola_id: p.escola_id,
+        data_chamada: p.data_chamada,
+        presente: p.presente,
+        falta_justificada: p.falta_justificada ?? false
+      };
+
+      const { error } = await supabase
+        .from('presencas')
+        .upsert(payload, {
+          onConflict: 'escola_id, aluno_id, data_chamada',
+          ignoreDuplicates: false
+        });
+
+      if (error) {
+        console.error(`Erro ao sincronizar item ${i + 1}:`, error);
+        // Continua tentando os outros, mas não conta como sucesso
+      } else {
+        successCount++;
+      }
     }
 
-    await limparChamadasPendentes();
+    // Limpa a fila APENAS se todos foram sucesso? 
+    // Ou limpa os que foram sucesso?
+    // SIMPLIFICAÇÃO: Se a maioria foi, limpamos tudo para evitar travar.
+    // Em produção ideal: remover apenas os IDs que tiveram sucesso.
+    // Como a chave é timestamp, poderíamos remover um a um.
+    // Mas para manter compatibilidade com o que já existia: limpa tudo se tudo ok.
 
-    console.log('Sincronização concluída com sucesso!');
-    return { success: true, count: pendentes.length };
+    if (successCount === total) {
+      await limparChamadasPendentes();
+      console.log('Sincronização concluída com sucesso!');
+      return { success: true, count: total };
+    } else {
+      console.warn(`Sincronização parcial: ${successCount} de ${total}`);
+      // Se falhou algum, não limpamos para tentar depois (comportamento seguro)
+      return { success: false, count: successCount, error: 'Alguns itens falharam.' };
+    }
+
   } catch (error: any) {
     console.error('Erro ao sincronizar chamadas offline:', error);
     return { success: false, error };

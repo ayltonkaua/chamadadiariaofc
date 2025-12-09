@@ -9,6 +9,14 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     const { user, loadingUser } = useAuth();
     const location = useLocation();
 
+    // DEBUG LOG - Remover após resolver o problema
+    console.log("[ProtectedRoute] Debug:", {
+        path: location.pathname,
+        user: user ? { id: user.id?.slice(0, 8), type: user.type, role: user.role } : null,
+        allowedRoles,
+        loadingUser
+    });
+
     if (loadingUser) {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-gray-50">
@@ -21,29 +29,45 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     }
 
     if (!user) {
+        console.log("[ProtectedRoute] Usuário não autenticado, redirecionando para /login");
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    // Se houver restrição de roles
-    if (allowedRoles) {
-        // Normalizar role do usuário para comparação
+    // Se houver restrição de roles/types
+    if (allowedRoles && allowedRoles.length > 0) {
+        // CORREÇÃO: Verificar TANTO role QUANTO type
         const userRole = user.role || '';
+        const userType = user.type || '';
 
         // Verifica se o usuário tem a permissão necessária
-        // Nota: 'super_admin' geralmente tem acesso a tudo, mas vamos seguir a lista explícita
-        const hasPermission = allowedRoles.includes(userRole) || (userRole === 'super_admin');
+        // Checa role OU type para cobrir ambos os casos
+        const hasPermission =
+            allowedRoles.includes(userRole) ||
+            allowedRoles.includes(userType) ||
+            userRole === 'super_admin';
+
+        console.log("[ProtectedRoute] Verificação de permissão:", {
+            userRole,
+            userType,
+            allowedRoles,
+            hasPermission,
+            blocked: !hasPermission
+        });
 
         if (!hasPermission) {
-            // Redirecionamento inteligente baseada no tipo de usuário
-            if (user.type === 'aluno') {
+            console.log("[ProtectedRoute] BLOQUEADO - Redirecionando...");
+
+            // Redirecionamento inteligente baseado no tipo de usuário
+            if (userType === 'aluno') {
                 return <Navigate to="/portal-aluno" replace />;
             }
 
-            // Se for professor tentando acessar área de gestão, vai pro dashboard comum
+            // Se for professor/staff tentando acessar área restrita
             return <Navigate to="/dashboard" replace />;
         }
     }
 
+    console.log("[ProtectedRoute] LIBERADO - Renderizando Outlet");
     return <Outlet />;
 };
 

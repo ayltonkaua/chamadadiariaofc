@@ -270,6 +270,7 @@ const ChamadaPage: React.FC = () => {
             description: "Conexão instável. Dados salvos localmente e serão enviados depois.",
             className: "bg-yellow-100 text-yellow-800 border-yellow-300"
           });
+          window.dispatchEvent(new Event('chamada-salva')); // Avisa o OfflineManager
           setPresencas({}); // Limpa estado para evitar re-salvamento do rascunho
           await limparSessaoChamada();
           navigate("/dashboard");

@@ -44,6 +44,14 @@ export default defineConfig({
           },
         ],
       },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'], // Cacheia a interface
+        runtimeCaching: [{
+          urlPattern: ({ url }) => url.pathname.startsWith('/api'), // Não cacheia API aqui (já fazemos manual)
+          handler: 'NetworkFirst',
+          options: { cacheName: 'api-cache' }
+        }]
+      },
     }),
   ],
   resolve: {

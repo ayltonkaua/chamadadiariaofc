@@ -42,9 +42,10 @@ interface AlunosTableProps {
   onRemove: (aluno: Aluno) => void;
   // Adicionar callback para quando transferir (para recarregar a lista)
   onTransferSuccess?: () => void;
+  canEdit?: boolean;
 }
 
-const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess }: AlunosTableProps) => {
+const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess, canEdit = false }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
   const [alunoBoletimId, setAlunoBoletimId] = useState<string | null>(null);
   const [alunoTransferencia, setAlunoTransferencia] = useState<Aluno | null>(null);
@@ -85,34 +86,47 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess }: AlunosTabl
                   <DropdownMenuItem onClick={() => setAlunoBoletimId(aluno.id)}>
                     <GraduationCap className="mr-2 h-4 w-4" /> Ver Notas
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAlunoTransferencia(aluno)}>
-                    <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir Turma
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
-                    <Edit className="mr-2 h-4 w-4" /> Editar
-                  </DropdownMenuItem>
+
+                  {canEdit && (
+                    <>
+                      <DropdownMenuItem onClick={() => setAlunoTransferencia(aluno)}>
+                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir Turma
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
+                        <Edit className="mr-2 h-4 w-4" /> Editar
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
                   <DropdownMenuItem asChild>
                     <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`} className="w-full">
                       <History className="mr-2 h-4 w-4" /> Histórico
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onRemove(aluno)} className="text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4" /> Remover
-                  </DropdownMenuItem>
+
+                  {canEdit && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onRemove(aluno)} className="text-red-600">
+                        <Trash2 className="mr-2 h-4 w-4" /> Remover
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground px-4 pb-4 space-y-2">
               <div><strong>Frequência:</strong> {aluno.frequencia ?? 'N/A'}%</div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full mt-2"
-                onClick={() => setAlunoTransferencia(aluno)}
-              >
-                <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
-              </Button>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-2"
+                  onClick={() => setAlunoTransferencia(aluno)}
+                >
+                  <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -157,15 +171,17 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess }: AlunosTabl
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setAlunoTransferencia(aluno)}
-                      title="Transferir de Turma"
-                      className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                    >
-                      <ArrowRightLeft className="h-4 w-4" />
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setAlunoTransferencia(aluno)}
+                        title="Transferir de Turma"
+                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                      </Button>
+                    )}
 
                     <Button
                       variant="ghost"
@@ -181,12 +197,17 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess }: AlunosTabl
                         <History className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button onClick={() => onEdit(aluno.id)} variant="ghost" size="icon" title="Editar Aluno">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button onClick={() => onRemove(aluno)} variant="ghost" size="icon" className="text-red-600" title="Remover Aluno">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+
+                    {canEdit && (
+                      <>
+                        <Button onClick={() => onEdit(aluno.id)} variant="ghost" size="icon" title="Editar Aluno">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button onClick={() => onRemove(aluno)} variant="ghost" size="icon" className="text-red-600" title="Remover Aluno">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

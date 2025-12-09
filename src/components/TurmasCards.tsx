@@ -25,6 +25,8 @@ import { get, set, del } from "idb-keyval";
 import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
 import { DeleteTurmaDialog } from "./turmas/DeleteTurmaDialog";
 import { ImportTurmasDialog } from "./turmas/ImportTurmasDialog";
+import { EmptyState } from "@/components/ui/EmptyState";
+
 
 // Interface
 interface Turma {
@@ -314,29 +316,27 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
       </div>
 
       {turmasExibidas.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg bg-slate-50 mx-1">
-          <RefreshCw className="w-10 h-10 text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma turma encontrada</h3>
-          <p className="text-gray-500 mb-6 max-w-sm">
-            {isManager
-              ? "Você ainda não tem turmas cadastradas ou vinculadas neste turno."
-              : "Nenhuma turma vinculada ao seu perfil. Entre em contato com a coordenação."}
-          </p>
-
-          {/* Botão de Ação Condicional */}
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleRefreshGlobal}>
-              Recarregar Página
-            </Button>
-
-            {isManager && (
-              <Button onClick={() => setShowImportDialog(true)} className="gap-2">
-                <FileSpreadsheet size={18} />
-                Importar Turmas
+        <EmptyState
+          icon={RefreshCw}
+          title="Nenhuma turma encontrada"
+          description={isManager
+            ? "Você ainda não tem turmas cadastradas ou vinculadas neste turno."
+            : "Nenhuma turma vinculada ao seu perfil. Entre em contato com a coordenação."}
+          action={
+            <>
+              <Button variant="outline" onClick={handleRefreshGlobal}>
+                Recarregar Página
               </Button>
-            )}
-          </div>
-        </div>
+
+              {isManager && (
+                <Button onClick={() => setShowImportDialog(true)} className="gap-2">
+                  <FileSpreadsheet size={18} />
+                  Importar Turmas
+                </Button>
+              )}
+            </>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 animate-in fade-in pb-20">
           {turmasExibidas.map((turma) => (

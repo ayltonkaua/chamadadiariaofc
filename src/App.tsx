@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { AttendanceProvider } from "@/contexts/AttendanceContext";
 import { EscolaConfigProvider } from "@/contexts/EscolaConfigContext";
 import EscolaThemeProvider from "@/components/EscolaThemeProvider";
 import Layout from "@/components/layout/Layout";
@@ -40,6 +39,9 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import DisciplinasPage from "@/pages/DisciplinasPage";
+import MeuIngressoPage from "@/pages/aluno/MeuIngressoPage";
+import ScannerPage from "@/pages/evento/ScannerPage";
+import GerenciarEventosPage from "@/pages/gestor/GerenciarEventosPage";
 
 import { sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { toast } from "@/components/ui/use-toast";
@@ -131,69 +133,80 @@ const App = () => {
       <AuthProvider>
         <EscolaConfigProvider>
           <EscolaThemeProvider>
-            <AttendanceProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Sonner />
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
 
-                <Router>
-                  <Routes>
-                    {/* --- Rotas Públicas --- */}
-                    <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
-                    <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
-                    <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
-                    <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
-                    <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
-                    <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
-                    <Route path="/student-query" element={<StudentQueryPage />} />
+              <Router>
+                <Routes>
+                  {/* --- Rotas Públicas --- */}
+                  <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
+                  <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
+                  <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
+                  <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
+                  <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
+                  <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
+                  <Route path="/student-query" element={<StudentQueryPage />} />
 
-                    {/* --- Rotas Autenticadas (Todas/Comum) --- */}
-                    <Route element={<ProtectedRoute />}>
-                      <Route element={<Layout><Outlet /></Layout>}>
-                        <Route path="/dashboard" element={<Dashboard />} />
+                  {/* --- Rotas Autenticadas (Todas/Comum) --- */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<Layout><Outlet /></Layout>}>
+                      <Route path="/dashboard" element={<Dashboard />} />
 
-                        {/* Funcionalidades Comuns */}
-                        <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
-                        <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
-                        <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
-                        <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
-                        <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
+                      {/* Funcionalidades Comuns */}
+                      <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
+                      <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
+                      <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
+                      <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
+                      <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
 
-                        <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
-                        <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
-                        <Route path="/atestados" element={<AtestadosPage />} />
-                        <Route path="/alertas" element={<AlertasPage />} />
-                        <Route path="/disciplinas" element={<DisciplinasPage />} />
-                        <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
+                      <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
+                      <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
+                      <Route path="/atestados" element={<AtestadosPage />} />
+                      <Route path="/alertas" element={<AlertasPage />} />
+                      <Route path="/disciplinas" element={<DisciplinasPage />} />
+                      <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
 
-                        {/* Pesquisas */}
-                        <Route path="/pesquisas" element={<PesquisasListPage />} />
-                        <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
-                        <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
+                      {/* Pesquisas */}
+                      <Route path="/pesquisas" element={<PesquisasListPage />} />
+                      <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
+                      <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
 
-                        {/* Perfil */}
-                        <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
+                      {/* Perfil */}
+                      <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
 
-                        {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
-                        <Route path="/portal-aluno" element={<PortalAlunoPage />} />
-                      </Route>
+                      {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
+                      <Route path="/portal-aluno" element={<PortalAlunoPage />} />
                     </Route>
+                  </Route>
 
-                    {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
-                    <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
-                      <Route element={<Layout><Outlet /></Layout>}>
-                        <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
-                        <Route path="/relatorios" element={<RelatoriosPage />} />
-                        <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
-                        <Route path="/notificacoes" element={<NotificacoesPage />} />
-                      </Route>
+                  {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
+                    <Route element={<Layout><Outlet /></Layout>}>
+                      <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
+                      <Route path="/relatorios" element={<RelatoriosPage />} />
+                      <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
+                      <Route path="/notificacoes" element={<NotificacoesPage />} />
                     </Route>
+                  </Route>
 
-                    <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
-                  </Routes>
-                </Router>
-              </TooltipProvider>
-            </AttendanceProvider>
+                  {/* --- Rotas de Eventos (SEM Layout para evitar tela branca) --- */}
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor']} />}>
+                    <Route path="/gestor/eventos" element={<GerenciarEventosPage />} />
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'professor', 'aluno', 'monitor']} />}>
+                    <Route path="/evento/scanner" element={<ScannerPage />} />
+                  </Route>
+
+                  <Route element={<ProtectedRoute allowedRoles={['aluno']} />}>
+                    <Route path="/aluno/ingresso" element={<MeuIngressoPage />} />
+                  </Route>
+
+                  <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
+                </Routes>
+              </Router>
+            </TooltipProvider>
           </EscolaThemeProvider>
         </EscolaConfigProvider>
       </AuthProvider>

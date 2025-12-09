@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { addDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
@@ -9,6 +9,8 @@ import {
   FileText,
   Calendar as CalendarIcon,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -114,12 +116,43 @@ export default function RelatoriosPage() {
   });
 
   // Dados de exemplo para os cards de resumo
-  const summaryData = {
-    alunosMatriculados: 715,
+  // Estados para os dados do dashboard
+  const [summaryData, setSummaryData] = useState({
+    alunosMatriculados: 0,
     faltososHoje: 0,
-    turmasCadastradas: 22,
-    atestadosPendentes: 3, // Exemplo
-  };
+    turmasCadastradas: 0,
+    atestadosPendentes: 0
+  });
+
+  const { user } = useAuth(); // Hook de auth
+
+  useEffect(() => {
+    async function fetchDashboardStats() {
+      if (!user?.escola_id) return;
+
+      try {
+        const { data, error } = await (supabase.rpc as any)('get_dashboard_stats', {
+          _escola_id: user.escola_id
+        });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          // O RPC retorna array, pegamos o primeiro item
+          setSummaryData({
+            alunosMatriculados: data[0].total_alunos || 0,
+            faltososHoje: data[0].faltas_hoje || 0,
+            turmasCadastradas: data[0].total_turmas || 0,
+            atestadosPendentes: data[0].atestados_pendentes || 0,
+          });
+        }
+      } catch (err) {
+        console.error("Erro ao carregar stats:", err);
+      }
+    }
+
+    fetchDashboardStats();
+  }, [user?.escola_id]);
 
   return (
     // Fundo da página cinza claro para destacar os cards brancos

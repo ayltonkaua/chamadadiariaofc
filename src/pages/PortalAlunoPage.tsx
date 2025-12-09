@@ -31,7 +31,8 @@ import {
   ListChecks,
   Calendar as CalendarIcon,
   User,
-  AlertTriangle
+  AlertTriangle,
+  Ticket
 } from 'lucide-react';
 
 // --- Componente Visual: Gráfico de Frequência ---
@@ -130,73 +131,74 @@ const PortalAlunoPage: React.FC = () => {
   }, [searchParams]);
 
   // Busca dados reais do aluno ao carregar
-  useEffect(() => {
-    const fetchStudentData = async () => {
-      if (!user?.aluno_id) return;
+  const fetchStudentData = async () => {
+    if (!user?.aluno_id) return;
 
-      try {
-        setLoadingData(true);
+    try {
+      setLoadingData(true);
 
-        // 1. Busca dados do Aluno e da Turma
-        const { data: alunoInfo, error: alunoError } = await supabase
-          .from('alunos')
-          .select('matricula, turma_id, turmas(nome), nome_responsavel, telefone_responsavel, endereco')
-          .eq('id', user.aluno_id)
-          .single();
+      // 1. Busca dados do Aluno e da Turma
+      const { data: alunoInfo, error: alunoError } = await (supabase as any)
+        .from('alunos')
+        .select('matricula, turma_id, turmas(nome), nome_responsavel, telefone_responsavel, endereco')
+        .eq('id', user.aluno_id)
+        .single();
 
-        if (alunoError) throw alunoError;
+      if (alunoError) throw alunoError;
 
-        // 2. Busca dados de Presença para calcular frequência
-        if (alunoInfo?.turma_id) {
-          // Otimização: Buscar apenas o total de registros do próprio aluno
-          const { count: totalAulasRegistradas, error: errorTotal } = await supabase
-            .from('presencas')
-            .select('id', { count: 'exact', head: true })
-            .eq('aluno_id', user.aluno_id);
+      // 2. Busca dados de Presença para calcular frequência
+      if (alunoInfo?.turma_id) {
+        const { count: totalAulasRegistradas, error: errorTotal } = await supabase
+          .from('presencas')
+          .select('id', { count: 'exact', head: true })
+          .eq('aluno_id', user.aluno_id);
 
-          if (errorTotal) throw errorTotal;
+        if (errorTotal) throw errorTotal;
 
-          const { count: totalFaltasRegistradas, error: errorFaltas } = await supabase
-            .from('presencas')
-            .select('id', { count: 'exact', head: true })
-            .eq('aluno_id', user.aluno_id)
-            .eq('presente', false);
+        const { count: totalFaltasRegistradas, error: errorFaltas } = await supabase
+          .from('presencas')
+          .select('id', { count: 'exact', head: true })
+          .eq('aluno_id', user.aluno_id)
+          .eq('presente', false);
 
-          if (errorFaltas) throw errorFaltas;
+        if (errorFaltas) throw errorFaltas;
 
-          const aulas = totalAulasRegistradas || 0;
-          const faltas = totalFaltasRegistradas || 0;
+        const aulas = totalAulasRegistradas || 0;
+        const faltas = totalFaltasRegistradas || 0;
 
-          const freq = aulas > 0 ? Math.round(((aulas - faltas) / aulas) * 100) : 100;
+        const freq = aulas > 0 ? Math.round(((aulas - faltas) / aulas) * 100) : 100;
 
-          let statusText = "Excelente";
-          if (freq < 75) statusText = "Crítico";
-          else if (freq < 85) statusText = "Atenção";
-          else if (freq < 100) statusText = "Regular";
+        let statusText = "Excelente";
+        if (freq < 75) statusText = "Crítico";
+        else if (freq < 85) statusText = "Atenção";
+        else if (freq < 100) statusText = "Regular";
 
-          setStudentData({
-            turma: alunoInfo.turmas?.nome || "Sem Turma",
-            matricula: alunoInfo.matricula,
-            frequencia: freq,
-            status: statusText,
-            totalAulas: aulas,
-            totalFaltas: faltas
-          });
+        setStudentData({
+          turma: alunoInfo.turmas?.nome || "Sem Turma",
+          matricula: alunoInfo.matricula,
+          frequencia: freq,
+          status: statusText,
+          totalAulas: aulas,
+          totalFaltas: faltas
+        });
 
-          // VERIFICAÇÃO DE DADOS CADASTRAIS
-          const dadosIncompletos = !alunoInfo.nome_responsavel || !alunoInfo.telefone_responsavel || !alunoInfo.endereco;
-          if (dadosIncompletos) {
-            setShowUpdateAlert(true);
-          }
+        // VERIFICAÇÃO DE DADOS CADASTRAIS
+        // Verifica apenas se ainda não foi verificado nesta sessão para evitar loop chato
+        // Mas se o dado vier vazio, avisa.
+        const dadosIncompletos = !alunoInfo.nome_responsavel || !alunoInfo.telefone_responsavel || !alunoInfo.endereco;
+        if (dadosIncompletos) {
+          setShowUpdateAlert(true);
         }
-      } catch (error) {
-        console.error("Erro ao carregar dados do aluno:", error);
-        toast({ title: "Erro", description: "Não foi possível carregar seus dados escolares.", variant: "destructive" });
-      } finally {
-        setLoadingData(false);
       }
-    };
+    } catch (error) {
+      console.error("Erro ao carregar dados do aluno:", error);
+      toast({ title: "Erro", description: "Não foi possível carregar seus dados escolares.", variant: "destructive" });
+    } finally {
+      setLoadingData(false);
+    }
+  };
 
+  useEffect(() => {
     fetchStudentData();
   }, [user?.aluno_id]);
 
@@ -397,8 +399,7 @@ const PortalAlunoPage: React.FC = () => {
                   alunoId={user?.aluno_id || ""}
                   onUpdate={() => {
                     setIsMeusDadosOpen(false);
-                    // Recarrega dados para atualizar estado local se necessário
-                    window.location.reload();
+                    fetchStudentData(); // Atualiza localmente
                   }}
                 />
               </DialogContent>
@@ -522,6 +523,21 @@ const PortalAlunoPage: React.FC = () => {
               </DialogContent>
             </Dialog>
 
+            {/* 4.5. Meu Ingresso (NOVO) */}
+            <Button
+              variant="outline"
+              className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
+              onClick={() => navigate('/aluno/ingresso')}
+            >
+              <div className="p-3 bg-fuchsia-50 rounded-2xl text-fuchsia-600 group-hover:scale-110 transition-transform">
+                <Ticket className="h-6 w-6" />
+              </div>
+              <div className="text-center">
+                <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Meu Ingresso</span>
+                <span className="text-[10px] text-gray-400 font-normal">Ver QR Code</span>
+              </div>
+            </Button>
+
             {/* 5. Pesquisas (Em Breve) */}
             <Button
               variant="outline"
@@ -573,7 +589,7 @@ const PortalAlunoPage: React.FC = () => {
               alunoId={user?.aluno_id || ""}
               onUpdate={() => {
                 setShowUpdateAlert(false);
-                window.location.reload();
+                fetchStudentData();
               }}
             />
           </div>
