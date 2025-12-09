@@ -105,7 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   // 1. Scanner (Para Staff ou Admin)
   if (isEventStaff || user?.role === 'admin' || user?.role === 'diretor') {
     menuItems.push({
-      title: 'Controlar Acesso 📷',
+      title: 'Controlar Acesso',
       href: '/evento/scanner',
       icon: ScanLine
     });
@@ -114,7 +114,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   // 2. Gestão de Eventos (Para Admin/Diretor)
   if (user?.role === 'admin' || user?.role === 'diretor') {
     menuItems.push({
-      title: 'Gestão de Eventos 🎉',
+      title: 'Gestão de Eventos',
       href: '/gestor/eventos',
       icon: PartyPopper
     });
@@ -123,7 +123,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   // 3. Ingresso (Para Aluno)
   if (user?.type === 'aluno') {
     menuItems.push({
-      title: 'Meu Ingresso 🎫',
+      title: 'Meus Ingressos',
       href: '/aluno/ingresso',
       icon: Ticket
     });
