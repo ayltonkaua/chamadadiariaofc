@@ -197,9 +197,12 @@ const App = () => {
                     <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
                   </Route>
 
-                  {/* --- Rotas de Eventos (SEM Layout para evitar tela branca) --- */}
+                  {/* --- Rotas de Eventos --- */}
                   <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor']} />}>
-                    <Route path="/gestor/eventos" element={<GerenciarEventosPage />} />
+                    {/* Adicione o wrapper de Layout aqui */}
+                    <Route element={<Layout><Outlet /></Layout>}>
+                      <Route path="/gestor/eventos" element={<GerenciarEventosPage />} />
+                    </Route>
                   </Route>
 
                   <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'professor', 'aluno', 'monitor']} />}>

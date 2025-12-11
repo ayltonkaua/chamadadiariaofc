@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from "@/hooks/use-toast";
-import { CalendarIcon, Loader2, Plus, Printer, Trash2, UserPlus, PartyPopper, ArrowLeft, Search, X, Users, ListPlus, UserRound, Ticket, Download } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Printer, Trash2, UserPlus, PartyPopper, Search, X, Users, ListPlus, UserRound, Ticket, Download } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ import download from 'downloadjs';
 export default function GerenciarEventosPage() {
     const { user } = useAuth();
     const { toast } = useToast();
-    const navigate = useNavigate();
     const ticketRef = useRef<HTMLDivElement>(null);
     const guestTicketRef = useRef<HTMLDivElement>(null);
 
@@ -283,16 +281,15 @@ export default function GerenciarEventosPage() {
 
             <div className="container mx-auto p-4 max-w-5xl space-y-8 animate-in fade-in print:hidden">
                 {/* Header */}
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div className="p-3 bg-purple-100 rounded-xl">
-                        <PartyPopper className="w-8 h-8 text-purple-600" />
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gestão de Eventos</h1>
-                        <p className="text-muted-foreground">Controle festas, convidados e acessos.</p>
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-purple-100 rounded-xl">
+                            <PartyPopper className="w-8 h-8 text-purple-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gestão de Eventos</h1>
+                            <p className="text-muted-foreground">Controle festas, convidados e acessos.</p>
+                        </div>
                     </div>
                 </div>
 

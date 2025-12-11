@@ -147,7 +147,7 @@ export default function MeuIngressoPage() {
                 <Button variant="ghost" size="icon" onClick={() => navigate('/portal-aluno')}>
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <h1 className="text-2xl font-bold text-purple-800">Seu Ingresso Vip 🎟️</h1>
+                <h1 className="text-2xl font-bold text-purple-800">Seu Ingresso</h1>
             </div>
 
             <div
