@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { limparTodosCachesOffline } from "@/lib/offlineChamada";
 
 // CORREÇÃO 1: Adicionar 'professor' na lista de tipos permitidos
 type UserType = 'admin' | 'aluno' | 'staff' | 'professor' | 'indefinido';
@@ -123,6 +124,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
+    await limparTodosCachesOffline(); // Clear encrypted offline data
     await supabase.auth.signOut();
     setUser(null);
   };

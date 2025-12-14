@@ -48,48 +48,49 @@ export default function CreateTurmaDialog({ onTurmaAdded }: { onTurmaAdded?: () 
       toast({ title: "Erro de Configuração", description: "Seu usuário não está vinculado a uma escola. Por favor, configure o perfil da escola primeiro.", variant: "destructive" });
       return;
     }
-    
+
     setLoading(true);
     try {
       const { data: turma, error: turmaError } = await supabase
         .from("turmas")
-        .insert({ 
-          nome: nomeTurma, 
-          numero_sala: numeroSala, 
+        .insert({
+          nome: nomeTurma,
+          numero_sala: numeroSala,
           user_id: user.id,
-          escola_id: user.escola_id // Agora é garantido que existe
+          escola_id: user.escola_id, // Agora é garantido que existe
+          turno: 'Manhã' // Valor padrão temporário
         })
         .select()
         .single();
-        
+
       if (turmaError || !turma) {
         throw turmaError || new Error("Não foi possível obter os dados da turma criada.");
       }
-      
-      const alunosParaInserir = alunos.map(a => ({ 
-        nome: a.nome, 
-        matricula: a.matricula, 
+
+      const alunosParaInserir = alunos.map(a => ({
+        nome: a.nome,
+        matricula: a.matricula,
         turma_id: turma.id,
         escola_id: user.escola_id // Vinculando aluno à escola também
       }));
-      
+
       const { error: alunosError } = await supabase.from("alunos").insert(alunosParaInserir);
-      
+
       if (alunosError) {
         // Se der erro ao inserir alunos, apaga a turma para não deixar dados inconsistentes
         await supabase.from("turmas").delete().eq("id", turma.id);
         throw alunosError;
       }
-      
+
       toast({ title: "Turma criada com sucesso", description: `Turma "${nomeTurma}" adicionada com ${alunos.length} aluno(s).` });
       setOpen(false);
       resetForm();
       onTurmaAdded?.();
     } catch (error: any) {
-        console.error("Erro ao salvar turma:", error);
-        toast({ title: "Erro", description: error.message || "Não foi possível criar a turma.", variant: "destructive" });
+      console.error("Erro ao salvar turma:", error);
+      toast({ title: "Erro", description: error.message || "Não foi possível criar a turma.", variant: "destructive" });
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -111,7 +112,7 @@ export default function CreateTurmaDialog({ onTurmaAdded }: { onTurmaAdded?: () 
           <Input value={numeroSala} onChange={e => setNumeroSala(e.target.value)} />
         </div>
         <div className="space-y-2 mt-4 border-t pt-4">
-            <h4 className="font-medium">Adicionar Alunos</h4>
+          <h4 className="font-medium">Adicionar Alunos</h4>
           <div className="flex gap-2">
             <div className="flex-1">
               <Label>Nome do Aluno</Label>
@@ -136,7 +137,7 @@ export default function CreateTurmaDialog({ onTurmaAdded }: { onTurmaAdded?: () 
         </div>
         <DialogFooter>
           <Button onClick={handleSave} disabled={loading || loadingUser}>
-            {loading || loadingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+            {loading || loadingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {loading || loadingUser ? "Aguarde..." : "Salvar Turma"}
           </Button>
         </DialogFooter>

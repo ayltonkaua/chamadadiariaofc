@@ -1,24 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-
-interface AlertaGerado {
-  id: string;
-  alunoNome: string;
-  turmaNome: string;
-  mensagem: string;
-  tipo: 'Faltas Elevadas' | 'Outro';
-  dadosAdicionais: {
-    totalAulas: number;
-    totalFaltas: number;
-    taxaFaltas: number;
-  };
-}
+import { alertasService, type AlertaGerado } from "@/domains";
 
 const AlertasPage: React.FC = () => {
   const [alertas, setAlertas] = useState<AlertaGerado[]>([]);
@@ -26,7 +13,7 @@ const AlertasPage: React.FC = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    const gerarAlertasDeFaltas = async () => {
+    const carregarAlertas = async () => {
       if (!user?.escola_id) {
         setLoading(false);
         return;
@@ -34,39 +21,9 @@ const AlertasPage: React.FC = () => {
 
       setLoading(true);
       try {
-        // Chama a função segura (RPC) que filtra por professor automaticamente
-        const { data: stats, error } = await supabase
-          .rpc('get_alertas_frequencia', { _escola_id: user.escola_id });
-
-        if (error) throw error;
-
-        const alertasGerados: AlertaGerado[] = [];
-        const LIMITE_FALTAS_PCT = 25; // Define o limite crítico (25%)
-
-        if (stats) {
-          stats.forEach((stat: any) => {
-            const taxa = Number(stat.percentual_faltas);
-
-            if (taxa >= LIMITE_FALTAS_PCT) {
-              alertasGerados.push({
-                id: stat.aluno_id,
-                alunoNome: stat.nome,
-                turmaNome: stat.turma_nome || "Turma",
-                mensagem: `O(A) aluno(a) atingiu ${taxa}% de faltas.`,
-                tipo: 'Faltas Elevadas',
-                dadosAdicionais: {
-                  totalAulas: Number(stat.total_aulas),
-                  totalFaltas: Number(stat.total_faltas),
-                  taxaFaltas: taxa,
-                },
-              });
-            }
-          });
-        }
-
-        setAlertas(alertasGerados.sort((a, b) => a.alunoNome.localeCompare(b.alunoNome)));
-
-      } catch (err: any) {
+        const alertasGerados = await alertasService.getAlertas(user.escola_id);
+        setAlertas(alertasGerados);
+      } catch (err) {
         console.error("Erro alertas:", err);
         toast({
           title: "Erro ao carregar",
@@ -78,7 +35,7 @@ const AlertasPage: React.FC = () => {
       }
     };
 
-    gerarAlertasDeFaltas();
+    carregarAlertas();
   }, [user?.escola_id]);
 
   if (loading) {
@@ -89,7 +46,6 @@ const AlertasPage: React.FC = () => {
     );
   }
 
-  // Verifica se é professor para mostrar aviso visual
   const isProfessor = user?.type === 'professor' || user?.role === 'professor';
 
   return (

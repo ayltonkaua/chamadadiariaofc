@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { programasService, type ProgramaSocialRow, type MappingColumns } from '@/domains';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
@@ -20,7 +20,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import {
-    Plus, Upload, Trash2, Eye, EyeOff, FileSpreadsheet, Loader2, CheckCircle, ArrowLeft
+    Plus, Upload, Trash2, Eye, EyeOff, FileSpreadsheet, Loader2, CheckCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +29,7 @@ export default function GerenciarProgramasPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const navigate = useNavigate();
-    const [programas, setProgramas] = useState<any[]>([]);
+    const [programas, setProgramas] = useState<ProgramaSocialRow[]>([]);
     const [loading, setLoading] = useState(false);
 
     // Estados do Modal de Criação
@@ -63,12 +63,8 @@ export default function GerenciarProgramasPage() {
 
     const loadProgramas = async () => {
         if (!user?.escola_id) return;
-        const { data } = await supabase
-            .from('programas_sociais')
-            .select('*')
-            .eq('escola_id', user.escola_id)
-            .order('created_at', { ascending: false });
-        setProgramas(data || []);
+        const data = await programasService.loadProgramas(user.escola_id);
+        setProgramas(data);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,56 +107,24 @@ export default function GerenciarProgramasPage() {
             return;
         }
 
-        setStep(3); // Vai para o progresso
+        setStep(3);
         setTotalRegistros(excelData.length);
         setProgress(0);
 
         try {
             // 1. Criar o Programa
-            const { data: progData, error: progError } = await supabase
-                .from('programas_sociais')
-                .insert({
-                    nome: novoProgramaNome,
-                    escola_id: user?.escola_id,
-                    ativo: true
-                })
-                .select()
-                .single();
+            const progData = await programasService.createPrograma(novoProgramaNome, user?.escola_id || '');
 
-            if (progError) throw progError;
-
-            // 2. Processar Registros em Lotes (Chunks de 50)
-            const programaId = progData.id;
-            const chunkSize = 50;
-            let processados = 0;
-
-            for (let i = 0; i < excelData.length; i += chunkSize) {
-                const chunk = excelData.slice(i, i + chunkSize);
-
-                const registrosParaInserir = chunk.map((row: any) => ({
-                    programa_id: programaId,
-                    matricula_beneficiario: String(row[mapping.matricula]).trim(), // Garante string
-                    dados_pagamento: {
-                        nome_responsavel: row[mapping.nome_responsavel],
-                        cpf_responsavel: row[mapping.cpf_responsavel],
-                        banco: row[mapping.banco],
-                        agencia: row[mapping.agencia],
-                        conta: row[mapping.conta],
-                        valor: row[mapping.valor],
-                        data_pagamento: row[mapping.data_pagamento] ? String(row[mapping.data_pagamento]).trim() : null
-                    }
-                }));
-
-                const { error: insertError } = await supabase
-                    .from('programas_registros')
-                    .insert(registrosParaInserir);
-
-                if (insertError) throw insertError;
-
-                processados += chunk.length;
-                setRegistrosProcessados(Math.min(processados, excelData.length));
-                setProgress(Math.round((processados / excelData.length) * 100));
-            }
+            // 2. Importar registros usando service
+            await programasService.importRegistros(
+                progData.id,
+                excelData,
+                mapping as MappingColumns,
+                (processed, total) => {
+                    setRegistrosProcessados(processed);
+                    setProgress(Math.round((processed / total) * 100));
+                }
+            );
 
             toast({ title: "Importação concluída com sucesso!" });
             setTimeout(() => {
@@ -172,7 +136,7 @@ export default function GerenciarProgramasPage() {
         } catch (error: any) {
             console.error(error);
             toast({ title: "Erro na importação", description: error.message, variant: "destructive" });
-            setStep(2); // Volta para tentar de novo
+            setStep(2);
         }
     };
 
@@ -187,27 +151,23 @@ export default function GerenciarProgramasPage() {
     };
 
     const toggleAtivo = async (id: string, atual: boolean) => {
-        await supabase.from('programas_sociais').update({ ativo: !atual }).eq('id', id);
+        await programasService.toggleAtivo(id, atual);
         loadProgramas();
     };
 
     const excluirPrograma = async (id: string) => {
         if (!window.confirm("Tem certeza? Isso apagará todos os registros deste programa.")) return;
-        await supabase.from('programas_sociais').delete().eq('id', id);
+        await programasService.deletePrograma(id);
         loadProgramas();
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6 space-y-6">
-            <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="rounded-full" onClick={() => navigate('/dashboard')}>
-                    <ArrowLeft className="h-5 w-5 text-gray-600" />
-                </Button>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Programas Sociais</h1>
                     <p className="text-gray-500">Gerencie benefícios e importações de planilhas.</p>
                 </div>
-                <div className="flex-1" />
                 <Dialog open={modalOpen} onOpenChange={setModalOpen}>
                     <DialogTrigger asChild>
                         <Button className="bg-green-600 hover:bg-green-700" onClick={resetForm}>

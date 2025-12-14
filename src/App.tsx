@@ -48,7 +48,18 @@ import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
 import { sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { toast } from "@/components/ui/use-toast";
 
-const queryClient = new QueryClient();
+// Optimized QueryClient for caching
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,    // Data stays fresh for 5 minutes
+      gcTime: 30 * 60 * 1000,      // Keep unused data in cache for 30 minutes
+      retry: 1,                    // Retry once on failure
+      refetchOnWindowFocus: true,  // Refetch when window gets focus
+      refetchOnMount: false,       // Don't refetch on mount if data is fresh
+    },
+  },
+});
 
 const OfflineBanner = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -194,7 +205,9 @@ const App = () => {
 
                   {/* Gestão de Programas Sociais (Novo) */}
                   <Route element={<ProtectedRoute allowedTypes={['admin', 'diretor']} />}>
-                    <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                    <Route element={<Layout><Outlet /></Layout>}>
+                      <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                    </Route>
                   </Route>
 
                   {/* --- Rotas de Eventos --- */}

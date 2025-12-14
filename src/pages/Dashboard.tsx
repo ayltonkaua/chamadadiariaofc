@@ -5,31 +5,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InfoCards } from "@/components/dashboard/InfoCards";
 import { TurmasCards } from "@/components/TurmasCards";
 import OfflineManager from "@/components/offline/OfflineManager";
-import { supabase } from "@/integrations/supabase/client";
 import { ImportTurmasDialog } from "@/components/turmas/ImportTurmasDialog";
 import { getDadosEscolaOffline } from "@/lib/offlineChamada";
 import { WifiOff, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-// Interface de dados
-interface Turma {
-  id: string;
-  nome: string;
-  numero_sala?: string;
-  turno: string;
-  escola_id: string;
-  _count?: {
-    alunos: number;
-  };
-  alunos?: number; // Compatibilidade offline
-}
+import { turmaService, type TurmaComContagem } from "@/domains";
 
 const Dashboard: React.FC = () => {
-  const { user } = useAuth(); // AuthContext pode estar vazio offline
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState("turmas");
   const [loading, setLoading] = useState(true);
-  const [todasTurmas, setTodasTurmas] = useState<Turma[]>([]);
+  const [todasTurmas, setTodasTurmas] = useState<TurmaComContagem[]>([]);
   const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
 
   // Monitora conexão em tempo real
@@ -42,54 +29,6 @@ const Dashboard: React.FC = () => {
       window.removeEventListener('offline', handleStatus);
     };
   }, []);
-
-  // --- LÓGICA DE DADOS ROBUSTA ---
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
-
-    // 1. ESTRATÉGIA OFFLINE-FIRST SE SEM CONEXÃO
-    // Se o navegador diz que está offline, NEM TENTE conectar ao Supabase.
-    if (!navigator.onLine) {
-      await carregarDadosOffline();
-      setLoading(false);
-      return;
-    }
-
-    // 2. ESTRATÉGIA ONLINE COM FALLBACK
-    try {
-      // Verifica se usuário está autenticado
-      if (!user) {
-        throw new Error("Usuário não autenticado");
-      }
-
-      // RLS já filtra por escola e role automaticamente
-      // Staff vê todas as turmas da escola, Professor vê apenas suas turmas, Aluno vê apenas sua turma
-      const { data, error } = await supabase
-        .from('turmas')
-        .select(`id, nome, numero_sala, turno, escola_id, alunos:alunos(count)`)
-        .order('nome');
-
-      if (error) throw error;
-
-      const turmasFormatadas: Turma[] = (data || []).map((t: any) => ({
-        id: t.id,
-        nome: t.nome,
-        escola_id: t.escola_id,
-        numero_sala: t.numero_sala,
-        turno: t.turno || "Sem Turno",
-        _count: { alunos: t.alunos?.[0]?.count || 0 }
-      }));
-
-      setTodasTurmas(turmasFormatadas);
-      setIsOfflineMode(false);
-
-    } catch (err) {
-      console.warn("Falha ao buscar dados online. Ativando modo offline...", err);
-      await carregarDadosOffline();
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
 
   // Função auxiliar para ler do IndexedDB
   const carregarDadosOffline = async () => {
@@ -106,6 +45,8 @@ const Dashboard: React.FC = () => {
             escola_id: t.escola_id || "offline-id",
             numero_sala: t.numero_sala,
             turno: t.turno || "Sem Turno",
+            user_id: t.user_id || null,
+            created_at: t.created_at || null,
             _count: { alunos: qtdAlunos },
             alunos: qtdAlunos
           };
@@ -115,7 +56,6 @@ const Dashboard: React.FC = () => {
         setTodasTurmas(turmasOffline);
         setIsOfflineMode(true);
       } else {
-        // Se não tem nada no cache
         setTodasTurmas([]);
       }
     } catch (err) {
@@ -123,25 +63,43 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // --- LÓGICA DE DADOS USANDO turmaService ---
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+
+    // ESTRATÉGIA OFFLINE-FIRST
+    if (!navigator.onLine) {
+      await carregarDadosOffline();
+      setLoading(false);
+      return;
+    }
+
+    // ESTRATÉGIA ONLINE COM FALLBACK
+    try {
+      if (!user) {
+        throw new Error("Usuário não autenticado");
+      }
+
+      // Usa turmaService em vez de supabase direto
+      const turmasComContagem = await turmaService.findWithCount(user.escola_id);
+
+      setTodasTurmas(turmasComContagem);
+      setIsOfflineMode(false);
+
+    } catch (err) {
+      console.warn("Falha ao buscar dados online. Ativando modo offline...", err);
+      await carregarDadosOffline();
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Filtros de Turno
-  const turmasManha = todasTurmas.filter(t => {
-    const turno = t.turno?.toLowerCase() || "";
-    return turno.includes("manhã") || turno.includes("manha") || turno.includes("matutino") || turno.includes("1");
-  });
-
-  const turmasTarde = todasTurmas.filter(t => {
-    const turno = t.turno?.toLowerCase() || "";
-    return turno.includes("tarde") || turno.includes("vespertino") || turno.includes("2");
-  });
-
-  const turmasNoite = todasTurmas.filter(t => {
-    const turno = t.turno?.toLowerCase() || "";
-    return turno.includes("noite") || turno.includes("noturno") || turno.includes("3");
-  });
+  // Usa turmaService.groupByTurno para filtrar
+  const grouped = turmaService.groupByTurno(todasTurmas);
 
   if (loading) {
     return (
@@ -204,21 +162,21 @@ const Dashboard: React.FC = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm border">
                 <Tabs defaultValue="manha" className="w-full">
                   <TabsList className="grid w-full grid-cols-3 mb-6">
-                    <TabsTrigger value="manha">Manhã ({turmasManha.length})</TabsTrigger>
-                    <TabsTrigger value="tarde">Tarde ({turmasTarde.length})</TabsTrigger>
-                    <TabsTrigger value="noite">Noite ({turmasNoite.length})</TabsTrigger>
+                    <TabsTrigger value="manha">Manhã ({grouped.manha.length})</TabsTrigger>
+                    <TabsTrigger value="tarde">Tarde ({grouped.tarde.length})</TabsTrigger>
+                    <TabsTrigger value="noite">Noite ({grouped.noite.length})</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="manha">
-                    <TurmasCards turmas={turmasManha} loading={false} onRefresh={fetchDashboardData} turno="Manhã" />
+                    <TurmasCards turmas={grouped.manha} loading={false} onRefresh={fetchDashboardData} turno="Manhã" />
                   </TabsContent>
 
                   <TabsContent value="tarde">
-                    <TurmasCards turmas={turmasTarde} loading={false} onRefresh={fetchDashboardData} turno="Tarde" />
+                    <TurmasCards turmas={grouped.tarde} loading={false} onRefresh={fetchDashboardData} turno="Tarde" />
                   </TabsContent>
 
                   <TabsContent value="noite">
-                    <TurmasCards turmas={turmasNoite} loading={false} onRefresh={fetchDashboardData} turno="Noite" />
+                    <TurmasCards turmas={grouped.noite} loading={false} onRefresh={fetchDashboardData} turno="Noite" />
                   </TabsContent>
                 </Tabs>
               </div>

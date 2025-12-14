@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Wallet, AlertTriangle, ExternalLink, Building2, User, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { beneficiosService, type BeneficioRegistro } from "@/domains";
 
 export default function MeusBeneficiosPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
-    const [beneficios, setBeneficios] = useState<any[]>([]);
+    const [beneficios, setBeneficios] = useState<BeneficioRegistro[]>([]);
     const [alunoMatricula, setAlunoMatricula] = useState<string | null>(null);
 
     useEffect(() => {
@@ -23,35 +23,9 @@ export default function MeusBeneficiosPage() {
         if (!user) return;
 
         try {
-            // 1. Buscar matrícula do aluno
-            const { data: alunoData, error: alunoError } = await (supabase as any)
-                .from('alunos')
-                .select('matricula')
-                .eq('user_id', user.id)
-                .single();
-
-            if (alunoError || !alunoData) {
-                setLoading(false);
-                return;
-            }
-
-            setAlunoMatricula(alunoData.matricula);
-
-            // 2. Buscar Benefícios (Registros + Nome do Programa)
-            const { data: beneficiosData, error: benError } = await (supabase as any)
-                .from('programas_registros')
-                .select(`
-                    *,
-                    programas_sociais (nome, ativo)
-                `)
-                .eq('matricula_beneficiario', alunoData.matricula);
-
-            if (!benError && beneficiosData) {
-                // Filtra apenas programas ativos
-                const ativos = beneficiosData.filter((b: any) => b.programas_sociais?.ativo);
-                setBeneficios(ativos);
-            }
-
+            const { matricula, beneficios: beneficiosData } = await beneficiosService.getBeneficiosForUser(user.id);
+            setAlunoMatricula(matricula);
+            setBeneficios(beneficiosData);
         } catch (error) {
             console.error("Erro ao carregar benefícios:", error);
         } finally {
@@ -92,7 +66,6 @@ export default function MeusBeneficiosPage() {
                 </Card>
             ) : (
                 <div className="space-y-6">
-                    {/* Alerta de Prestação de Contas (Sempre visível se tiver benefício) */}
                     <Alert className="bg-amber-50 border-amber-200 text-amber-900">
                         <AlertTriangle className="h-5 w-5 text-amber-600" />
                         <AlertTitle className="ml-2 font-bold">Atenção: Prestação de Contas</AlertTitle>
@@ -113,9 +86,8 @@ export default function MeusBeneficiosPage() {
                         </AlertDescription>
                     </Alert>
 
-                    {/* Lista de Cards de Benefícios */}
                     {beneficios.map((item) => {
-                        const dados = item.dados_pagamento || {}; // Garante que não quebre se for null
+                        const dados = item.dados_pagamento || {};
                         const dataPagamento = dados.data_pagamento || '--/--/----';
                         return (
                             <Card key={item.id} className="border-l-4 border-l-green-500 shadow-sm overflow-hidden">

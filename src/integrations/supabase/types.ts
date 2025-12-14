@@ -16,6 +16,7 @@ export type Database = {
           matricula: string
           nome: string
           turma_id: string
+          escola_id: string
         }
         Insert: {
           created_at?: string | null
@@ -23,6 +24,7 @@ export type Database = {
           matricula: string
           nome: string
           turma_id: string
+          escola_id: string
         }
         Update: {
           created_at?: string | null
@@ -30,6 +32,7 @@ export type Database = {
           matricula?: string
           nome?: string
           turma_id?: string
+          escola_id?: string
         }
         Relationships: [
           {
@@ -122,6 +125,7 @@ export type Database = {
           numero_sala: string
           user_id: string | null
           escola_id: string
+          turno: string | null
         }
         Insert: {
           created_at?: string | null
@@ -130,6 +134,7 @@ export type Database = {
           numero_sala?: string
           user_id?: string | null
           escola_id: string
+          turno?: string | null
         }
         Update: {
           created_at?: string | null
@@ -138,6 +143,7 @@ export type Database = {
           numero_sala?: string
           user_id?: string | null
           escola_id?: string
+          turno?: string | null
         }
         Relationships: [
           {

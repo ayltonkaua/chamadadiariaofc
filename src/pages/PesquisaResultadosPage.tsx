@@ -7,25 +7,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ArrowLeft, Loader2, PieChart, Users, FileText, BarChart3, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Complex nested queries
 
 // Tipos para estruturar os dados
-interface Resposta { 
-  resposta: string; 
+interface Resposta {
+  resposta: string;
   alunos: { nome: string; } | null;
 }
-interface Pergunta { 
+interface Pergunta {
   id: string;
-  texto_pergunta: string; 
-  opcoes: string[]; 
-  pesquisa_respostas: Resposta[]; 
+  texto_pergunta: string;
+  opcoes: string[];
+  pesquisa_respostas: Resposta[];
 }
-interface PesquisaCompleta { 
+interface PesquisaCompleta {
   id: string;
-  titulo: string; 
-  descricao: string | null; 
+  titulo: string;
+  descricao: string | null;
   created_at: string;
-  pesquisa_perguntas: Pergunta[]; 
+  pesquisa_perguntas: Pergunta[];
 }
 
 const PesquisaResultadosPage: React.FC = () => {
@@ -87,10 +87,10 @@ const PesquisaResultadosPage: React.FC = () => {
         });
       } catch (err) {
         console.error('Erro ao carregar resultados:', err);
-        toast({ 
-          title: "Erro ao carregar resultados", 
-          description: (err as Error).message, 
-          variant: "destructive" 
+        toast({
+          title: "Erro ao carregar resultados",
+          description: (err as Error).message,
+          variant: "destructive"
         });
       } finally {
         setLoading(false);
@@ -109,7 +109,7 @@ const PesquisaResultadosPage: React.FC = () => {
     return pergunta.opcoes.map(opcao => ({
       name: opcao,
       votos: contagem[opcao] || 0,
-      porcentagem: pergunta.pesquisa_respostas.length > 0 
+      porcentagem: pergunta.pesquisa_respostas.length > 0
         ? Math.round((contagem[opcao] || 0) / pergunta.pesquisa_respostas.length * 100)
         : 0
     }));
@@ -152,7 +152,7 @@ const PesquisaResultadosPage: React.FC = () => {
     );
   }
 
-  const totalRespostas = pesquisa.pesquisa_perguntas.reduce((total, pergunta) => 
+  const totalRespostas = pesquisa.pesquisa_perguntas.reduce((total, pergunta) =>
     total + pergunta.pesquisa_respostas.length, 0
   );
 
@@ -191,7 +191,7 @@ const PesquisaResultadosPage: React.FC = () => {
           {pesquisa.pesquisa_perguntas.map((pergunta, index) => {
             const dadosGrafico = processarResultados(pergunta);
             const totalRespostasPergunta = pergunta.pesquisa_respostas.length;
-            
+
             return (
               <Card key={pergunta.id} className="shadow-sm">
                 <CardHeader>
@@ -225,9 +225,9 @@ const PesquisaResultadosPage: React.FC = () => {
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis type="number" />
                             <YAxis dataKey="name" type="category" width={150} />
-                            <Tooltip 
+                            <Tooltip
                               formatter={(value: any, name: any) => [
-                                `${value} votos (${dadosGrafico.find(d => d.name === name)?.porcentagem}%)`, 
+                                `${value} votos (${dadosGrafico.find(d => d.name === name)?.porcentagem}%)`,
                                 'Votos'
                               ]}
                             />
@@ -236,7 +236,7 @@ const PesquisaResultadosPage: React.FC = () => {
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
-                      
+
                       {/* Tabela de resultados */}
                       <div className="border rounded-lg overflow-hidden">
                         <table className="w-full">

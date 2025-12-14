@@ -9,8 +9,8 @@ import {
   FileText,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { gestorService } from "@/domains";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -34,7 +33,7 @@ import { TaxaPresencaTurmaReport } from "@/components/relatorios/TaxaPresencaTur
 import { RelatorioAtestados } from "@/components/relatorios/RelatorioAtestados";
 import { RelatorioAtestadosPendentes } from "@/components/relatorios/RelatorioAtestadosPendentes";
 
-// Componente para o seletor de período (reutilizado)
+// Componente para o seletor de período
 function DateRangePicker({
   date,
   setDate,
@@ -49,7 +48,7 @@ function DateRangePicker({
           id="date"
           variant={"outline"}
           className={cn(
-            "w-full sm:w-[280px] justify-start text-left font-normal bg-card", // Fundo branco para contraste
+            "w-full sm:w-[280px] justify-start text-left font-normal bg-card",
             !date && "text-muted-foreground"
           )}
         >
@@ -83,7 +82,7 @@ function DateRangePicker({
   );
 }
 
-// NOVO: Componente para os Cards de Resumo coloridos
+// Componente para os Cards de Resumo coloridos
 const SummaryCard = ({
   title,
   value,
@@ -108,15 +107,13 @@ const SummaryCard = ({
   );
 };
 
-// Página de Relatórios com o novo design
+// Página de Relatórios
 export default function RelatoriosPage() {
   const [date, setDate] = useState<DateRange | undefined>({
     from: addDays(new Date(), -30),
     to: new Date(),
   });
 
-  // Dados de exemplo para os cards de resumo
-  // Estados para os dados do dashboard
   const [summaryData, setSummaryData] = useState({
     alunosMatriculados: 0,
     faltososHoje: 0,
@@ -124,26 +121,23 @@ export default function RelatoriosPage() {
     atestadosPendentes: 0
   });
 
-  const { user } = useAuth(); // Hook de auth
+  const { user } = useAuth();
 
   useEffect(() => {
     async function fetchDashboardStats() {
       if (!user?.escola_id) return;
 
       try {
-        const { data, error } = await (supabase.rpc as any)('get_dashboard_stats', {
-          _escola_id: user.escola_id
-        });
+        // Usa gestorService em vez de supabase.rpc direto
+        const kpis = await gestorService.getKpis(user.escola_id);
+        const kpisAdmin = await gestorService.getKpisAdmin(user.escola_id);
 
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          // O RPC retorna array, pegamos o primeiro item
+        if (kpis && kpisAdmin) {
           setSummaryData({
-            alunosMatriculados: data[0].total_alunos || 0,
-            faltososHoje: data[0].faltas_hoje || 0,
-            turmasCadastradas: data[0].total_turmas || 0,
-            atestadosPendentes: data[0].atestados_pendentes || 0,
+            alunosMatriculados: kpis.total_alunos || 0,
+            faltososHoje: 0, // Não temos este dado no KPI atual
+            turmasCadastradas: 0, // Não temos este dado no KPI atual
+            atestadosPendentes: kpisAdmin.atestados_pendentes || 0,
           });
         }
       } catch (err) {
@@ -155,7 +149,6 @@ export default function RelatoriosPage() {
   }, [user?.escola_id]);
 
   return (
-    // Fundo da página cinza claro para destacar os cards brancos
     <main className="flex-1 space-y-6 bg-muted/40 p-4 md:p-8">
       {/* 1. Cabeçalho da página */}
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
@@ -168,7 +161,7 @@ export default function RelatoriosPage() {
         <DateRangePicker date={date} setDate={setDate} />
       </div>
 
-      {/* 2. Seção de Cards de Resumo (KPIs) - A principal mudança estética */}
+      {/* 2. Seção de Cards de Resumo (KPIs) */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           title="Alunos Matriculados"

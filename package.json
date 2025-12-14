@@ -8,7 +8,10 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.1",
@@ -45,10 +48,11 @@
     "@refinedev/react-router-v6": "^4.6.2",
     "@refinedev/supabase": "^5.9.8",
     "@supabase/supabase-js": "^2.49.4",
-    "@tanstack/react-query": "^5.56.2",
+    "@tanstack/react-query": "^5.90.12",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "crypto-js": "^4.2.0",
     "date-fns": "^3.6.0",
     "downloadjs": "^1.4.7",
     "embla-carousel-react": "^8.3.0",
@@ -78,7 +82,10 @@
     "@eslint/js": "^9.9.0",
     "@rollup/browser": "^4.40.1",
     "@tailwindcss/typography": "^0.5.15",
-    "@types/node": "^22.5.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/node": "^22.19.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
@@ -87,6 +94,7 @@
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
+    "jsdom": "^27.3.0",
     "postcss": "^8.4.47",
     "postcss-cli": "^11.0.0",
     "rollup": "^4.40.1",
@@ -95,6 +103,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
-    "vite-plugin-pwa": "^1.0.1"
+    "vite-plugin-pwa": "^1.0.1",
+    "vitest": "^4.0.15"
   }
 }

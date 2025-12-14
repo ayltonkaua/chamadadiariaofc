@@ -6,77 +6,56 @@ import download from 'downloadjs';
 import { Button } from '@/components/ui/button';
 import { Download, ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { ingressoService, type EventoPublico } from '@/domains';
 
 export default function MeuIngressoPage() {
     const { user, loadingUser } = useAuth();
     const navigate = useNavigate();
     const ticketRef = useRef<HTMLDivElement>(null);
-    const [evento, setEvento] = useState<any>(null);
+    const [evento, setEvento] = useState<EventoPublico | null>(null);
     const [loading, setLoading] = useState(true);
     const [debugInfo, setDebugInfo] = useState<string>('');
 
     useEffect(() => {
         const fetchEvento = async () => {
-            // CORREÇÃO 1: Aguarda user e loadingUser terminarem
             if (loadingUser) {
                 console.log("[MeuIngresso] Aguardando user carregar...");
                 return;
             }
 
             if (!user) {
-                console.log("[MeuIngresso] User não autenticado");
                 setLoading(false);
                 setDebugInfo('Usuário não autenticado');
                 return;
             }
 
-            // CORREÇÃO 2: Verifica escola_id com retry
             if (!user.escola_id) {
-                console.log("[MeuIngresso] User sem escola_id:", user);
-                setDebugInfo(`User carregado mas sem escola_id. Type: ${user.type}, aluno_id: ${user.aluno_id || 'N/A'}`);
+                setDebugInfo(`User carregado mas sem escola_id. Type: ${user.type}`);
                 setLoading(false);
                 return;
             }
 
-            console.log("[MeuIngresso] Buscando evento para escola:", user.escola_id);
-            setDebugInfo(`Buscando eventos para escola: ${user.escola_id.slice(0, 8)}...`);
+            console.log("[MeuIngresso] Buscando evento via service");
+            setDebugInfo(`Buscando eventos...`);
 
             try {
-                // CORREÇÃO 3: Query robusta com tratamento de erro
-                const { data, error } = await (supabase as any)
-                    .from('eventos')
-                    .select('*')
-                    .eq('escola_id', user.escola_id)
-                    .eq('ativo', true)
-                    .order('data_evento', { ascending: false })
-                    .limit(1);
-
-                if (error) {
-                    console.error("[MeuIngresso] Erro Supabase:", error);
-                    setDebugInfo(`Erro RLS: ${error.message}`);
-                    setLoading(false);
-                    return;
-                }
-
-                console.log("[MeuIngresso] Resultado:", data);
-
-                if (data && data.length > 0) {
-                    setEvento(data[0]);
+                const data = await ingressoService.getActiveEvento(user.escola_id);
+                if (data) {
+                    setEvento(data);
                     setDebugInfo('');
                 } else {
-                    setDebugInfo(`Nenhum evento ativo encontrado para escola ${user.escola_id.slice(0, 8)}...`);
+                    setDebugInfo('Nenhum evento ativo encontrado');
                 }
             } catch (err: any) {
                 console.error("[MeuIngresso] Exception:", err);
-                setDebugInfo(`Exceção: ${err.message}`);
+                setDebugInfo(`Erro: ${err.message}`);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchEvento();
-    }, [user, loadingUser]); // CORREÇÃO 4: Inclui loadingUser nas dependências
+    }, [user, loadingUser]);
 
     const handleDownload = () => {
         if (ticketRef.current) {

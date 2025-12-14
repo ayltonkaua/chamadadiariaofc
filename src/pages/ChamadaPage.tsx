@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import {
   Check,
@@ -30,26 +28,17 @@ import {
 } from '@/lib/offlineChamada';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
-
-// --- TIPOS ---
-interface Aluno {
-  id: string;
-  nome: string;
-  matricula: string;
-  turma_id: string;
-  escola_id?: string; // Fundamental para o offline funcionar
-}
-
-interface Atestado {
-  id: string;
-  aluno_id: string;
-  data_inicio: string;
-  data_fim: string;
-  status: string;
-}
+import {
+  alunoService,
+  atestadosService,
+  presencaService,
+  observacoesService,
+  type Aluno,
+  type Atestado
+} from "@/domains";
 
 // Estado visual único. Não permite ambiguidade.
-type Presenca = "presente" | "falta" | "atestado";
+type PresencaStatus = "presente" | "falta" | "atestado";
 
 const ChamadaPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
@@ -59,18 +48,17 @@ const ChamadaPage: React.FC = () => {
 
   // Estados de Dados
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [presencas, setPresencas] = useState<Record<string, Presenca>>({});
+  const [presencas, setPresencas] = useState<Record<string, PresencaStatus>>({});
   const [atestados, setAtestados] = useState<Record<string, Atestado[]>>({});
 
   // Estados de Controle
   const [date, setDate] = useState<Date>(new Date());
   const [isSaving, setIsSaving] = useState(false);
-  const isSubmittingRef = React.useRef(false); // Ref para debounce imediato
+  const isSubmittingRef = React.useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // --- CORREÇÃO OFFLINE: ID da Escola Local ---
-  // Se o user.escola_id falhar (offline), pegamos dos alunos baixados
+  // ID da Escola Local (para offline)
   const [localEscolaId, setLocalEscolaId] = useState<string | null>(null);
 
   // Modais
@@ -88,7 +76,6 @@ const ChamadaPage: React.FC = () => {
       const status = navigator.onLine;
       setIsOnline(status);
       if (status) {
-        // Tenta sincronizar silenciosamente ao voltar a internet
         sincronizarChamadasOffline().then(res => {
           if (res.success && res.count > 0) toast({ title: "Sincronizado", description: `${res.count} registros enviados.` });
         });
@@ -102,7 +89,7 @@ const ChamadaPage: React.FC = () => {
     };
   }, []);
 
-  // --- 2. CARREGAMENTO DE DADOS (Estratégia Offline-First Robusta) ---
+  // --- 2. CARREGAMENTO DE DADOS ---
   const carregarDados = useCallback(async () => {
     if (!turmaId) return;
     setIsLoading(true);
@@ -116,76 +103,56 @@ const ChamadaPage: React.FC = () => {
         console.log("Modo Offline: Buscando alunos no cache...");
         listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
       }
-      // B) SE ONLINE: Tenta Supabase, com fallback para cache
-      // RLS já filtra por escola e role automaticamente
+      // B) SE ONLINE: Usa service com fallback para cache
       else {
         try {
-          const { data, error } = await supabase
-            .from("alunos")
-            .select("id, nome, matricula, turma_id, escola_id")
-            .eq("turma_id", turmaId)
-            .order("nome");
-
-          if (error) throw error;
-          listaAlunos = data || [];
+          listaAlunos = await alunoService.findByTurma(turmaId);
         } catch (err) {
           console.warn("Erro ao buscar online. Usando cache.", err);
           listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
         }
       }
 
-      // --- CRUCIAL: Extração do ID da Escola ---
-      // Se não veio do Auth (comum offline), tenta pegar do primeiro aluno
+      // Extração do ID da Escola dos dados do aluno
       if (!escolaIdEncontrado && listaAlunos.length > 0) {
-        // Tenta encontrar algum aluno que tenha escola_id preenchido
         const alunoComEscola = listaAlunos.find(a => a.escola_id);
         if (alunoComEscola) {
           escolaIdEncontrado = alunoComEscola.escola_id!;
-          console.log("Escola ID recuperado dos dados do aluno:", escolaIdEncontrado);
         }
       }
       setLocalEscolaId(escolaIdEncontrado);
 
-      // C) Recuperar Rascunho ou Inicializar
+      // Recuperar Rascunho ou Inicializar
       const rascunho = await getSessaoChamada();
-      const mapaPresencas: Record<string, Presenca> = {};
+      const mapaPresencas: Record<string, PresencaStatus> = {};
 
       if (rascunho && rascunho.turmaId === turmaId) {
         const [y, m, d] = rascunho.date.split('-').map(Number);
         setDate(new Date(y, m - 1, d));
         Object.entries(rascunho.presencas).forEach(([id, status]) => {
-          if (status) mapaPresencas[id] = status as Presenca;
+          if (status) mapaPresencas[id] = status as PresencaStatus;
         });
-        // Garante consistência
         listaAlunos.forEach(a => { if (!mapaPresencas[a.id]) mapaPresencas[a.id] = "presente"; });
       } else {
-        // PADRÃO: Todos presentes
         listaAlunos.forEach(a => mapaPresencas[a.id] = "presente");
       }
 
-      // D) Buscar Atestados (Só Online)
+      // Buscar Atestados (Só Online) usando service
       let mapaAtestados: Record<string, Atestado[]> = {};
       if (navigator.onLine) {
         try {
-          const hoje = format(new Date(), 'yyyy-MM-dd');
-          const { data: attData } = await supabase
-            .from("atestados")
-            .select("*")
-            .eq("status", "aprovado")
-            .lte("data_inicio", hoje)
-            .gte("data_fim", hoje);
+          const atestadosVigentes = await atestadosService.getAtestadosVigentes();
+          mapaAtestados = atestadosService.groupByAluno(atestadosVigentes);
 
-          if (attData) {
-            attData.forEach(att => {
-              if (!mapaAtestados[att.aluno_id]) mapaAtestados[att.aluno_id] = [];
-              mapaAtestados[att.aluno_id].push(att);
-              // Se tem atestado, marca automaticamente
-              if (listaAlunos.some(al => al.id === att.aluno_id)) {
-                mapaPresencas[att.aluno_id] = "atestado";
-              }
-            });
-          }
-        } catch (err) { console.error("Erro atestados", err); }
+          // Marca alunos com atestado automaticamente
+          Object.keys(mapaAtestados).forEach(alunoId => {
+            if (listaAlunos.some(al => al.id === alunoId)) {
+              mapaPresencas[alunoId] = "atestado";
+            }
+          });
+        } catch (err) {
+          console.error("Erro atestados", err);
+        }
       }
 
       setAlunos(listaAlunos);
@@ -223,20 +190,18 @@ const ChamadaPage: React.FC = () => {
     });
   };
 
-  const setStatusManual = (alunoId: string, status: Presenca, e: React.MouseEvent) => {
+  const setStatusManual = (alunoId: string, status: PresencaStatus, e: React.MouseEvent) => {
     e.stopPropagation();
     setPresencas(prev => ({ ...prev, [alunoId]: status }));
   };
 
-  // --- SALVAR CHAMADA ROBUSTO COM FALLBACK ---
+  // --- SALVAR CHAMADA usando presencaService ---
   const handleSalvar = async () => {
-    // 1. Debounce / Evitar Duplo Clique
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setIsSaving(true);
 
     try {
-      // 2. Tenta obter o ID da escola de qualquer lugar possível
       const idEscolaFinal = localEscolaId || user?.escola_id;
 
       if (!idEscolaFinal) {
@@ -248,90 +213,38 @@ const ChamadaPage: React.FC = () => {
         return;
       }
 
-      // Prepara o payload
       const dataFormatada = format(date, "yyyy-MM-dd");
-      const payload = Object.entries(presencas).map(([alunoId, status]) => ({
-        aluno_id: alunoId,
-        turma_id: turmaId!,
-        escola_id: idEscolaFinal, // ID GARANTIDO
-        data_chamada: dataFormatada,
+      const registros = Object.entries(presencas).map(([alunoId, status]) => ({
+        alunoId,
         presente: status === "presente",
-        falta_justificada: status === "atestado"
+        faltaJustificada: status === "atestado"
       }));
 
-      // Função auxiliar para salvar offline
-      const salvarLocalmente = async () => {
-        console.log("Salvando offline...", payload.length, "registros. Escola:", idEscolaFinal);
-        const sucesso = await salvarChamadaOffline(payload);
+      // Usa o presencaService para salvar (já tem lógica online/offline)
+      const result = await presencaService.salvarChamada({
+        turmaId: turmaId!,
+        escolaId: idEscolaFinal,
+        dataChamada: dataFormatada,
+        registros
+      });
 
-        if (sucesso) {
-          toast({
-            title: "Salvo no Dispositivo",
-            description: "Conexão instável. Dados salvos localmente e serão enviados depois.",
-            className: "bg-yellow-100 text-yellow-800 border-yellow-300"
-          });
-          window.dispatchEvent(new Event('chamada-salva')); // Avisa o OfflineManager
-          setPresencas({}); // Limpa estado para evitar re-salvamento do rascunho
-          await limparSessaoChamada();
-          navigate("/dashboard");
-        } else {
-          throw new Error("Falha ao gravar no banco local.");
-        }
-      };
-
-      // 3. SE OFFLINE: Salva no IndexedDB direto
-      if (!navigator.onLine) {
-        try {
-          await salvarLocalmente();
-        } catch (err: any) {
-          toast({ title: "Erro ao salvar offline", description: err.message, variant: "destructive" });
-        }
-        return;
-      }
-
-      // 4. SE ONLINE: Tenta Supabase com Fallback
-      try {
-        // Limpa registros anteriores para evitar duplicidade
-        const { error: deleteError } = await supabase
-          .from("presencas")
-          .delete()
-          .eq("turma_id", turmaId)
-          .eq("data_chamada", dataFormatada);
-
-        if (deleteError) throw deleteError;
-
-        if (payload.length > 0) {
-          const { error: insertError } = await supabase.from("presencas").insert(payload);
-          if (insertError) throw insertError;
-        }
-
+      if (result.online) {
         toast({ title: "Chamada salva!", className: "bg-green-600 text-white" });
-        setPresencas({}); // CRUCIAL: Limpa o estado visual antes de limpar o storage
-        await limparSessaoChamada();
-        navigate("/dashboard");
-
-      } catch (error: any) {
-        console.error("Erro no salvamento:", error);
-
-        // DETECÇÃO DE ERRO DE REDE PARA FALLBACK
-        const isNetworkError =
-          error.message?.includes("Failed to fetch") ||
-          error.message?.includes("network") ||
-          error.status === 503 ||
-          error.status === 504;
-
-        if (isNetworkError) {
-          console.warn("Erro de rede detectado durante salvamento online. Ativando fallback offline.");
-          try {
-            await salvarLocalmente();
-          } catch (offlineErr: any) {
-            toast({ title: "Erro Crítico", description: "Falha ao salvar online e offline: " + offlineErr.message, variant: "destructive" });
-          }
-        } else {
-          // Erro de validação ou outro erro do Supabase
-          toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
-        }
+      } else {
+        toast({
+          title: "Salvo no Dispositivo",
+          description: "Dados salvos localmente e serão enviados depois.",
+          className: "bg-yellow-100 text-yellow-800 border-yellow-300"
+        });
+        window.dispatchEvent(new Event('chamada-salva'));
       }
+
+      setPresencas({});
+      navigate("/dashboard");
+
+    } catch (error: any) {
+      console.error("Erro no salvamento:", error);
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } finally {
       setIsSaving(false);
       isSubmittingRef.current = false;
@@ -339,38 +252,26 @@ const ChamadaPage: React.FC = () => {
   };
 
   const handleSalvarObservacao = async () => {
-    if (!showObservacao || !localEscolaId) return;
+    if (!showObservacao || !localEscolaId || !user?.id || !turmaId) return;
     setSalvandoObservacao(true);
-    try {
-      if (!isOnline) {
-        toast({ title: "Atenção", description: "Observações requerem internet no momento.", variant: "destructive" });
-        return;
-      }
 
-      const observacaoData = {
+    try {
+      await observacoesService.salvar({
         aluno_id: showObservacao.alunoId,
+        turma_id: turmaId,
+        escola_id: localEscolaId,
+        user_id: user.id,
         data_observacao: format(date, "yyyy-MM-dd"),
         titulo: tituloObservacao.trim(),
         descricao: descricaoObservacao.trim(),
-        turma_id: turmaId,
-        user_id: user?.id, // Pode ser undefined se offline, mas aqui estamos no bloco online
-        escola_id: localEscolaId,
-      };
-
-      if (!observacaoData.user_id) throw new Error("Usuário não autenticado");
-
-      const { error } = await supabase
-        .from("observacoes_alunos")
-        .upsert(observacaoData as any, { onConflict: 'aluno_id, data_observacao' });
-
-      if (error) throw error;
+      });
 
       toast({ title: "Observação salva!" });
       setShowObservacao(null);
       setTituloObservacao("");
       setDescricaoObservacao("");
-    } catch (err) {
-      toast({ title: "Erro", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setSalvandoObservacao(false);
     }

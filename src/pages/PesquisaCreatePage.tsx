@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Trash2, Save, Loader2, ArrowLeft } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Plus, Trash2, Save, Loader2, ArrowLeft, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client'; // Keep for RPC
+import { turmaService } from '@/domains';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -32,19 +33,15 @@ const PesquisaCreatePage: React.FC = () => {
   useEffect(() => {
     if (!user?.escola_id) return;
     const carregarTurmas = async () => {
-      const { data, error } = await supabase
-        .from('turmas')
-        .select('id, nome')
-        .eq('escola_id', user.escola_id)
-        .order('nome');
-      if (error) {
+      try {
+        const data = await turmaService.findByEscola(user.escola_id);
+        setTurmas(data.map(t => ({ id: t.id, nome: t.nome })));
+      } catch (error) {
         toast({ title: "Erro ao carregar turmas", variant: "destructive" });
-      } else {
-        setTurmas(data || []);
       }
     };
     carregarTurmas();
-  }, [user?.escola_id, toast]);
+  }, [user?.escola_id]);
 
   const adicionarPergunta = () => {
     setPerguntas([...perguntas, { id: Date.now(), texto_pergunta: '', opcoes: ['', ''] }]);
@@ -83,8 +80,8 @@ const PesquisaCreatePage: React.FC = () => {
       return;
     }
     if (!user?.escola_id) {
-        toast({ title: "Erro", description: "Escola não identificada.", variant: "destructive" });
-        return;
+      toast({ title: "Erro", description: "Escola não identificada.", variant: "destructive" });
+      return;
     }
 
     setLoading(true);

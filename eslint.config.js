@@ -25,5 +25,28 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-unused-vars": "off",
     },
+  },
+  // ARCHITECTURE RULE: Block direct Supabase imports in Pages
+  {
+    files: ["src/pages/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/integrations/supabase/client",
+              message: "❌ Pages cannot import Supabase directly. Use domain services instead (e.g., @/domains)."
+            }
+          ],
+          patterns: [
+            {
+              group: ["**/integrations/supabase/**"],
+              message: "❌ Architecture violation: Use services from @/domains instead of direct Supabase access."
+            }
+          ]
+        }
+      ]
+    }
   }
 );

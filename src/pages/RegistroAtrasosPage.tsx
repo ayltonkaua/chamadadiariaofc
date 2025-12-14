@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,26 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Clock, ArrowLeft, Save, Search, Filter, User, Pencil, Trash2 } from "lucide-react";
+import { Clock, ArrowLeft, Save, Search, Pencil, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Badge } from '@/components/ui/badge';
-import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
-import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
-import { Calendar, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
-
-interface Aluno {
-  id: string;
-  nome: string;
-  matricula: string;
-}
-
-interface RegistroAtraso {
-  id: string;
-  aluno_id: string;
-  data_atraso: string;
-  horario_registro: string;
-  criado_em: string;
-}
+import {
+  alunoService,
+  atrasosService,
+  type Aluno,
+  type RegistroAtraso
+} from "@/domains";
 
 export default function RegistroAtrasosPage() {
   const { user } = useAuth();
@@ -53,7 +40,6 @@ export default function RegistroAtrasosPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAluno, setFilterAluno] = useState("");
   const [editingRegistro, setEditingRegistro] = useState<string | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -67,13 +53,8 @@ export default function RegistroAtrasosPage() {
 
   const fetchAlunos = async () => {
     try {
-      const { data, error } = await supabase
-        .from("alunos")
-        .select("id, nome, matricula")
-        .order("nome");
-
-      if (error) throw error;
-      setAlunos(data || []);
+      const data = await alunoService.findAll();
+      setAlunos(data);
     } catch (error) {
       console.error("Erro ao buscar alunos:", error);
       toast({
@@ -86,13 +67,8 @@ export default function RegistroAtrasosPage() {
 
   const fetchRegistros = async () => {
     try {
-      const { data, error } = await supabase
-        .from("registros_atrasos")
-        .select("*")
-        .order("data_atraso", { ascending: false });
-
-      if (error) throw error;
-      setRegistros(data || []);
+      const data = await atrasosService.findAll();
+      setRegistros(data);
     } catch (error) {
       console.error("Erro ao buscar registros:", error);
       toast({
@@ -107,18 +83,11 @@ export default function RegistroAtrasosPage() {
     if (!confirm("Tem certeza que deseja excluir este registro?")) return;
 
     try {
-      const { error } = await supabase
-        .from("registros_atrasos")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-
+      await atrasosService.delete(id);
       toast({
         title: "Sucesso",
         description: "Registro excluído com sucesso!",
       });
-
       fetchRegistros();
     } catch (error) {
       console.error("Erro ao excluir registro:", error);
@@ -154,32 +123,21 @@ export default function RegistroAtrasosPage() {
     setLoading(true);
     try {
       if (editingRegistro) {
-        // Atualizar registro existente
-        const { error } = await supabase
-          .from("registros_atrasos")
-          .update({
-            aluno_id: selectedAluno,
-            data_atraso: dataAtraso,
-            horario_registro: horarioRegistro,
-          })
-          .eq("id", editingRegistro);
-
-        if (error) throw error;
-
+        await atrasosService.update(editingRegistro, {
+          aluno_id: selectedAluno,
+          data_atraso: dataAtraso,
+          horario_registro: horarioRegistro,
+        });
         toast({
           title: "Sucesso",
           description: "Registro atualizado com sucesso!",
         });
       } else {
-        // Criar novo registro
-        const { error } = await supabase.from("registros_atrasos").insert({
+        await atrasosService.create({
           aluno_id: selectedAluno,
           data_atraso: dataAtraso,
           horario_registro: horarioRegistro,
         });
-
-        if (error) throw error;
-
         toast({
           title: "Sucesso",
           description: "Registro de atraso cadastrado com sucesso!",
@@ -276,9 +234,8 @@ export default function RegistroAtrasosPage() {
                       filteredAlunos.map((aluno) => (
                         <div
                           key={aluno.id}
-                          className={`p-2 hover:bg-gray-100 cursor-pointer ${
-                            selectedAluno === aluno.id ? "bg-purple-50" : ""
-                          }`}
+                          className={`p-2 hover:bg-gray-100 cursor-pointer ${selectedAluno === aluno.id ? "bg-purple-50" : ""
+                            }`}
                           onClick={() => setSelectedAluno(aluno.id)}
                         >
                           {aluno.nome} - {aluno.matricula}
@@ -321,8 +278,8 @@ export default function RegistroAtrasosPage() {
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={loading || !selectedAluno}
                   className="flex-1 bg-purple-600 hover:bg-purple-700"
                 >
@@ -425,4 +382,4 @@ export default function RegistroAtrasosPage() {
       </div>
     </div>
   );
-} 
+}

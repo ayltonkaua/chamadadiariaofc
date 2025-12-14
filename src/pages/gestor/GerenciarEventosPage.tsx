@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { eventosService, type Evento, type EventoStaff, type EventoConvidado } from '@/domains';
 import { useToast } from "@/hooks/use-toast";
 import { CalendarIcon, Loader2, Plus, Printer, Trash2, UserPlus, PartyPopper, Search, X, Users, ListPlus, UserRound, Ticket, Download } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -27,8 +27,8 @@ export default function GerenciarEventosPage() {
 
     // Estados gerais
     const [loading, setLoading] = useState(false);
-    const [eventos, setEventos] = useState<any[]>([]);
-    const [eventoAtivo, setEventoAtivo] = useState<any>(null);
+    const [eventos, setEventos] = useState<Evento[]>([]);
+    const [eventoAtivo, setEventoAtivo] = useState<Evento | null>(null);
 
     // Estados - Novo Evento
     const [date, setDate] = useState<Date | undefined>(undefined);
@@ -37,14 +37,14 @@ export default function GerenciarEventosPage() {
     // Estados - Staff
     const [staffSearch, setStaffSearch] = useState('');
     const [staffResults, setStaffResults] = useState<any[]>([]);
-    const [staffList, setStaffList] = useState<any[]>([]);
+    const [staffList, setStaffList] = useState<EventoStaff[]>([]);
     const [loadingStaff, setLoadingStaff] = useState(false);
 
     // Estados - Convidados (NOVO)
     const [guestName, setGuestName] = useState('');
     const [guestType, setGuestType] = useState('Convidado');
-    const [guestList, setGuestList] = useState<any[]>([]);
-    const [selectedGuest, setSelectedGuest] = useState<any>(null);
+    const [guestList, setGuestList] = useState<EventoConvidado[]>([]);
+    const [selectedGuest, setSelectedGuest] = useState<EventoConvidado | null>(null);
 
     // Estados - Impressão
     const [printSearch, setPrintSearch] = useState('');
@@ -67,40 +67,22 @@ export default function GerenciarEventosPage() {
 
     const loadEventos = async () => {
         if (!user?.escola_id) return;
-
-        const { data, error } = await (supabase as any)
-            .from('eventos')
-            .select('*, eventos_checkins(count)')
-            .eq('escola_id', user.escola_id)
-            .order('data_evento', { ascending: false });
-
-        if (error) {
-            const { data: dataFallback } = await (supabase as any)
-                .from('eventos')
-                .select('*')
-                .eq('escola_id', user.escola_id)
-                .order('data_evento', { ascending: false });
-            setEventos(dataFallback || []);
-            return;
-        }
-
-        const eventosData = data || [];
+        const eventosData = await eventosService.loadEventos(user.escola_id);
         setEventos(eventosData);
-
         const ativo = eventosData.find((e: any) => e.ativo);
         if (ativo) setEventoAtivo(ativo);
     };
 
     const loadStaff = async () => {
         if (!eventoAtivo) return;
-        const { data } = await (supabase as any).from('eventos_staff').select('*, alunos(id, nome)').eq('evento_id', eventoAtivo.id);
-        setStaffList(data || []);
+        const data = await eventosService.loadStaff(eventoAtivo.id);
+        setStaffList(data);
     };
 
     const loadGuests = async () => {
         if (!eventoAtivo) return;
-        const { data } = await (supabase as any).from('eventos_convidados').select('*').eq('evento_id', eventoAtivo.id).order('created_at', { ascending: false });
-        setGuestList(data || []);
+        const data = await eventosService.loadGuests(eventoAtivo.id);
+        setGuestList(data);
     };
 
     // ========== CRIAR EVENTO ==========
@@ -111,18 +93,8 @@ export default function GerenciarEventosPage() {
         }
         setLoading(true);
         try {
-            await (supabase as any).from('eventos').update({ ativo: false }).eq('escola_id', user.escola_id);
             const dataLocal = format(date, 'yyyy-MM-dd');
-
-            const { error } = await (supabase as any).from('eventos').insert({
-                nome: nomeEvento,
-                data_evento: dataLocal,
-                escola_id: user.escola_id,
-                ativo: true
-            });
-
-            if (error) throw error;
-
+            await eventosService.createEvento(nomeEvento, dataLocal, user.escola_id);
             toast({ title: "Evento Criado!", description: "O evento está ativo." });
             setNomeEvento('');
             setDate(undefined);
@@ -137,7 +109,7 @@ export default function GerenciarEventosPage() {
     const handleExcluirEvento = async (id: string) => {
         const confirm = window.confirm("Tem certeza? Isso apagará todos os registros e convidados deste evento.");
         if (!confirm) return;
-        await (supabase as any).from('eventos').delete().eq('id', id);
+        await eventosService.deleteEvento(id);
         toast({ title: "Evento excluído" });
         loadEventos();
     };
@@ -146,15 +118,8 @@ export default function GerenciarEventosPage() {
     const buscarStaff = async () => {
         if (!staffSearch || staffSearch.length < 2) return;
         setLoadingStaff(true);
-        const { data } = await supabase.from('alunos').select('id, nome, turmas!inner(nome, escola_id)').ilike('nome', `%${staffSearch}%`).limit(5);
-
-        const filtrados = (data || []).filter((a: any) => {
-            const turma = a.turmas;
-            if (Array.isArray(turma)) return turma.some((t: any) => t.escola_id === user?.escola_id);
-            return turma?.escola_id === user?.escola_id;
-        });
-
-        setStaffResults(filtrados);
+        const data = await eventosService.searchStaff(staffSearch, user?.escola_id || '');
+        setStaffResults(data);
         setLoadingStaff(false);
     };
 
@@ -163,7 +128,7 @@ export default function GerenciarEventosPage() {
         const jaExiste = staffList.some((s: any) => s.aluno_id === aluno.id);
         if (jaExiste) { toast({ title: "Já adicionado", variant: "destructive" }); return; }
 
-        await (supabase as any).from('eventos_staff').insert({ evento_id: eventoAtivo.id, aluno_id: aluno.id });
+        await eventosService.addMonitor(eventoAtivo.id, aluno.id);
         toast({ title: "Monitor adicionado!" });
         setStaffSearch('');
         setStaffResults([]);
@@ -171,7 +136,7 @@ export default function GerenciarEventosPage() {
     };
 
     const removerMonitor = async (staffId: string) => {
-        await (supabase as any).from('eventos_staff').delete().eq('id', staffId);
+        await eventosService.removeMonitor(staffId);
         loadStaff();
     };
 
@@ -182,18 +147,13 @@ export default function GerenciarEventosPage() {
             return;
         }
 
-        const { error } = await (supabase as any).from('eventos_convidados').insert({
-            evento_id: eventoAtivo.id,
-            nome: guestName,
-            tipo: guestType
-        });
-
-        if (error) {
-            toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
-        } else {
+        try {
+            await eventosService.addGuest(eventoAtivo.id, guestName, guestType);
             toast({ title: "Convidado Adicionado!" });
             setGuestName('');
             loadGuests();
+        } catch (error: any) {
+            toast({ title: "Erro ao adicionar", description: error.message, variant: "destructive" });
         }
     };
 
@@ -202,17 +162,12 @@ export default function GerenciarEventosPage() {
         if (!window.confirm("Remover este convidado da lista?")) return;
 
         try {
-            const { error } = await (supabase as any).from('eventos_convidados').delete().eq('id', id);
-
-            if (error) {
-                console.error("Erro ao excluir convidado:", error);
-                toast({ title: "Erro ao excluir", description: "Verifique suas permissões ou tente novamente.", variant: "destructive" });
-            } else {
-                toast({ title: "Convidado removido" });
-                loadGuests(); // Recarrega a lista
-            }
+            await eventosService.removeGuest(id);
+            toast({ title: "Convidado removido" });
+            loadGuests();
         } catch (err) {
             console.error("Erro crítico:", err);
+            toast({ title: "Erro ao excluir", variant: "destructive" });
         }
     };
 
@@ -228,13 +183,8 @@ export default function GerenciarEventosPage() {
     const buscarAlunoPrint = async () => {
         if (!printSearch || printSearch.length < 2) return;
         setLoadingPrint(true);
-        const { data } = await supabase.from('alunos').select('id, nome, turmas!inner(nome, escola_id)').ilike('nome', `%${printSearch}%`).limit(5);
-        const filtrados = (data || []).filter((a: any) => {
-            const turma = a.turmas;
-            if (Array.isArray(turma)) return turma.some((t: any) => t.escola_id === user?.escola_id);
-            return turma?.escola_id === user?.escola_id;
-        });
-        setPrintResults(filtrados);
+        const data = await eventosService.searchStaff(printSearch, user?.escola_id || '');
+        setPrintResults(data);
         setLoadingPrint(false);
     };
 

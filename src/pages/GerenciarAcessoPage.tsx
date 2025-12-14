@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,32 +11,21 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
-    Loader2, UserX, Search, Mail,
-    UserPlus, Pencil, Circle
+    Loader2, UserX, Search, UserPlus, Pencil, Circle,
+    Trash2, KeyRound, Mail, GraduationCap, Users
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Interfaces atualizadas para bater com o RPC
-interface MembroEquipe {
-    user_id: string;
-    nome: string;
-    email: string;
-    role: string;
-    last_sign_in_at?: string;
-}
-
-interface AlunoAcesso {
-    id: string;
-    nome: string;
-    matricula: string;
-    turma_nome: string;
-    user_id: string | null;
-}
+import {
+    acessoService,
+    type MembroEquipe,
+    type AlunoAcesso
+} from "@/domains";
 
 export default function GerenciarAcessoPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState("equipe");
 
     // Dados
     const [equipe, setEquipe] = useState<MembroEquipe[]>([]);
@@ -46,10 +35,13 @@ export default function GerenciarAcessoPage() {
     // Filtros
     const [busca, setBusca] = useState("");
     const [filtroStatus, setFiltroStatus] = useState<"todos" | "online" | "offline">("todos");
+    const [filtroAlunoAcesso, setFiltroAlunoAcesso] = useState<"todos" | "com_conta" | "sem_conta">("todos");
 
     // Modais
     const [modalConviteOpen, setModalConviteOpen] = useState(false);
     const [modalRoleOpen, setModalRoleOpen] = useState(false);
+    const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
+    const [modalResetOpen, setModalResetOpen] = useState(false);
 
     // Estados de Formulário
     const [emailConvite, setEmailConvite] = useState("");
@@ -59,7 +51,16 @@ export default function GerenciarAcessoPage() {
     const [editingUser, setEditingUser] = useState<MembroEquipe | null>(null);
     const [newRole, setNewRole] = useState("");
 
-    // --- 1. REALTIME PRESENCE (Quem está online) ---
+    // Delete/Reset state
+    const [selectedUser, setSelectedUser] = useState<{
+        id: string;
+        nome: string;
+        email?: string;
+        tipo: 'staff' | 'aluno';
+    } | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // --- 1. REALTIME PRESENCE ---
     useEffect(() => {
         if (!user?.escola_id) return;
 
@@ -67,19 +68,15 @@ export default function GerenciarAcessoPage() {
             .on('presence', { event: 'sync' }, () => {
                 const state = channel.presenceState();
                 const userIds = new Set<string>();
-
-                // Extrai os IDs de quem está na sala
                 Object.values(state).forEach((presences: any) => {
                     presences.forEach((p: any) => {
                         if (p.user_id) userIds.add(p.user_id);
                     });
                 });
-
                 setOnlineUsers(userIds);
             })
             .subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
-                    // O admin também se anuncia na sala para ser visto por outros
                     await channel.track({
                         user_id: user.id,
                         online_at: new Date().toISOString()
@@ -90,40 +87,20 @@ export default function GerenciarAcessoPage() {
         return () => { supabase.removeChannel(channel) };
     }, [user?.escola_id, user?.id]);
 
-    // --- 2. FETCH DADOS (Correção Principal) ---
+    // --- 2. FETCH DADOS ---
     const fetchDados = async () => {
         if (!user?.escola_id) return;
         setLoading(true);
         try {
-            // CORREÇÃO: Usar RPC segura em vez de query manual
-            // Isso resolve o problema de "não ver nomes" e "não ver emails"
-            const { data: staffData, error: staffError } = await supabase
-                .rpc('get_school_users', { _escola_id: user.escola_id });
-
-            if (staffError) throw staffError;
-
-            setEquipe(staffData || []);
-
-            // Buscar Alunos
-            const { data: alunosData, error: alunosError } = await supabase
-                .from('alunos')
-                .select(`id, nome, matricula, user_id, turmas ( nome )`)
-                .order('nome');
-
-            if (alunosError) throw alunosError;
-
-            const alunosFormatados = alunosData.map((aluno: any) => ({
-                id: aluno.id,
-                nome: aluno.nome,
-                matricula: aluno.matricula,
-                turma_nome: aluno.turmas?.nome || "Sem Turma",
-                user_id: aluno.user_id
-            }));
-            setAlunos(alunosFormatados);
-
+            const [equipeData, alunosData] = await Promise.all([
+                acessoService.getEquipe(user.escola_id),
+                acessoService.getAlunosAcesso(user.escola_id)
+            ]);
+            setEquipe(equipeData);
+            setAlunos(alunosData);
         } catch (error: any) {
             console.error("Erro ao buscar dados:", error);
-            toast({ title: "Erro", description: error.message || "Falha ao carregar equipe.", variant: "destructive" });
+            toast({ title: "Erro", description: error.message, variant: "destructive" });
         } finally {
             setLoading(false);
         }
@@ -134,42 +111,40 @@ export default function GerenciarAcessoPage() {
     }, [user?.escola_id]);
 
     // --- 3. AÇÕES ---
-
     const handleEnviarConvite = async () => {
         if (!emailConvite || !user?.escola_id) return;
         setLoadingConvite(true);
         try {
-            // 1. Salva o convite no banco (Requer Policy de Insert na tabela convites_acesso)
-            const { error: dbError } = await supabase
-                .from('convites_acesso')
-                .insert({
-                    email: emailConvite.trim(),
-                    escola_id: user.escola_id,
-                    role: roleConvite
-                });
-
-            if (dbError) throw dbError;
-
-            // 2. Dispara o Magic Link
-            const { error: authError } = await supabase.auth.signInWithOtp({
+            const { isResend, signupLink, magicLinkSent } = await acessoService.enviarConvite({
                 email: emailConvite.trim(),
-                options: {
-                    emailRedirectTo: window.location.origin + "/dashboard",
-                    data: {
-                        invited_by: user.id,
-                        escola_id: user.escola_id
-                    }
-                }
-            });
+                escola_id: user.escola_id,
+                role: roleConvite
+            }, user.id);
 
-            if (authError) throw authError;
+            if (magicLinkSent) {
+                toast({
+                    title: isResend ? "Convite Reenviado" : "Convite Enviado",
+                    description: `Link de acesso enviado para ${emailConvite}`
+                });
+            } else {
+                // Magic Link failed - show copyable link
+                toast({
+                    title: "Convite Criado",
+                    description: "Email automático falhou. Copie o link abaixo e envie manualmente.",
+                    duration: 10000
+                });
+                // Copy to clipboard
+                await navigator.clipboard.writeText(signupLink);
+                toast({
+                    title: "📋 Link copiado!",
+                    description: "Envie este link para o convidado criar a conta.",
+                    duration: 5000
+                });
+            }
 
-            toast({ title: "Convite Enviado", description: `Link enviado para ${emailConvite}` });
             setModalConviteOpen(false);
             setEmailConvite("");
-
         } catch (error: any) {
-            console.error(error);
             toast({ title: "Erro ao convidar", description: error.message, variant: "destructive" });
         } finally {
             setLoadingConvite(false);
@@ -177,17 +152,9 @@ export default function GerenciarAcessoPage() {
     };
 
     const handleUpdateRole = async () => {
-        if (!editingUser || !newRole) return;
+        if (!editingUser || !newRole || !user?.escola_id) return;
         try {
-            // Supondo que você tenha ou use update direto se for admin
-            const { error } = await supabase
-                .from('user_roles')
-                .update({ role: newRole })
-                .eq('user_id', editingUser.user_id)
-                .eq('escola_id', user?.escola_id);
-
-            if (error) throw error;
-
+            await acessoService.updateRole(editingUser.user_id, user.escola_id, newRole);
             toast({ title: "Função Atualizada" });
             setModalRoleOpen(false);
             fetchDados();
@@ -200,14 +167,63 @@ export default function GerenciarAcessoPage() {
         if (!confirm(`Tem certeza que deseja remover o acesso de ${nome}?`)) return;
         try {
             if (tipo === 'staff') {
-                await supabase.from('user_roles').delete().eq('user_id', userId);
+                await acessoService.removerAcessoStaff(userId);
             } else {
-                await supabase.from('alunos').update({ user_id: null }).eq('user_id', userId);
+                await acessoService.removerAcessoAluno(userId);
             }
             toast({ title: "Acesso removido" });
             fetchDados();
         } catch (err: any) {
             toast({ title: "Erro", description: err.message, variant: "destructive" });
+        }
+    };
+
+    // NOVA: Enviar link de reset de senha
+    const handleSendPasswordReset = async () => {
+        if (!selectedUser?.email) {
+            toast({ title: "E-mail não encontrado", variant: "destructive" });
+            return;
+        }
+        setActionLoading(true);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, {
+                redirectTo: `${window.location.origin}/update-password`
+            });
+            if (error) throw error;
+            toast({
+                title: "Link enviado!",
+                description: `E-mail de recuperação enviado para ${selectedUser.email}`
+            });
+            setModalResetOpen(false);
+        } catch (error: any) {
+            toast({ title: "Erro", description: error.message, variant: "destructive" });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // NOVA: Excluir conta (remove user_id do aluno ou user_roles do staff)
+    const handleDeleteAccount = async () => {
+        if (!selectedUser) return;
+        setActionLoading(true);
+        try {
+            if (selectedUser.tipo === 'aluno') {
+                // Remove vinculo do aluno (não deleta o registro do aluno)
+                await supabase
+                    .from('alunos')
+                    .update({ user_id: null } as any)
+                    .eq('user_id', selectedUser.id);
+            } else {
+                // Remove da equipe
+                await acessoService.removerAcessoStaff(selectedUser.id);
+            }
+            toast({ title: "Conta desvinculada", description: `${selectedUser.nome} foi desvinculado.` });
+            setModalDeleteOpen(false);
+            fetchDados();
+        } catch (error: any) {
+            toast({ title: "Erro", description: error.message, variant: "destructive" });
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -217,10 +233,18 @@ export default function GerenciarAcessoPage() {
             const termo = busca.toLowerCase();
             const match = (m.nome || "").toLowerCase().includes(termo) || (m.email || "").toLowerCase().includes(termo);
             const isOnline = onlineUsers.has(m.user_id);
-
             if (filtroStatus === 'online' && !isOnline) return false;
             if (filtroStatus === 'offline' && isOnline) return false;
+            return match;
+        });
+    };
 
+    const filtrarAlunos = () => {
+        return alunos.filter(a => {
+            const termo = busca.toLowerCase();
+            const match = a.nome.toLowerCase().includes(termo) || a.matricula.toLowerCase().includes(termo);
+            if (filtroAlunoAcesso === 'com_conta' && !a.user_id) return false;
+            if (filtroAlunoAcesso === 'sem_conta' && a.user_id) return false;
             return match;
         });
     };
@@ -245,100 +269,194 @@ export default function GerenciarAcessoPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gerenciamento de Acesso</h1>
-                    <p className="text-gray-500 text-sm">Controle de equipe e status.</p>
+                    <p className="text-gray-500 text-sm">Controle de equipe, alunos e contas.</p>
                 </div>
                 <Button onClick={() => setModalConviteOpen(true)} className="bg-purple-600 hover:bg-purple-700">
                     <UserPlus className="h-4 w-4 mr-2" /> Convidar Equipe
                 </Button>
             </div>
 
-            {/* FILTROS */}
-            <div className="flex flex-col md:flex-row gap-3 bg-white p-3 rounded-lg border shadow-sm">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                        placeholder="Buscar por nome ou email..."
-                        className="pl-9 bg-gray-50 border-gray-200"
-                        value={busca}
-                        onChange={(e) => setBusca(e.target.value)}
-                    />
-                </div>
-                <Select value={filtroStatus} onValueChange={(v: any) => setFiltroStatus(v)}>
-                    <SelectTrigger className="w-full md:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="todos">Todos Status</SelectItem>
-                        <SelectItem value="online">🟢 Online</SelectItem>
-                        <SelectItem value="offline">⚪ Offline</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
+            {/* TABS */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                    <TabsTrigger value="equipe" className="gap-2">
+                        <Users className="h-4 w-4" /> Equipe
+                    </TabsTrigger>
+                    <TabsTrigger value="alunos" className="gap-2">
+                        <GraduationCap className="h-4 w-4" /> Alunos
+                    </TabsTrigger>
+                </TabsList>
 
-            {/* TABELA DE EQUIPE */}
-            <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-lg">Membros da Equipe</CardTitle></CardHeader>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-purple-600" /></div>
+                {/* FILTROS */}
+                <div className="flex flex-col md:flex-row gap-3 bg-white p-3 rounded-lg border shadow-sm mt-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <Input
+                            placeholder={activeTab === 'equipe' ? "Buscar por nome ou email..." : "Buscar por nome ou matrícula..."}
+                            className="pl-9 bg-gray-50 border-gray-200"
+                            value={busca}
+                            onChange={(e) => setBusca(e.target.value)}
+                        />
+                    </div>
+                    {activeTab === 'equipe' ? (
+                        <Select value={filtroStatus} onValueChange={(v: any) => setFiltroStatus(v)}>
+                            <SelectTrigger className="w-full md:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="todos">Todos Status</SelectItem>
+                                <SelectItem value="online">🟢 Online</SelectItem>
+                                <SelectItem value="offline">⚪ Offline</SelectItem>
+                            </SelectContent>
+                        </Select>
                     ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Usuário</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Função</TableHead>
-                                    <TableHead className="text-right">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filtrarEquipe().length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-8 text-gray-500">
-                                            Nenhum membro encontrado.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filtrarEquipe().map((m) => (
-                                        <TableRow key={m.user_id}>
-                                            <TableCell className="flex items-center gap-3">
-                                                <Avatar className="h-9 w-9 border bg-slate-100">
-                                                    <AvatarFallback className="text-purple-700 font-bold">
-                                                        {(m.nome || m.email || "?")[0].toUpperCase()}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div>
-                                                    <div className="font-medium text-slate-900">{m.nome || "Sem Nome"}</div>
-                                                    <div className="text-xs text-slate-500">{m.email}</div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <OnlineIndicator
-                                                    isOnline={onlineUsers.has(m.user_id)}
-                                                    lastSeen={m.last_sign_in_at}
-                                                />
-                                            </TableCell>
-                                            <TableCell><Badge variant="secondary" className="uppercase bg-slate-100 text-slate-700 border-slate-200">{m.role}</Badge></TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button variant="ghost" size="icon" onClick={() => { setEditingUser(m); setNewRole(m.role); setModalRoleOpen(true); }}>
-                                                        <Pencil className="h-4 w-4 text-slate-500" />
-                                                    </Button>
-                                                    {m.role !== 'admin' && m.user_id !== user?.id && (
-                                                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleRemoverAcesso(m.user_id, 'staff', m.nome)}>
-                                                            <UserX className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                        <Select value={filtroAlunoAcesso} onValueChange={(v: any) => setFiltroAlunoAcesso(v)}>
+                            <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Conta" /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="todos">Todos</SelectItem>
+                                <SelectItem value="com_conta">✅ Com Conta</SelectItem>
+                                <SelectItem value="sem_conta">⚪ Sem Conta</SelectItem>
+                            </SelectContent>
+                        </Select>
                     )}
-                </CardContent>
-            </Card>
+                </div>
 
-            {/* MODAIS (Convite e Edição) mantidos conforme lógica original, apenas com o layout limpo */}
+                {/* TAB: EQUIPE */}
+                <TabsContent value="equipe">
+                    <Card>
+                        <CardHeader className="pb-2"><CardTitle className="text-lg">Membros da Equipe</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                            {loading ? (
+                                <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-purple-600" /></div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Usuário</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Função</TableHead>
+                                            <TableHead className="text-right">Ações</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filtrarEquipe().length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                                                    Nenhum membro encontrado.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filtrarEquipe().map((m) => (
+                                                <TableRow key={m.user_id}>
+                                                    <TableCell className="flex items-center gap-3">
+                                                        <Avatar className="h-9 w-9 border bg-slate-100">
+                                                            <AvatarFallback className="text-purple-700 font-bold">
+                                                                {(m.nome || m.email || "?")[0].toUpperCase()}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <div>
+                                                            <div className="font-medium text-slate-900">{m.nome || "Sem Nome"}</div>
+                                                            <div className="text-xs text-slate-500">{m.email}</div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <OnlineIndicator isOnline={onlineUsers.has(m.user_id)} lastSeen={m.last_sign_in_at} />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className="uppercase bg-slate-100 text-slate-700 border-slate-200">{m.role}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button variant="ghost" size="icon" title="Editar função" onClick={() => { setEditingUser(m); setNewRole(m.role); setModalRoleOpen(true); }}>
+                                                                <Pencil className="h-4 w-4 text-slate-500" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" title="Enviar link de nova senha" onClick={() => { setSelectedUser({ id: m.user_id, nome: m.nome, email: m.email, tipo: 'staff' }); setModalResetOpen(true); }}>
+                                                                <KeyRound className="h-4 w-4 text-blue-500" />
+                                                            </Button>
+                                                            {m.role !== 'admin' && m.user_id !== user?.id && (
+                                                                <Button variant="ghost" size="icon" title="Excluir conta" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => { setSelectedUser({ id: m.user_id, nome: m.nome, email: m.email, tipo: 'staff' }); setModalDeleteOpen(true); }}>
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* TAB: ALUNOS */}
+                <TabsContent value="alunos">
+                    <Card>
+                        <CardHeader className="pb-2"><CardTitle className="text-lg">Alunos com Acesso</CardTitle></CardHeader>
+                        <CardContent className="p-0">
+                            {loading ? (
+                                <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-purple-600" /></div>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Aluno</TableHead>
+                                            <TableHead>Turma</TableHead>
+                                            <TableHead>Conta</TableHead>
+                                            <TableHead className="text-right">Ações</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filtrarAlunos().length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                                                    Nenhum aluno encontrado.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filtrarAlunos().map((a) => (
+                                                <TableRow key={a.id}>
+                                                    <TableCell className="flex items-center gap-3">
+                                                        <Avatar className="h-9 w-9 border bg-blue-50">
+                                                            <AvatarFallback className="text-blue-700 font-bold">
+                                                                {a.nome[0].toUpperCase()}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <div>
+                                                            <div className="font-medium text-slate-900">{a.nome}</div>
+                                                            <div className="text-xs text-slate-500">Matrícula: {a.matricula}</div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className="bg-slate-50">{a.turma_nome}</Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {a.user_id ? (
+                                                            <Badge className="bg-green-100 text-green-700 border-green-200">Vinculado</Badge>
+                                                        ) : (
+                                                            <Badge variant="secondary" className="bg-gray-100 text-gray-500">Sem Conta</Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {a.user_id && (
+                                                            <div className="flex justify-end gap-1">
+                                                                <Button variant="ghost" size="icon" title="Desvincular conta" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => { setSelectedUser({ id: a.user_id!, nome: a.nome, tipo: 'aluno' }); setModalDeleteOpen(true); }}>
+                                                                    <UserX className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+
+            {/* MODAL: CONVITE */}
             <Dialog open={modalConviteOpen} onOpenChange={setModalConviteOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -373,9 +491,10 @@ export default function GerenciarAcessoPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* MODAL: EDITAR FUNÇÃO */}
             <Dialog open={modalRoleOpen} onOpenChange={setModalRoleOpen}>
                 <DialogContent>
-                    <DialogHeader><DialogTitle>Editar Função</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Editar Função de {editingUser?.nome}</DialogTitle></DialogHeader>
                     <div className="py-4">
                         <Select value={newRole} onValueChange={setNewRole}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -389,7 +508,64 @@ export default function GerenciarAcessoPage() {
                         </Select>
                     </div>
                     <DialogFooter>
+                        <Button variant="outline" onClick={() => setModalRoleOpen(false)}>Cancelar</Button>
                         <Button onClick={handleUpdateRole}>Salvar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL: RESET SENHA */}
+            <Dialog open={modalResetOpen} onOpenChange={setModalResetOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <KeyRound className="h-5 w-5 text-blue-500" />
+                            Enviar Link de Nova Senha
+                        </DialogTitle>
+                        <DialogDescription>
+                            Um e-mail será enviado para <strong>{selectedUser?.email}</strong> com instruções para criar uma nova senha.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 bg-blue-50 rounded-lg p-4 text-sm text-blue-800">
+                        <p><strong>Usuário:</strong> {selectedUser?.nome}</p>
+                        <p><strong>E-mail:</strong> {selectedUser?.email}</p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setModalResetOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSendPasswordReset} disabled={actionLoading} className="bg-blue-600 hover:bg-blue-700">
+                            {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Mail className="mr-2 h-4 w-4" /> Enviar Link
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL: EXCLUIR/DESVINCULAR CONTA */}
+            <Dialog open={modalDeleteOpen} onOpenChange={setModalDeleteOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-600">
+                            <Trash2 className="h-5 w-5" />
+                            {selectedUser?.tipo === 'aluno' ? 'Desvincular Conta do Aluno' : 'Remover Membro da Equipe'}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {selectedUser?.tipo === 'aluno'
+                                ? 'O aluno perderá acesso ao portal, mas seus dados de presença serão mantidos.'
+                                : 'O membro será removido da equipe e perderá todos os acessos.'
+                            }
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 bg-red-50 rounded-lg p-4 text-sm text-red-800">
+                        <p><strong>Nome:</strong> {selectedUser?.nome}</p>
+                        {selectedUser?.email && <p><strong>E-mail:</strong> {selectedUser?.email}</p>}
+                        <p className="mt-2 font-medium">⚠️ Esta ação não pode ser desfeita.</p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setModalDeleteOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleDeleteAccount} disabled={actionLoading} variant="destructive">
+                            {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirmar Exclusão
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

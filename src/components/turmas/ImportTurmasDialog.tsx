@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,12 +8,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { turmaService } from '@/domains';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
-import { Loader2, FileUp, List, User, School, ArrowRight, ArrowLeft, Settings2, Table as TableIcon, Sun, Moon, Sunset, Clock, Upload } from 'lucide-react';
+import { Loader2, FileUp, ArrowRight, ArrowLeft, Sun, Moon, Sunset, Clock, CheckCircle } from 'lucide-react';
 
-// ... (Interfaces AlunoImportado, DadosBrutos etc mantidas) ...
 interface AlunoImportado {
   nome: string;
   matricula: string;
@@ -26,19 +25,32 @@ interface DadosBrutos {
 }
 
 type EtapaImportacao = 'upload' | 'mapeamento' | 'preview';
-type EstrategiaDuplicidade = 'ignorar' | 'atualizar';
 type Turno = 'Manhã' | 'Tarde' | 'Noite' | 'Integral';
 
 interface ImportTurmasDialogProps {
   onSuccess: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
+export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange }: ImportTurmasDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // --- CONTROLE DE ABERTURA (O SEGREDO!) ---
-  const [open, setOpen] = useState(false); // Começa fechado!
+  // SECURITY CHECK: Only managers can import
+  const userRole = user?.role?.toLowerCase() || '';
+  const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin', 'gestor'].includes(userRole);
+
+  // Debug logs for troubleshooting
+  console.log('[ImportTurmasDialog] user:', user);
+  console.log('[ImportTurmasDialog] user.role:', user?.role);
+  console.log('[ImportTurmasDialog] normalized role:', userRole);
+  console.log('[ImportTurmasDialog] isManager:', isManager);
+
+  if (!isManager) {
+    console.warn('[ImportTurmasDialog] Access denied for role:', user?.role);
+    return null; // Don't render anything for non-managers
+  }
 
   const [etapa, setEtapa] = useState<EtapaImportacao>('upload');
   const [loading, setLoading] = useState(false);
@@ -50,13 +62,10 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
   const [colunaNome, setColunaNome] = useState<string>("1");
   const [linhaInicio, setLinhaInicio] = useState<number>(2);
   const [alunosProcessados, setAlunosProcessados] = useState<AlunoImportado[]>([]);
-  const [estrategia, setEstrategia] = useState<EstrategiaDuplicidade>('ignorar');
 
-  // Resetar estados ao fechar
   const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
+    onOpenChange?.(newOpen);
     if (!newOpen) {
-      // Limpa tudo ao fechar para a próxima vez ser limpa
       setTimeout(() => {
         setEtapa('upload');
         setDadosBrutos(null);
@@ -68,7 +77,6 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... (mesma lógica de leitura do Excel) ...
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -113,7 +121,6 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
   };
 
   const gerarPreview = () => {
-    // ... (mesma lógica de preview) ...
     if (!dadosBrutos) return;
     const idxMatricula = parseInt(colunaMatricula);
     const idxNome = parseInt(colunaNome);
@@ -127,7 +134,7 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
     }
 
     if (alunos.length === 0) {
-      toast({ title: "Nenhum aluno encontrado", description: "Verifique colunas.", variant: "destructive" });
+      toast({ title: "Nenhum aluno encontrado", description: "Verifique as colunas selecionadas.", variant: "destructive" });
       return;
     }
     setAlunosProcessados(alunos);
@@ -135,72 +142,39 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
   };
 
   const handleImportar = async () => {
-    // ... (mesma lógica de importação) ...
-    if (!user?.escola_id) return;
+    if (!user?.escola_id) {
+      toast({ title: "Erro", description: "Escola não identificada.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
     try {
-      // 1. Criar Turma
-      const { data: turma, error: errTurma } = await supabase
-        .from('turmas')
-        .insert({
-          nome: nomeTurma,
-          numero_sala: numeroSala,
-          turno: turno,
-          escola_id: user.escola_id,
-          // user_id: user.id -> Removido se o banco já tiver o campo novo, ou mantém se for compatibilidade
-        })
-        .select()
-        .single();
-
-      if (errTurma) throw new Error("Erro ao criar turma: " + errTurma.message);
-
-      // 2. Processar Alunos
-      let atualizados = 0;
-      let inseridos = 0;
-
-      for (const aluno of alunosProcessados) {
-        const { data: existente } = await supabase
-          .from('alunos')
-          .select('id')
-          .eq('escola_id', user.escola_id)
-          .eq('matricula', aluno.matricula)
-          .maybeSingle();
-
-        if (existente) {
-          if (estrategia === 'atualizar') {
-            await supabase.from('alunos').update({ nome: aluno.nome, turma_id: turma.id }).eq('id', existente.id);
-            atualizados++;
-          }
-        } else {
-          await supabase.from('alunos').insert({
-            nome: aluno.nome,
-            matricula: aluno.matricula,
-            turma_id: turma.id,
-            escola_id: user.escola_id
-          });
-          inseridos++;
-        }
-      }
+      const result = await turmaService.importWithStudents(
+        nomeTurma,
+        numeroSala,
+        turno,
+        user.escola_id,
+        alunosProcessados
+      );
 
       toast({
         title: "Sucesso!",
-        description: `Turma importada. Novos: ${inseridos}, Atualizados: ${atualizados}`,
+        description: `Turma importada. Novos: ${result.inseridos}, Atualizados: ${result.atualizados}`,
         className: "bg-green-600 text-white"
       });
 
       onSuccess();
-      setOpen(false); // Fecha o modal
+      handleOpenChange(false);
 
     } catch (err: any) {
-      console.error(err);
+      console.error('Import error:', err);
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  // --- RENDERIZADORES DE CONTEÚDO (Mantive a lógica visual intacta) ---
+  // --- RENDERIZADORES DE ETAPAS ---
   const renderUpload = () => (
     <div className="space-y-6 py-4">
       <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -214,39 +188,219 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
     </div>
   );
 
-  // ... (renderMapeamento e renderPreview iguais ao seu código original) ...
-  // Para economizar espaço aqui, assuma que são os mesmos.
-  // Vou colocar apenas o Dialog principal corrigido:
+  const renderMapeamento = () => {
+    if (!dadosBrutos) return null;
+
+    const colunas = dadosBrutos.linhas[0] || [];
+    const previewLinhas = dadosBrutos.linhas.slice(0, 5);
+
+    return (
+      <div className="space-y-6 py-4">
+        {/* Dados da Turma */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="nomeTurma">Nome da Turma *</Label>
+            <Input
+              id="nomeTurma"
+              value={nomeTurma}
+              onChange={(e) => setNomeTurma(e.target.value)}
+              placeholder="Ex: 3º Ano A"
+            />
+          </div>
+          <div>
+            <Label htmlFor="numeroSala">Número da Sala</Label>
+            <Input
+              id="numeroSala"
+              value={numeroSala}
+              onChange={(e) => setNumeroSala(e.target.value)}
+              placeholder="Ex: 101"
+            />
+          </div>
+          <div>
+            <Label>Turno *</Label>
+            <div className="flex gap-2 mt-2">
+              {[
+                { value: 'Manhã', icon: Sun, label: 'Manhã' },
+                { value: 'Tarde', icon: Sunset, label: 'Tarde' },
+                { value: 'Noite', icon: Moon, label: 'Noite' },
+                { value: 'Integral', icon: Clock, label: 'Integral' },
+              ].map(({ value, icon: Icon, label }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={turno === value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTurno(value as Turno)}
+                  className="flex-1"
+                >
+                  <Icon className="h-4 w-4 mr-1" />
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Mapeamento de Colunas */}
+        <div className="border rounded-lg p-4 bg-slate-50">
+          <h4 className="font-medium mb-4 flex items-center gap-2">
+            📊 Mapeamento de Colunas
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Coluna Matrícula *</Label>
+              <Select value={colunaMatricula} onValueChange={setColunaMatricula}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {colunas.map((col, idx) => (
+                    <SelectItem key={idx} value={String(idx)}>
+                      Coluna {idx + 1}: {String(col).slice(0, 20) || `(vazia)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Coluna Nome *</Label>
+              <Select value={colunaNome} onValueChange={setColunaNome}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {colunas.map((col, idx) => (
+                    <SelectItem key={idx} value={String(idx)}>
+                      Coluna {idx + 1}: {String(col).slice(0, 20) || `(vazia)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Iniciar da Linha</Label>
+              <Select value={String(linhaInicio)} onValueChange={(v) => setLinhaInicio(parseInt(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      Linha {n} (pula {n - 1} cabeçalho{n > 2 ? 's' : ''})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Preview da Tabela */}
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-slate-100 px-4 py-2 font-medium text-sm">
+            📋 Prévia das primeiras linhas do Excel
+          </div>
+          <ScrollArea className="max-h-48">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">#</TableHead>
+                  {colunas.map((_, idx) => (
+                    <TableHead key={idx} className={`
+                      ${idx === parseInt(colunaMatricula) ? 'bg-blue-100 text-blue-800' : ''}
+                      ${idx === parseInt(colunaNome) ? 'bg-green-100 text-green-800' : ''}
+                    `}>
+                      Col {idx + 1}
+                      {idx === parseInt(colunaMatricula) && ' (Matrícula)'}
+                      {idx === parseInt(colunaNome) && ' (Nome)'}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {previewLinhas.map((row, rowIdx) => (
+                  <TableRow key={rowIdx} className={rowIdx < linhaInicio ? 'bg-gray-100 opacity-50' : ''}>
+                    <TableCell className="font-mono text-xs">{rowIdx + 1}</TableCell>
+                    {row.map((cell, cellIdx) => (
+                      <TableCell key={cellIdx} className={`text-sm
+                        ${cellIdx === parseInt(colunaMatricula) ? 'bg-blue-50' : ''}
+                        ${cellIdx === parseInt(colunaNome) ? 'bg-green-50' : ''}
+                      `}>
+                        {String(cell).slice(0, 30)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+          {linhaInicio > 1 && (
+            <div className="bg-yellow-50 px-4 py-2 text-xs text-yellow-800">
+              ⚠️ Linhas 1-{linhaInicio - 1} serão ignoradas (cabeçalho)
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPreview = () => (
+    <div className="space-y-4 py-4">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-green-800 font-medium mb-2">
+          <CheckCircle className="h-5 w-5" />
+          Pronto para importar!
+        </div>
+        <p className="text-sm text-green-700">
+          <strong>{alunosProcessados.length}</strong> alunos serão importados para a turma <strong>{nomeTurma}</strong>
+        </p>
+      </div>
+
+      <ScrollArea className="max-h-64 border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12">#</TableHead>
+              <TableHead>Matrícula</TableHead>
+              <TableHead>Nome</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {alunosProcessados.map((aluno, idx) => (
+              <TableRow key={idx}>
+                <TableCell className="font-mono text-xs">{idx + 1}</TableCell>
+                <TableCell className="font-mono">{aluno.matricula}</TableCell>
+                <TableCell>{aluno.nome}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+    </div>
+  );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
-          <Upload className="h-4 w-4" />
-          <span className="hidden sm:inline">Importar</span>
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={externalOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Importar Turma via Excel</DialogTitle>
-          <DialogDescription>Siga os passos para cadastrar turmas em massa.</DialogDescription>
+          <DialogTitle>
+            {etapa === 'upload' && '📁 Importar Turma via Excel'}
+            {etapa === 'mapeamento' && '⚙️ Configurar Mapeamento'}
+            {etapa === 'preview' && '✅ Confirmar Importação'}
+          </DialogTitle>
+          <DialogDescription>
+            {etapa === 'upload' && 'Selecione um arquivo Excel com a lista de alunos.'}
+            {etapa === 'mapeamento' && 'Configure os dados da turma e as colunas do Excel.'}
+            {etapa === 'preview' && 'Revise os dados antes de importar.'}
+          </DialogDescription>
         </DialogHeader>
 
         {etapa === 'upload' && renderUpload()}
-        {/* Adicione renderMapeamento() e renderPreview() aqui se copiar o código completo */}
-        {/* Como estou editando, vou assumir que você tem essas funções no corpo */}
-        {etapa === 'mapeamento' && (
-          // Cole aqui o conteúdo do seu renderMapeamento original
-          <div className="text-center p-4">Conteúdo de Mapeamento (Reutilize seu código)</div>
-        )}
-        {etapa === 'preview' && (
-          // Cole aqui o conteúdo do seu renderPreview original
-          <div className="text-center p-4">Conteúdo de Preview (Reutilize seu código)</div>
-        )}
+        {etapa === 'mapeamento' && renderMapeamento()}
+        {etapa === 'preview' && renderPreview()}
 
         <DialogFooter className="gap-2 sm:gap-0 mt-4">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
 
@@ -255,7 +409,7 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
               <Button variant="secondary" onClick={() => setEtapa('upload')}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
               </Button>
-              <Button onClick={gerarPreview}>
+              <Button onClick={gerarPreview} disabled={!nomeTurma}>
                 Pré-visualizar <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -266,9 +420,9 @@ export function ImportTurmasDialog({ onSuccess }: ImportTurmasDialogProps) {
               <Button variant="secondary" onClick={() => setEtapa('mapeamento')} disabled={loading}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Ajustar
               </Button>
-              <Button onClick={handleImportar} disabled={loading}>
+              <Button onClick={handleImportar} disabled={loading} className="bg-green-600 hover:bg-green-700">
                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}
-                {loading ? 'Importando...' : 'Confirmar'}
+                {loading ? 'Importando...' : 'Confirmar Importação'}
               </Button>
             </div>
           )}

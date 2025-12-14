@@ -6,7 +6,7 @@ import { Loader2, Send, User, FileText, CheckCircle, ArrowLeft, Calendar } from 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Keep for specific queries
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -16,9 +16,9 @@ interface PesquisaPendente {
     descricao: string | null;
     created_at: string;
     pesquisa_perguntas: {
-      id: string;
-      texto_pergunta: string;
-      opcoes: string[];
+        id: string;
+        texto_pergunta: string;
+        opcoes: string[];
     }[];
 }
 
@@ -61,20 +61,20 @@ const PesquisaPublicaPage: React.FC = () => {
                     .eq('status_resposta', 'pendente');
 
                 if (pendentesError) throw pendentesError;
-                
+
                 // A filtragem agora é feita de forma segura no código
                 const pesquisasFormatadas = (pendentesData as any[])
                     .filter(item => item.pesquisas && item.pesquisas.status === 'ativa') // Garante que a pesquisa exista e esteja ativa
                     .map(item => item.pesquisas as PesquisaPendente)
                     .filter(p => p.pesquisa_perguntas && p.pesquisa_perguntas.length > 0);
-                
+
                 setPesquisasPendentes(pesquisasFormatadas);
                 setStep('list');
-            } catch(err: any) {
+            } catch (err: any) {
                 console.error('Erro ao buscar pesquisas:', err);
-                toast({ 
-                    title: "Erro ao buscar pesquisas", 
-                    description: err.message || "Não foi possível carregar os dados.", 
+                toast({
+                    title: "Erro ao buscar pesquisas",
+                    description: err.message || "Não foi possível carregar os dados.",
                     variant: "destructive"
                 });
                 setStep('error');
@@ -85,7 +85,7 @@ const PesquisaPublicaPage: React.FC = () => {
 
         fetchPesquisasPendentes();
     }, [user, loadingUser, navigate]);
-    
+
     // O resto do componente não precisa de alterações
     const handleSelectPesquisa = (pesquisa: PesquisaPendente) => {
         setPesquisaAtiva(pesquisa);
@@ -99,15 +99,15 @@ const PesquisaPublicaPage: React.FC = () => {
 
     const handleAnswerSubmit = async () => {
         if (!pesquisaAtiva || !user || !user.aluno_id) return;
-        
+
         const totalPerguntas = pesquisaAtiva.pesquisa_perguntas.length;
         const respostasRespondidas = Object.keys(respostas).length;
-        
+
         if (respostasRespondidas !== totalPerguntas) {
             toast({ title: "Responda todas as perguntas", variant: "destructive" });
             return;
         }
-        
+
         setLoading(true);
         try {
             const respostasParaInserir = Object.entries(respostas).map(([perguntaId, resposta]) => ({
@@ -116,10 +116,10 @@ const PesquisaPublicaPage: React.FC = () => {
                 aluno_id: user.aluno_id,
                 resposta,
             }));
-            
+
             const { error: respostasError } = await supabase.from('pesquisa_respostas').insert(respostasParaInserir);
             if (respostasError) throw respostasError;
-            
+
             const { error: updateError } = await supabase
                 .from('pesquisa_destinatarios')
                 .update({ status_resposta: 'concluida' })
@@ -128,12 +128,12 @@ const PesquisaPublicaPage: React.FC = () => {
             if (updateError) throw updateError;
 
             toast({ title: "Resposta enviada com sucesso!" });
-            
+
             setPesquisasPendentes(prev => prev.filter(p => p.id !== pesquisaAtiva.id));
             setStep('list');
             setPesquisaAtiva(null);
             setRespostas({});
-        } catch(err) {
+        } catch (err) {
             toast({ title: "Erro ao enviar respostas", variant: "destructive" });
         } finally {
             setLoading(false);
@@ -166,7 +166,7 @@ const PesquisaPublicaPage: React.FC = () => {
                         </div>
 
                         {loading ? (
-                             <div className="flex justify-center items-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                            <div className="flex justify-center items-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                         ) : pesquisasPendentes.length > 0 ? (
                             <div className="space-y-4">
                                 {pesquisasPendentes.map((pesquisa) => (
@@ -255,7 +255,7 @@ const PesquisaPublicaPage: React.FC = () => {
                     </div>
                 );
             case 'error':
-                 return (
+                return (
                     <Card className="max-w-2xl mx-auto text-center py-12">
                         <CardHeader>
                             <CardTitle>Ocorreu um Erro</CardTitle>
@@ -270,7 +270,7 @@ const PesquisaPublicaPage: React.FC = () => {
                         </CardContent>
                     </Card>
                 );
-            
+
             default:
                 return null;
         }

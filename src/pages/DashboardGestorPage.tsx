@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,19 +16,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DesempenhoAcademicoChart } from "@/components/dashboard/DesempenhoAcademicoChart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { subDays, format, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
-
-// --- Tipagens ---
-interface KpiAdminData { atestados_pendentes: number; justificativas_a_rever: number; }
-interface UltimaObservacaoData { aluno_nome: string; aluno_matricula?: string; titulo: string; descricao: string; created_at?: string; }
-interface KpiData { taxa_presenca_geral: number; total_alunos: number; }
-interface TurmaComparisonData { turma_nome: string; taxa_presenca: number; turma_id?: string; }
-interface AlunoRiscoData { aluno_id: string; aluno_nome: string; turma_nome: string; total_faltas: number; }
-interface AlunoFaltasConsecutivasData { aluno_id: string; aluno_nome: string; turma_nome: string; ultima_falta?: string; contagem_faltas_consecutivas: number; }
-interface UltimaPresenca { data_chamada: string; presente: boolean; }
-interface TurmaMetadata { id: string; nome: string; turno: string | null; }
+import {
+  gestorService,
+  type KpiData,
+  type KpiAdminData,
+  type TurmaComparisonData,
+  type AlunoRiscoData,
+  type AlunoFaltasConsecutivasData,
+  type UltimaObservacaoData,
+  type TurmaMetadata,
+  type PresencaRecente,
+  type UltimaPresenca
+} from '@/domains';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -58,15 +59,11 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
     let isMounted = true;
     async function fetchPresencas() {
       try {
-        // @ts-ignore
-        const resp = await supabase.rpc('get_ultimas_presencas_aluno', { p_aluno_id: aluno.aluno_id });
+        const data = await gestorService.getUltimasPresencasAluno(aluno.aluno_id);
         if (!isMounted) return;
-        if ((resp as any).error) return;
-        const data = (resp as any).data ?? [];
-        setUltimasPresencas(data.slice(0, 3));
+        setUltimasPresencas(data);
       } catch (err) { }
     }
-    // @ts-ignore
     if (aluno.aluno_id) fetchPresencas();
     return () => { isMounted = false; };
   }, [aluno.aluno_id]);
@@ -74,13 +71,11 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
   const getBadgeInfo = () => {
     switch (tipo) {
       case 'risco':
-        // @ts-ignore
-        return { text: `${(aluno as AlunoRiscoData).total_faltas} Faltas`, variant: 'destructive', className: 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200' };
+        return { text: `${(aluno as AlunoRiscoData).total_faltas} Faltas`, className: 'bg-red-100 text-red-700 hover:bg-red-200 border-red-200' };
       case 'consecutivo':
-        // @ts-ignore
-        return { text: `${(aluno as AlunoFaltasConsecutivasData).contagem_faltas_consecutivas} Seguidas`, variant: 'secondary', className: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' };
+        return { text: `${(aluno as AlunoFaltasConsecutivasData).contagem_faltas_consecutivas} Seguidas`, className: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' };
       default:
-        return { text: '', variant: 'default', className: '' };
+        return { text: '', className: '' };
     }
   };
   const badgeInfo = getBadgeInfo();
@@ -99,8 +94,7 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
               : <XCircle key={index} className="h-4 w-4 text-rose-500" />
           ))}
         </div>
-        {/* @ts-ignore */}
-        <Badge variant={badgeInfo.variant as any} className={badgeInfo.className}>{badgeInfo.text}</Badge>
+        <Badge variant="outline" className={badgeInfo.className}>{badgeInfo.text}</Badge>
       </div>
     </li>
   );
@@ -113,38 +107,31 @@ export default function DashboardGestorPage() {
   // --- ESTADOS ---
   const [kpis, setKpis] = useState<KpiData | null>(null);
   const [kpisAdmin, setKpisAdmin] = useState<KpiAdminData | null>(null);
-
-  // Dados Brutos
   const [rawTurmaData, setRawTurmaData] = useState<TurmaComparisonData[]>([]);
   const [rawAlunosRisco, setRawAlunosRisco] = useState<AlunoRiscoData[]>([]);
   const [rawAlunosConsecutivos, setRawAlunosConsecutivos] = useState<AlunoFaltasConsecutivasData[]>([]);
-  const [rawPresencasRecentes, setRawPresencasRecentes] = useState<any[]>([]);
+  const [rawPresencasRecentes, setRawPresencasRecentes] = useState<PresencaRecente[]>([]);
   const [ultimasObservacoes, setUltimasObservacoes] = useState<UltimaObservacaoData[]>([]);
 
-  // Loaders e Status
-  const [loading, setLoading] = useState(true); // Loading Global
+  const [loading, setLoading] = useState(true);
   const [statusMsg, setStatusMsg] = useState("Inicializando...");
 
-  // Filtros
   const [turmasDisponiveis, setTurmasDisponiveis] = useState<TurmaMetadata[]>([]);
   const [filtroTurno, setFiltroTurno] = useState<string>("todos");
   const [turmasSelecionadas, setTurmasSelecionadas] = useState<string[]>([]);
   const [filtroAno, setFiltroAno] = useState<string>(new Date().getFullYear().toString());
 
-  // Paginação
   const [riscoCurrentPage, setRiscoCurrentPage] = useState(1);
   const [consecutivasCurrentPage, setConsecutivasCurrentPage] = useState(1);
 
-  // --- FUNÇÃO DE CARREGAMENTO PRINCIPAL (Unificada e Blindada) ---
+  // --- FUNÇÃO DE CARREGAMENTO USANDO gestorService ---
   const fetchAllData = async () => {
     try {
       setLoading(true);
       setStatusMsg("Identificando escola...");
 
-      // 1. VERIFICAÇÃO DE USUÁRIO E ESCOLA
       if (!user?.escola_id) {
         console.log("⏳ ID da escola ainda não encontrado. Aguardando...");
-        // Não setamos loading=false aqui para manter o spinner rodando até achar
         return;
       }
 
@@ -152,55 +139,33 @@ export default function DashboardGestorPage() {
       console.log("✅ Escola confirmada:", activeEscolaId, "- Iniciando download de dados...");
       setStatusMsg("Baixando dados pedagógicos...");
 
-      // 2. PARALELIZAÇÃO DE REQUISIÇÕES (Melhora performance)
-      // RLS já filtra automaticamente por escola e role
-      const [
-        kpiRes,
-        kpiAdminRes,
-        turmaRes,
-        riscoRes,
-        consecRes,
-        obsRes,
-        turmasListRes,
-        presencasRes
-      ] = await Promise.all([
-        supabase.rpc('get_escola_kpis', { _escola_id: activeEscolaId }),
-        supabase.rpc('get_kpis_administrativos', { _escola_id: activeEscolaId }),
-        supabase.rpc('get_comparativo_turmas', { _escola_id: activeEscolaId }),
-        supabase.rpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: activeEscolaId }),
-        supabase.rpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: activeEscolaId }),
-        supabase.rpc('get_ultimas_observacoes', { limite: 10, _escola_id: activeEscolaId }),
-        supabase.from('turmas').select('id, nome, turno').order('nome'),
-        supabase.from('presencas').select('data_chamada, presente, turma_id, escola_id')
-          .gte('data_chamada', subDays(new Date(), 15).toISOString())
-      ]);
+      // Usa gestorService para carregar todos os dados
+      const data = await gestorService.getDashboardData(activeEscolaId);
 
-      // 3. SETAR ESTADOS
-      setKpis((kpiRes as any).data ?? null);
-      setKpisAdmin((kpiAdminRes as any).data ?? null);
-      setRawTurmaData((turmaRes as any).data ?? []);
-      setRawAlunosRisco((riscoRes as any).data ?? []);
-      setRawAlunosConsecutivos((consecRes as any).data ?? []);
-      setUltimasObservacoes((obsRes as any).data ?? []);
-      setTurmasDisponiveis(turmasListRes.data ?? []);
-      setRawPresencasRecentes(presencasRes.data ?? []);
+      setKpis(data.kpis);
+      setKpisAdmin(data.kpisAdmin);
+      setRawTurmaData(data.turmaComparison);
+      setRawAlunosRisco(data.alunosRisco);
+      setRawAlunosConsecutivos(data.alunosConsecutivos);
+      setUltimasObservacoes(data.ultimasObservacoes);
+      setTurmasDisponiveis(data.turmasDisponiveis);
+      setRawPresencasRecentes(data.presencasRecentes);
 
       setStatusMsg("Dados carregados.");
-      setLoading(false); // SUCESSO!
+      setLoading(false);
 
     } catch (err) {
       console.error("❌ Erro fatal no dashboard:", err);
       setStatusMsg("Erro ao carregar dados.");
-      setLoading(false); // Para o spinner mesmo com erro para não travar
+      setLoading(false);
     }
   };
 
-  // Trigger Inicial
   useEffect(() => {
     if (user) {
       fetchAllData();
     }
-  }, [user, filtroAno]); // Recarrega se usuário ou ano mudar
+  }, [user, filtroAno]);
 
   // --- LÓGICA DE FILTRAGEM (MEMOIZED) ---
   const activeTurmas = useMemo(() => {
@@ -293,7 +258,6 @@ export default function DashboardGestorPage() {
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-gray-50/50">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-gray-500 font-medium animate-pulse">{statusMsg}</p>
-        {/* Botão de fuga se travar */}
         <Button variant="link" onClick={() => window.location.reload()} className="text-xs text-gray-400 mt-4">
           Demorando muito? Recarregar
         </Button>
@@ -316,7 +280,6 @@ export default function DashboardGestorPage() {
             <RefreshCw className="h-4 w-4" />
           </Button>
 
-          {/* Filtro Ano */}
           <div className="w-32">
             <Select value={filtroAno} onValueChange={setFiltroAno}>
               <SelectTrigger className="bg-white"><Calendar className="w-4 h-4 mr-2 text-gray-500" /> <SelectValue placeholder="Ano" /></SelectTrigger>
@@ -327,7 +290,6 @@ export default function DashboardGestorPage() {
             </Select>
           </div>
 
-          {/* Filtro Turno */}
           <div className="w-40">
             <Select value={filtroTurno} onValueChange={setFiltroTurno}>
               <SelectTrigger className="bg-white"><Filter className="w-4 h-4 mr-2 text-gray-500" /> <SelectValue placeholder="Turno" /></SelectTrigger>
@@ -341,7 +303,6 @@ export default function DashboardGestorPage() {
             </Select>
           </div>
 
-          {/* Filtro Turmas */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" role="combobox" className="justify-between bg-white w-[200px]">
@@ -433,7 +394,6 @@ export default function DashboardGestorPage() {
       {/* Desempenho Acadêmico */}
       <section className="grid grid-cols-1 gap-6">
         <div className="w-full">
-          {/* @ts-ignore */}
           <DesempenhoAcademicoChart turmasIds={activeTurmaIds} />
         </div>
       </section>

@@ -1,11 +1,19 @@
+/**
+ * Offline Chamada Storage
+ * 
+ * Handles offline data storage with AES-256 encryption for LGPD compliance.
+ * Protects sensitive student data (names, matriculas) stored in IndexedDB.
+ */
+
 import { set, get, del } from 'idb-keyval';
 import { supabase } from "@/integrations/supabase/client";
+import { encryptData, decryptData, isEncrypted } from './encryption';
 
 const CHAMADA_KEY = 'chamadas_pendentes';
 const CHAMADA_SESSION_KEY = 'chamada_session';
 const CACHE_ESCOLA_KEY = 'cache_dados_escola';
 const CACHE_USER_KEY = 'cache_user_id';
-const CACHE_VERSION = '2.0.0-rls'; // Versão do cache para invalidar dados antigos
+const CACHE_VERSION = '2.1.0-encrypted'; // Updated version for encrypted cache
 
 export interface ChamadaOffline {
   aluno_id: string;
@@ -34,12 +42,12 @@ interface DadosEscolaOffline {
 }
 
 // ==============================================================================
-// FUNÇÕES: CACHE DE DADOS (DOWNLOAD PARA OFFLINE)
+// FUNÇÕES: CACHE DE DADOS (DOWNLOAD PARA OFFLINE) - AGORA CRIPTOGRAFADO
 // ==============================================================================
 
 export async function baixarDadosEscola(escolaId: string) {
   try {
-    console.log("Iniciando download de dados para offline...");
+    console.log("Iniciando download de dados para offline (criptografado)...");
 
     // 1. Buscar todas as turmas
     const { data: turmas, error: turmasError } = await supabase
@@ -62,7 +70,7 @@ export async function baixarDadosEscola(escolaId: string) {
 
     if (alunosError) throw alunosError;
 
-    // 3. Salvar no IndexedDB com versão e user_id
+    // 3. Criar pacote de dados
     const pacoteOffline: DadosEscolaOffline = {
       timestamp: Date.now(),
       escola_id: escolaId,
@@ -71,9 +79,11 @@ export async function baixarDadosEscola(escolaId: string) {
       cache_version: CACHE_VERSION
     };
 
-    await set(CACHE_ESCOLA_KEY, pacoteOffline);
+    // 4. CRIPTOGRAFAR e salvar no IndexedDB
+    const encrypted = encryptData(pacoteOffline);
+    await set(CACHE_ESCOLA_KEY, encrypted);
 
-    console.log(`Dados baixados: ${turmas?.length} turmas e ${alunos?.length} alunos.`);
+    console.log(`Dados baixados e criptografados: ${turmas?.length} turmas e ${alunos?.length} alunos.`);
     return { success: true, turmasCount: turmas?.length, alunosCount: alunos?.length };
 
   } catch (error) {
@@ -82,14 +92,32 @@ export async function baixarDadosEscola(escolaId: string) {
   }
 }
 
-export async function getDadosEscolaOffline(userId?: string) {
+export async function getDadosEscolaOffline(userId?: string): Promise<DadosEscolaOffline | null> {
   try {
-    const dados = await get<DadosEscolaOffline>(CACHE_ESCOLA_KEY);
+    const raw = await get<string | DadosEscolaOffline>(CACHE_ESCOLA_KEY);
 
-    if (!dados) return null;
+    if (!raw) return null;
+
+    // Decrypt if encrypted
+    let dados: DadosEscolaOffline | null;
+
+    if (isEncrypted(raw)) {
+      dados = decryptData<DadosEscolaOffline>(raw as string);
+      if (!dados) {
+        console.warn("Falha ao descriptografar cache. Limpando...");
+        await del(CACHE_ESCOLA_KEY);
+        return null;
+      }
+    } else {
+      // Legacy plain text data - migrate to encrypted
+      dados = raw as DadosEscolaOffline;
+      console.log("Migrando cache antigo para formato criptografado...");
+      const encrypted = encryptData(dados);
+      await set(CACHE_ESCOLA_KEY, encrypted);
+    }
 
     // Validação de versão: se o cache não tem versão ou versão antiga, invalida
-    if (!dados.cache_version || dados.cache_version !== CACHE_VERSION) {
+    if (!dados.cache_version || !dados.cache_version.includes('encrypted')) {
       console.warn("Cache com versão antiga detectado. Limpando cache...");
       await del(CACHE_ESCOLA_KEY);
       return null;
@@ -120,13 +148,8 @@ export async function getAlunosDaTurmaOffline(turmaId: string, userId?: string) 
 }
 
 // ==============================================================================
-// NOVA FUNÇÃO HÍBRIDA (SOLUÇÃO DO PROBLEMA A)
+// FUNÇÃO HÍBRIDA (NETWORK FIRST)
 // ==============================================================================
-/**
- * Tenta buscar turmas online. Se falhar (offline), busca do cache local.
- * NETWORK FIRST: Sempre tenta Supabase primeiro se estiver online.
- * Use isso no seu TurmasCards ao invés de chamar o supabase direto.
- */
 export async function buscarTurmasHibrido(escolaId: string, userId?: string) {
   // 1. NETWORK FIRST: Se estiver online, FORÇA busca no Supabase
   if (navigator.onLine) {
@@ -137,25 +160,22 @@ export async function buscarTurmasHibrido(escolaId: string, userId?: string) {
         .eq('escola_id', escolaId);
 
       if (!error && data) {
-        // Se deu certo online, atualiza o cache em background para garantir que o offline esteja fresco
         // Salva o user_id no cache para validação futura
         if (userId) {
           await set(CACHE_USER_KEY, userId);
         }
-        // Não esperamos o await aqui para não travar a UI
+        // Atualiza cache em background (agora criptografado)
         baixarDadosEscola(escolaId).then(() => console.log("Cache atualizado em background"));
         return { data, fonte: 'online' };
       }
 
-      // Se houve erro, lança para cair no catch
       if (error) throw error;
     } catch (err) {
       console.warn("Falha ao buscar online, tentando cache...", err);
-      // Continua para o fallback de cache
     }
   }
 
-  // 2. FALLBACK: Se falhou online ou está offline, busca do Cache
+  // 2. FALLBACK: Cache offline
   console.log("Buscando turmas do cache offline...");
   const dadosOffline = await getDadosEscolaOffline(userId);
 
@@ -167,18 +187,30 @@ export async function buscarTurmasHibrido(escolaId: string, userId?: string) {
 }
 
 // ==============================================================================
-// FUNÇÕES: REGISTRO DE CHAMADA E SESSÃO
+// FUNÇÕES: REGISTRO DE CHAMADA E SESSÃO - AGORA CRIPTOGRAFADO
 // ==============================================================================
 
 export async function salvarChamadaOffline(chamadas: Omit<ChamadaOffline, 'timestamp'>[]) {
   try {
-    const pendentes = (await get(CHAMADA_KEY)) || [];
+    const raw = await get<string | ChamadaOffline[]>(CHAMADA_KEY);
+
+    let pendentes: ChamadaOffline[];
+    if (typeof raw === 'string' && isEncrypted(raw)) {
+      pendentes = decryptData<ChamadaOffline[]>(raw) || [];
+    } else {
+      pendentes = (raw as ChamadaOffline[]) || [];
+    }
+
     const novasChamadas = chamadas.map(chamada => ({
       ...chamada,
       timestamp: Date.now()
     }));
+
     pendentes.push(...novasChamadas);
-    await set(CHAMADA_KEY, pendentes);
+
+    // Salvar criptografado
+    const encrypted = encryptData(pendentes);
+    await set(CHAMADA_KEY, encrypted);
     return true;
   } catch (error) {
     console.error('Erro ao salvar chamada offline:', error);
@@ -188,7 +220,16 @@ export async function salvarChamadaOffline(chamadas: Omit<ChamadaOffline, 'times
 
 export async function getChamadasPendentes(): Promise<ChamadaOffline[]> {
   try {
-    return (await get(CHAMADA_KEY)) || [];
+    const raw = await get<string | ChamadaOffline[]>(CHAMADA_KEY);
+
+    if (!raw) return [];
+
+    if (typeof raw === 'string' && isEncrypted(raw)) {
+      return decryptData<ChamadaOffline[]>(raw) || [];
+    }
+
+    // Legacy format
+    return raw as ChamadaOffline[];
   } catch (error) {
     console.error('Erro ao buscar chamadas pendentes:', error);
     return [];
@@ -197,7 +238,7 @@ export async function getChamadasPendentes(): Promise<ChamadaOffline[]> {
 
 export async function limparChamadasPendentes() {
   try {
-    await set(CHAMADA_KEY, []);
+    await set(CHAMADA_KEY, encryptData([]));
     return true;
   } catch (error) {
     console.error('Erro ao limpar chamadas pendentes:', error);
@@ -209,7 +250,7 @@ export async function removerChamadaPendente(timestamp: number) {
   try {
     const pendentes = await getChamadasPendentes();
     const filtradas = pendentes.filter(chamada => chamada.timestamp !== timestamp);
-    await set(CHAMADA_KEY, filtradas);
+    await set(CHAMADA_KEY, encryptData(filtradas));
     return true;
   } catch (error) {
     console.error('Erro ao remover chamada pendente:', error);
@@ -223,7 +264,8 @@ export async function salvarSessaoChamada(session: Omit<ChamadaSession, 'timesta
       ...session,
       timestamp: Date.now()
     };
-    await set(CHAMADA_SESSION_KEY, sessionData);
+    // Sessão também criptografada
+    await set(CHAMADA_SESSION_KEY, encryptData(sessionData));
     return true;
   } catch (error) {
     console.error('Erro ao salvar sessão de chamada:', error);
@@ -233,7 +275,18 @@ export async function salvarSessaoChamada(session: Omit<ChamadaSession, 'timesta
 
 export async function getSessaoChamada(): Promise<ChamadaSession | null> {
   try {
-    const session = await get(CHAMADA_SESSION_KEY);
+    const raw = await get<string | ChamadaSession>(CHAMADA_SESSION_KEY);
+
+    if (!raw) return null;
+
+    let session: ChamadaSession | null;
+
+    if (typeof raw === 'string' && isEncrypted(raw)) {
+      session = decryptData<ChamadaSession>(raw);
+    } else {
+      session = raw as ChamadaSession;
+    }
+
     if (!session) return null;
 
     const agora = Date.now();
@@ -261,6 +314,23 @@ export async function limparSessaoChamada() {
 }
 
 // ==============================================================================
+// FUNÇÃO: LIMPAR TODOS OS DADOS (PARA LOGOUT)
+// ==============================================================================
+export async function limparTodosCachesOffline() {
+  try {
+    await del(CACHE_ESCOLA_KEY);
+    await del(CACHE_USER_KEY);
+    await del(CHAMADA_KEY);
+    await del(CHAMADA_SESSION_KEY);
+    console.log('Todos os caches offline foram limpos.');
+    return true;
+  } catch (error) {
+    console.error('Erro ao limpar caches offline:', error);
+    return false;
+  }
+}
+
+// ==============================================================================
 // FUNÇÃO DE SINCRONIZAÇÃO
 // ==============================================================================
 
@@ -269,16 +339,14 @@ export async function sincronizarChamadasOffline(onProgress?: (current: number, 
     const pendentes = await getChamadasPendentes();
     if (pendentes.length === 0) return { success: true, count: 0 };
 
-    console.log(`Iniciando sincronização MANUAL de ${pendentes.length} registros...`);
+    console.log(`Iniciando sincronização de ${pendentes.length} registros...`);
 
     let successCount = 0;
     const total = pendentes.length;
 
-    // Processa um por um para dar feedback visual de progresso
     for (let i = 0; i < total; i++) {
       const p = pendentes[i];
 
-      // Notifica progresso (i+1 porque começou do 0)
       if (onProgress) onProgress(i + 1, total);
 
       const payload = {
@@ -299,18 +367,10 @@ export async function sincronizarChamadasOffline(onProgress?: (current: number, 
 
       if (error) {
         console.error(`Erro ao sincronizar item ${i + 1}:`, error);
-        // Continua tentando os outros, mas não conta como sucesso
       } else {
         successCount++;
       }
     }
-
-    // Limpa a fila APENAS se todos foram sucesso? 
-    // Ou limpa os que foram sucesso?
-    // SIMPLIFICAÇÃO: Se a maioria foi, limpamos tudo para evitar travar.
-    // Em produção ideal: remover apenas os IDs que tiveram sucesso.
-    // Como a chave é timestamp, poderíamos remover um a um.
-    // Mas para manter compatibilidade com o que já existia: limpa tudo se tudo ok.
 
     if (successCount === total) {
       await limparChamadasPendentes();
@@ -318,7 +378,6 @@ export async function sincronizarChamadasOffline(onProgress?: (current: number, 
       return { success: true, count: total };
     } else {
       console.warn(`Sincronização parcial: ${successCount} de ${total}`);
-      // Se falhou algum, não limpamos para tentar depois (comportamento seguro)
       return { success: false, count: successCount, error: 'Alguns itens falharam.' };
     }
 

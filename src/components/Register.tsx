@@ -27,6 +27,14 @@ export default function Register() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Matricula validation state
+  const [matriculaStatus, setMatriculaStatus] = useState<{
+    checking: boolean;
+    valid: boolean | null;
+    message: string;
+    alunoNome?: string;
+  }>({ checking: false, valid: null, message: '' });
+
   // Limpa qualquer sessão antiga ao entrar na página de registro
   useEffect(() => {
     const clearSession = async () => {
@@ -48,6 +56,21 @@ export default function Register() {
       if (accountType === "aluno" && !matricula.trim()) throw new Error("Por favor, informe sua matrícula.");
       if (!name.trim()) throw new Error(accountType === "escola" ? "Informe o nome da escola." : "Informe seu nome completo.");
       if (password.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
+
+      // NOVA VALIDAÇÃO: Verificar se matrícula já está vinculada
+      if (accountType === "aluno") {
+        const { data: check, error: checkError } = await (supabase.rpc as any)(
+          'verificar_matricula_disponivel',
+          { p_matricula: matricula.trim() }
+        );
+
+        if (checkError) {
+          console.error('Erro ao verificar matrícula:', checkError);
+          // Continue anyway, the vincular function will also check
+        } else if (check && !check.available) {
+          throw new Error(check.message || 'Esta matrícula já está vinculada a outra conta.');
+        }
+      }
 
       // 2. Criar Usuário (O Supabase loga automaticamente se o email confirm for desligado)
       const response = await register(name, email, password);

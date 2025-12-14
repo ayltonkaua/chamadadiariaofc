@@ -291,9 +291,16 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
   }
 
   // Verificação de permissão para mostrar botões administrativos
-  // Staff (admin, diretor, coordenador, secretario, super_admin) pode gerenciar
+  // Staff (admin, diretor, coordenador, secretario, super_admin, gestor) pode gerenciar
   // Professores NÃO devem ver botões de editar/excluir/importar
-  const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin'].includes(user?.role || '');
+  const userRole = (user?.role || '').toLowerCase();
+  const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin', 'gestor'].includes(userRole);
+
+  // DEBUG: Log para diagnóstico
+  console.log('[TurmasCards] turmasPai:', turmasPai ? 'provided' : 'undefined');
+  console.log('[TurmasCards] isManager:', isManager);
+  console.log('[TurmasCards] userRole:', userRole);
+  console.log('[TurmasCards] showImportButton:', isManager); // Agora mostra sempre que isManager for true
 
   return (
     <>
@@ -307,7 +314,8 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
           )}
         </div>
 
-        {!turmasPai && isManager && (
+        {/* CORREÇÃO: Removida condição !turmasPai - botão aparece sempre que isManager */}
+        {isManager && (
           <Button onClick={() => setShowImportDialog(true)} variant="outline" className="w-full sm:w-auto flex items-center gap-2 border-dashed border-2 h-10">
             <FileSpreadsheet size={18} className="text-green-600" />
             <span>Importar Turmas (Excel)</span>
@@ -373,6 +381,8 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
 
       {showImportDialog && (
         <ImportTurmasDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
           onSuccess={() => {
             handleRefreshGlobal();
             setShowImportDialog(false);

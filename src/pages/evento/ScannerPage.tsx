@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QrScanner from 'react-qr-scanner';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // Keep for RPC call
+import { eventosService, ingressoService } from '@/domains';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,17 +84,7 @@ export default function ScannerPage() {
         setAlunosEncontrados([]);
 
         try {
-            const { data: alunos } = await supabase
-                .from('alunos')
-                .select('id, nome, turmas!inner(nome, escola_id)')
-                .ilike('nome', `%${manualSearch}%`)
-                .limit(5);
-
-            const alunosDaEscola = (alunos || []).filter((aluno: any) => {
-                const turma = aluno.turmas;
-                if (Array.isArray(turma)) return turma.some((t: any) => t.escola_id === user.escola_id);
-                return turma?.escola_id === user.escola_id;
-            });
+            const alunosDaEscola = await eventosService.searchStaff(manualSearch, user.escola_id);
 
             if (alunosDaEscola.length === 0) {
                 setFeedback({ status: 'error', msg: 'Nenhum aluno encontrado.' });
@@ -113,14 +104,15 @@ export default function ScannerPage() {
 
     const registrarEntradaAluno = async (aluno: any) => {
         try {
-            // Busca evento ativo
-            const { data: evento } = await (supabase as any).from('eventos').select('id').eq('escola_id', user?.escola_id).eq('ativo', true).single();
+            // Busca evento ativo usando service
+            const evento = await ingressoService.getActiveEvento(user?.escola_id || '');
 
             if (!evento) {
                 setFeedback({ status: 'error', msg: 'Nenhum evento ativo.' });
                 return;
             }
 
+            // RPC ainda precisa do supabase direto (função específica)
             const { data: res } = await (supabase as any).rpc('registrar_entrada_evento', {
                 _evento_id: evento.id,
                 _aluno_id: aluno.id,

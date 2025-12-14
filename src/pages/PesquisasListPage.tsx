@@ -17,15 +17,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { pesquisasService, type Pesquisa } from '@/domains';
 
-interface Pesquisa {
-  id: string;
-  titulo: string;
-  descricao: string | null;
-  status: string;
-  created_at: string;
-}
+
 
 const PesquisasListPage: React.FC = () => {
   const [pesquisas, setPesquisas] = useState<Pesquisa[]>([]);
@@ -37,17 +31,11 @@ const PesquisasListPage: React.FC = () => {
   useEffect(() => {
     const fetchPesquisas = async () => {
       if (!user) return;
-      
+
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('pesquisas')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setPesquisas((data as Pesquisa[]) || []);
+        const data = await pesquisasService.loadPesquisas(user.id);
+        setPesquisas(data);
       } catch (error) {
         toast({ title: 'Erro ao buscar pesquisas', variant: 'destructive' });
       } finally {
@@ -61,13 +49,7 @@ const PesquisasListPage: React.FC = () => {
   const handleDeletePesquisa = async (pesquisaId: string) => {
     setDeletingId(pesquisaId);
     try {
-      const { error } = await supabase
-        .from('pesquisas')
-        .delete()
-        .eq('id', pesquisaId);
-
-      if (error) throw error;
-
+      await pesquisasService.deletePesquisa(pesquisaId);
       setPesquisas(prev => prev.filter(p => p.id !== pesquisaId));
       toast({ title: 'Pesquisa excluída com sucesso' });
     } catch (error) {
@@ -140,7 +122,7 @@ const PesquisasListPage: React.FC = () => {
                         {pesquisa.titulo}
                       </CardTitle>
                       <div className="flex items-center gap-2 mt-2">
-                        <Badge 
+                        <Badge
                           variant={pesquisa.status === 'ativa' ? 'default' : 'secondary'}
                           className={pesquisa.status === 'ativa' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''}
                         >
@@ -160,7 +142,7 @@ const PesquisasListPage: React.FC = () => {
                       {pesquisa.descricao}
                     </p>
                   )}
-                  
+
                   <div className="flex flex-wrap gap-2">
                     <Link to={`/pesquisas/${pesquisa.id}/resultados`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full">
@@ -168,19 +150,19 @@ const PesquisasListPage: React.FC = () => {
                         Ver Resultados
                       </Button>
                     </Link>
-                    
+
                     <Link to={`/pesquisas/${pesquisa.id}/editar`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full">
                         <Edit className="h-4 w-4 mr-1" />
                         Editar
                       </Button>
                     </Link>
-                    
+
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="flex-1 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -191,7 +173,7 @@ const PesquisasListPage: React.FC = () => {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Excluir pesquisa</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Tem certeza que deseja excluir a pesquisa "{pesquisa.titulo}"? 
+                            Tem certeza que deseja excluir a pesquisa "{pesquisa.titulo}"?
                             Esta ação não pode ser desfeita e todos os dados coletados serão perdidos.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
