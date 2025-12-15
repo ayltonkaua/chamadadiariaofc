@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, Trash2, History, MoreVertical, GraduationCap, ArrowRightLeft } from "lucide-react";
+import { Edit, Trash2, MoreVertical, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -19,17 +19,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BoletimAluno } from "@/components/notas/BoletimAluno";
-// Importe o novo componente
-import { TransferStudentDialog } from "@/components/turmas/TransferStudentDialog";
 
 interface Aluno {
   id: string;
   nome: string;
   matricula: string;
-  faltas?: number;
-  frequencia?: number;
   turma_id: string;
   nome_responsavel?: string;
   telefone_responsavel?: string;
@@ -40,15 +34,11 @@ interface AlunosTableProps {
   alunos: Aluno[];
   onEdit: (id: string) => void;
   onRemove: (aluno: Aluno) => void;
-  // Adicionar callback para quando transferir (para recarregar a lista)
-  onTransferSuccess?: () => void;
   canEdit?: boolean;
 }
 
-const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess, canEdit = false }: AlunosTableProps) => {
+const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
-  const [alunoBoletimId, setAlunoBoletimId] = useState<string | null>(null);
-  const [alunoTransferencia, setAlunoTransferencia] = useState<Aluno | null>(null);
 
   const filteredAlunos = alunos.filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -75,6 +65,9 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess, canEdit = fa
               <div>
                 <CardTitle className="text-base">{aluno.nome}</CardTitle>
                 <CardDescription>Matrícula: {aluno.matricula}</CardDescription>
+                <CardDescription className="mt-1">
+                  Responsável: {aluno.nome_responsavel || "--"}
+                </CardDescription>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -83,127 +76,81 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess, canEdit = fa
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setAlunoBoletimId(aluno.id)}>
-                    <GraduationCap className="mr-2 h-4 w-4" /> Ver Notas
-                  </DropdownMenuItem>
-
-                  {canEdit && (
-                    <>
-                      <DropdownMenuItem onClick={() => setAlunoTransferencia(aluno)}>
-                        <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir Turma
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
-                        <Edit className="mr-2 h-4 w-4" /> Editar
-                      </DropdownMenuItem>
-                    </>
-                  )}
-
                   <DropdownMenuItem asChild>
-                    <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`} className="w-full">
-                      <History className="mr-2 h-4 w-4" /> Histórico
+                    <Link to={`/aluno/${aluno.id}/perfil`} className="w-full">
+                      <User className="mr-2 h-4 w-4" /> Ver Perfil
                     </Link>
                   </DropdownMenuItem>
 
                   {canEdit && (
                     <>
+                      <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
+                        <Edit className="mr-2 h-4 w-4" /> Editar
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => onRemove(aluno)} className="text-red-600">
-                        <Trash2 className="mr-2 h-4 w-4" /> Remover
+                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
                       </DropdownMenuItem>
                     </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground px-4 pb-4 space-y-2">
-              <div><strong>Frequência:</strong> {aluno.frequencia ?? 'N/A'}%</div>
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => setAlunoTransferencia(aluno)}
-                >
-                  <ArrowRightLeft className="mr-2 h-4 w-4" /> Transferir
-                </Button>
-              )}
-            </CardContent>
           </Card>
         ))}
       </div>
 
       {/* --- MODO DESKTOP (TABLE) --- */}
       <div className="hidden sm:block overflow-x-auto">
-        <Table className="min-w-[800px] w-full text-sm">
+        <Table className="w-full text-sm">
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Matrícula</TableHead>
               <TableHead>Responsável</TableHead>
-              <TableHead>Faltas</TableHead>
-              <TableHead>Frequência</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredAlunos.map((aluno) => (
-              <TableRow key={aluno.id} className={aluno.faltas && aluno.faltas > 10 ? "bg-yellow-50" : ""}>
+              <TableRow key={aluno.id}>
                 <TableCell className="font-medium">{aluno.nome}</TableCell>
                 <TableCell>{aluno.matricula}</TableCell>
-                <TableCell>{aluno.nome_responsavel || "-"}</TableCell>
-                <TableCell>
-                  <span className={aluno.faltas && aluno.faltas > 10 ? "font-bold text-red-600" : ""}>
-                    {aluno.faltas ?? 'N/A'}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {aluno.frequencia !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${aluno.frequencia > 80 ? "bg-green-500" : aluno.frequencia > 60 ? "bg-yellow-500" : "bg-red-500"}`}
-                          style={{ width: `${aluno.frequencia}%` }}
-                        ></div>
-                      </div>
-                      <span>{aluno.frequencia}%</span>
-                    </div>
-                  )}
-                </TableCell>
+                <TableCell>{aluno.nome_responsavel || "--"}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {canEdit && (
+                  <div className="flex justify-end gap-1">
+                    {/* Perfil */}
+                    <Link to={`/aluno/${aluno.id}/perfil`}>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setAlunoTransferencia(aluno)}
-                        title="Transferir de Turma"
-                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                        title="Ver Perfil"
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                       >
-                        <ArrowRightLeft className="h-4 w-4" />
-                      </Button>
-                    )}
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                      onClick={() => setAlunoBoletimId(aluno.id)}
-                      title="Ver Notas (Boletim)"
-                    >
-                      <GraduationCap className="h-4 w-4" />
-                    </Button>
-                    <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`}>
-                      <Button variant="ghost" size="icon" title="Ver histórico de chamadas">
-                        <History className="h-4 w-4" />
+                        <User className="h-4 w-4" />
                       </Button>
                     </Link>
 
                     {canEdit && (
                       <>
-                        <Button onClick={() => onEdit(aluno.id)} variant="ghost" size="icon" title="Editar Aluno">
+                        {/* Editar */}
+                        <Button
+                          onClick={() => onEdit(aluno.id)}
+                          variant="ghost"
+                          size="icon"
+                          title="Editar Aluno"
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button onClick={() => onRemove(aluno)} variant="ghost" size="icon" className="text-red-600" title="Remover Aluno">
+
+                        {/* Excluir */}
+                        <Button
+                          onClick={() => onRemove(aluno)}
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Excluir Aluno"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </>
@@ -216,27 +163,12 @@ const AlunosTable = ({ alunos, onEdit, onRemove, onTransferSuccess, canEdit = fa
         </Table>
       </div>
 
-      {/* --- MODAL DO BOLETIM --- */}
-      <Dialog open={!!alunoBoletimId} onOpenChange={(open) => !open && setAlunoBoletimId(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GraduationCap className="h-6 w-6 text-blue-600" />
-              Boletim Escolar
-            </DialogTitle>
-          </DialogHeader>
-          {alunoBoletimId && <BoletimAluno alunoId={alunoBoletimId} />}
-        </DialogContent>
-      </Dialog>
-
-      {/* --- MODAL DE TRANSFERÊNCIA --- */}
-      <TransferStudentDialog
-        aluno={alunoTransferencia}
-        onClose={() => setAlunoTransferencia(null)}
-        onSuccess={() => {
-          if (onTransferSuccess) onTransferSuccess();
-        }}
-      />
+      {/* Empty state */}
+      {filteredAlunos.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          {search ? "Nenhum aluno encontrado com esse termo." : "Nenhum aluno cadastrado nesta turma."}
+        </div>
+      )}
     </div>
   );
 };

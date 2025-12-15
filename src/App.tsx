@@ -44,6 +44,7 @@ import ScannerPage from "@/pages/evento/ScannerPage";
 import GerenciarEventosPage from "@/pages/gestor/GerenciarEventosPage";
 import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
 import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
+import PerfilAlunoPage from "@/pages/aluno/PerfilAlunoPage";
 
 import { sincronizarChamadasOffline } from "@/lib/offlineChamada";
 import { toast } from "@/components/ui/use-toast";
@@ -172,6 +173,7 @@ const App = () => {
                       <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
                       <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
                       <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
+                      <Route path="/aluno/:alunoId/perfil" element={<PerfilAlunoPage />} />
 
                       <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
                       <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />

@@ -10,7 +10,19 @@ export { logger } from '@/core';
 // Alunos
 export { alunoService } from './alunos';
 export { batchImportAlunos, checkDuplicateMatriculas } from './alunos';
+export { perfilAlunoService } from './alunos';
 export type { Aluno, AlunoInsert, AlunoUpdate, AlunoResumo, AlunoComTurma } from './alunos';
+export type {
+    PerfilAluno,
+    IndicadoresAluno,
+    HistoricoPresenca,
+    NotaAluno,
+    NotasPorDisciplina,
+    TransferenciaAluno,
+    ObservacaoAluno,
+    ContatoBuscaAtiva,
+    PerfilCompletoAluno
+} from './alunos';
 
 // Turmas
 export { turmaService } from './turmas';

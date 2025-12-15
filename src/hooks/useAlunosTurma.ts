@@ -8,13 +8,17 @@ interface Aluno {
   faltas: number;
   frequencia: number;
   turma_id: string;
-  user_id?: string; // Campo opcional
+  user_id?: string;
 }
 
 interface TurmaInfo {
   id: string;
   nome: string;
   numero_sala: string;
+  totalAlunos?: number;
+  alunosFaltosos?: number;
+  alunosPresentes?: number;
+  percentualPresencaHoje?: number;
 }
 
 export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome", "matricula", "turma_id"]) {
@@ -28,10 +32,8 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
     setLoading(true);
 
     try {
-      // 1. Garante que 'user_id' e 'turma_id' sempre sejam buscados, 
-      //    mesmo que a página não tenha pedido explicitamente.
+      // 1. Garante que 'user_id' e 'turma_id' sempre sejam buscados
       const camposObrigatorios = ["id", "turma_id", "user_id"];
-      // Une os campos pedidos com os obrigatórios e remove duplicatas
       const camposParaBuscar = [...new Set([...campos, ...camposObrigatorios])];
 
       // Get turma info
@@ -48,7 +50,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
       // Get students
       const { data: alunosData, error: alunosError } = await supabase
         .from("alunos")
-        .select(camposParaBuscar.join(", ")) // Usa a lista combinada
+        .select(camposParaBuscar.join(", "))
         .eq("turma_id", turmaId)
         .order("nome");
 
@@ -56,49 +58,77 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
         throw alunosError;
       }
 
-      // Count unique dates for total classes
-      const { data: datasChamada } = await supabase
+      // ============================================
+      // CORREÇÃO DO BUG: Cálculo de frequência por aluno
+      // ============================================
+      // Buscar TODAS as presenças da turma (não só faltas)
+      const { data: todasPresencas, error: errorPresencas } = await supabase
         .from("presencas")
-        .select("data_chamada")
-        .eq("turma_id", turmaId)
-        .order("data_chamada", { ascending: false });
+        .select("aluno_id, presente, falta_justificada")
+        .eq("turma_id", turmaId);
 
-      const datasUnicas = new Set(datasChamada?.map(p => p.data_chamada) || []);
-      const totalAulas = datasUnicas.size || 0;
-
-      // Fetch all absences for the class in one go
-      const { data: todasFaltas, error: errorFaltas } = await supabase
-        .from("presencas")
-        .select("aluno_id")
-        .eq("turma_id", turmaId)
-        .eq("presente", false);
-
-      if (errorFaltas) {
-        console.error("Erro ao buscar faltas:", errorFaltas);
-        throw errorFaltas;
+      if (errorPresencas) {
+        console.error("Erro ao buscar presenças:", errorPresencas);
+        throw errorPresencas;
       }
 
-      // Map absences count by student ID
-      const faltasMap = new Map<string, number>();
-      todasFaltas?.forEach((falta) => {
-        const current = faltasMap.get(falta.aluno_id) || 0;
-        faltasMap.set(falta.aluno_id, current + 1);
+      // Calcular estatísticas POR ALUNO individualmente
+      // Isso garante que alunos transferidos tenham cálculo correto
+      const statsMap = new Map<string, { total: number; faltas: number }>();
+      todasPresencas?.forEach((p) => {
+        const current = statsMap.get(p.aluno_id) || { total: 0, faltas: 0 };
+        current.total++;
+        // Falta = não presente E não justificada
+        if (!p.presente && !p.falta_justificada) {
+          current.faltas++;
+        }
+        statsMap.set(p.aluno_id, current);
       });
 
-      // Process students with attendance data
+      // ============================================
+      // NOVA FUNCIONALIDADE: Estatísticas do dia atual
+      // ============================================
+      const hoje = new Date().toISOString().split('T')[0];
+      const { data: presencasHoje } = await supabase
+        .from("presencas")
+        .select("aluno_id, presente")
+        .eq("turma_id", turmaId)
+        .eq("data_chamada", hoje);
+
+      const faltososHoje = presencasHoje?.filter(p => !p.presente).length || 0;
+      const presentesHoje = presencasHoje?.filter(p => p.presente).length || 0;
+      const totalRegistrosHoje = presencasHoje?.length || 0;
+      const percentualPresencaHoje = totalRegistrosHoje > 0
+        ? Math.round((presentesHoje / totalRegistrosHoje) * 100)
+        : undefined; // undefined indica que a chamada não foi realizada hoje
+
+      // Process students with CORRECT attendance calculation
       const processedAlunos = alunosData.map((aluno) => {
-        const totalFaltas = faltasMap.get(aluno.id) || 0;
+        const stats = statsMap.get(aluno.id) || { total: 0, faltas: 0 };
+
+        // FÓRMULA CORRETA:
+        // Frequência = (Total de chamadas do aluno - Faltas não justificadas) / Total de chamadas * 100
+        // Se não há chamadas para o aluno, frequência = 100% (não negativo!)
+        const frequencia = stats.total > 0
+          ? Math.round(((stats.total - stats.faltas) / stats.total) * 100)
+          : 100;
 
         return {
           ...aluno,
-          faltas: totalFaltas,
-          frequencia: totalAulas > 0 ?
-            Math.round(((totalAulas - totalFaltas) / totalAulas) * 100) :
-            100
+          faltas: stats.faltas,
+          frequencia: Math.max(0, Math.min(100, frequencia)) // Garantir entre 0-100%
         };
       });
 
-      setTurmaInfo(turmaData);
+      // Atualizar turmaInfo com estatísticas completas
+      setTurmaInfo({
+        ...turmaData,
+        totalAlunos: alunosData.length,
+        alunosFaltosos: faltososHoje,
+        alunosPresentes: presentesHoje,
+        percentualPresencaHoje
+      });
+
       setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)) as Aluno[]);
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
