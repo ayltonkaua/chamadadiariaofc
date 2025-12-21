@@ -48,5 +48,23 @@ export default tseslint.config(
         }
       ]
     }
+  },
+  // ANTI-REGRESSION: Block import of removed legacy offline functions
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/offlineChamada",
+              importNames: ["salvarChamadaOffline", "getChamadasPendentes", "sincronizarChamadasOffline"],
+              message: "❌ REMOVIDO: Use presencaService.salvarChamada() e triggerSync() de @/lib/SyncManager"
+            }
+          ]
+        }
+      ]
+    }
   }
 );

@@ -46,14 +46,14 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
         .from("alunos")
         .select("id", { count: "exact", head: true })
         .eq("turma_id", turmaId);
-      
+
       // Query attendance data for the class
       const { data: presencas, error } = await supabase
         .from("presencas")
         .select("data_chamada, presente, aluno_id, falta_justificada")
         .eq("turma_id", turmaId)
         .order("data_chamada", { ascending: false });
-      
+
       if (error && error.message.includes("falta_justificada")) {
         toast({
           title: "Erro de banco de dados",
@@ -66,21 +66,21 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
 
       if (presencas && presencas.length > 0) {
         // Agrupar presenças por data
-        const chamadas = presencas.reduce((acc: Record<string, { 
-          presentes: number; 
+        const chamadas = presencas.reduce((acc: Record<string, {
+          presentes: number;
           faltosos: number;
           presencas: Array<{ aluno_id: string; presente: boolean; falta_justificada?: boolean }>;
         }>, curr) => {
           const dataFormatada = curr.data_chamada;
-          
+
           if (!acc[dataFormatada]) {
-            acc[dataFormatada] = { 
-              presentes: 0, 
+            acc[dataFormatada] = {
+              presentes: 0,
               faltosos: 0,
               presencas: []
             };
           }
-          
+
           if (curr.presente) {
             acc[dataFormatada].presentes += 1;
           } else {
@@ -92,7 +92,7 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
             presente: curr.presente,
             falta_justificada: curr.falta_justificada || false
           });
-          
+
           return acc;
         }, {});
 
@@ -106,7 +106,7 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
         }));
 
         // Ordenar por data (mais recente primeiro)
-        const historicoOrdenado = historicoFormatado.sort((a, b) => 
+        const historicoOrdenado = historicoFormatado.sort((a, b) =>
           new Date(b.data).getTime() - new Date(a.data).getTime()
         );
 
@@ -170,15 +170,21 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
     }
   };
 
-  const excluirChamada = async (data: string) => {
+  const excluirChamada = async (dataChamada: string) => {
     try {
-      const { error } = await supabase
-        .from("presencas")
-        .delete()
-        .eq("turma_id", turmaId)
-        .eq("data_chamada", data);
+      // Use RPC to delete (direct table access is blocked by RLS)
+      const { data: result, error } = await supabase
+        .rpc('excluir_chamada' as any, {
+          p_turma_id: turmaId,
+          p_data_chamada: dataChamada
+        });
 
       if (error) throw error;
+
+      // Check RPC response
+      if (result && (result as any).success === false) {
+        throw new Error((result as any).message || 'Erro ao excluir chamada');
+      }
 
       // Recarregar os dados
       await carregarDados();

@@ -1,5 +1,22 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+/**
+ * useAlunosTurma Hook v2.0
+ * 
+ * 🚨 REFATORADO PARA OFFLINE-FIRST
+ * 
+ * ANTES: Chamava supabase diretamente (4 queries)
+ * AGORA: Usa dataProvider (IndexedDB primeiro, fallback Supabase)
+ * 
+ * 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getAlunosByTurma,
+  getTurmaById,
+  getPresencasByTurma,
+  type AlunoData
+} from "@/lib/dataProvider";
 
 interface Aluno {
   id: string;
@@ -8,7 +25,6 @@ interface Aluno {
   faltas: number;
   frequencia: number;
   turma_id: string;
-  user_id?: string;
 }
 
 interface TurmaInfo {
@@ -22,134 +38,142 @@ interface TurmaInfo {
 }
 
 export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome", "matricula", "turma_id"]) {
+  const { user } = useAuth();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [turmaInfo, setTurmaInfo] = useState<TurmaInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
-  const fetchAlunos = async () => {
+  const fetchAlunos = useCallback(async () => {
     if (!turmaId) return;
 
     setLoading(true);
 
     try {
-      // 1. Garante que 'user_id' e 'turma_id' sempre sejam buscados
-      const camposObrigatorios = ["id", "turma_id", "user_id"];
-      const camposParaBuscar = [...new Set([...campos, ...camposObrigatorios])];
+      // 1. Get turma info via dataProvider (OFFLINE-FIRST)
+      const turmaResult = await getTurmaById(turmaId);
 
-      // Get turma info
-      const { data: turmaData, error: turmaError } = await supabase
-        .from("turmas")
-        .select("id, nome, numero_sala")
-        .eq("id", turmaId)
-        .single();
-
-      if (turmaError || !turmaData) {
-        throw turmaError || new Error("Turma não encontrada");
+      if (!turmaResult.data) {
+        console.warn('[useAlunosTurma] Turma not found in cache or network');
+        setLoading(false);
+        return;
       }
 
-      // Get students
-      const { data: alunosData, error: alunosError } = await supabase
-        .from("alunos")
-        .select(camposParaBuscar.join(", "))
-        .eq("turma_id", turmaId)
-        .order("nome");
+      const turmaData = turmaResult.data;
 
-      if (alunosError) {
-        throw alunosError;
+      // 2. Get alunos via dataProvider (OFFLINE-FIRST)
+      const alunosResult = await getAlunosByTurma(turmaId, user?.escola_id);
+      const alunosData = alunosResult.data;
+
+      // 3. Get presencas (OPTIONAL - only if online)
+      let presencasData: any[] = [];
+      let presencasHojeData: any[] = [];
+
+      if (navigator.onLine) {
+        const presencasResult = await getPresencasByTurma(turmaId);
+        presencasData = presencasResult.data;
+
+        // Filter today's presencas
+        const hoje = new Date().toISOString().split('T')[0];
+        presencasHojeData = presencasData.filter(p => p.data_chamada === hoje);
       }
 
-      // ============================================
-      // CORREÇÃO DO BUG: Cálculo de frequência por aluno
-      // ============================================
-      // Buscar TODAS as presenças da turma (não só faltas)
-      const { data: todasPresencas, error: errorPresencas } = await supabase
-        .from("presencas")
-        .select("aluno_id, presente, falta_justificada")
-        .eq("turma_id", turmaId);
-
-      if (errorPresencas) {
-        console.error("Erro ao buscar presenças:", errorPresencas);
-        throw errorPresencas;
-      }
-
-      // Calcular estatísticas POR ALUNO individualmente
-      // Isso garante que alunos transferidos tenham cálculo correto
+      // 4. Calculate stats per student
       const statsMap = new Map<string, { total: number; faltas: number }>();
-      todasPresencas?.forEach((p) => {
+      presencasData.forEach((p: any) => {
         const current = statsMap.get(p.aluno_id) || { total: 0, faltas: 0 };
         current.total++;
-        // Falta = não presente E não justificada
         if (!p.presente && !p.falta_justificada) {
           current.faltas++;
         }
         statsMap.set(p.aluno_id, current);
       });
 
-      // ============================================
-      // NOVA FUNCIONALIDADE: Estatísticas do dia atual
-      // ============================================
-      const hoje = new Date().toISOString().split('T')[0];
-      const { data: presencasHoje } = await supabase
-        .from("presencas")
-        .select("aluno_id, presente")
-        .eq("turma_id", turmaId)
-        .eq("data_chamada", hoje);
-
-      const faltososHoje = presencasHoje?.filter(p => !p.presente).length || 0;
-      const presentesHoje = presencasHoje?.filter(p => p.presente).length || 0;
-      const totalRegistrosHoje = presencasHoje?.length || 0;
+      // 5. Calculate today's stats
+      const faltososHoje = presencasHojeData.filter(p => !p.presente).length;
+      const presentesHoje = presencasHojeData.filter(p => p.presente).length;
+      const totalRegistrosHoje = presencasHojeData.length;
       const percentualPresencaHoje = totalRegistrosHoje > 0
         ? Math.round((presentesHoje / totalRegistrosHoje) * 100)
-        : undefined; // undefined indica que a chamada não foi realizada hoje
+        : undefined;
 
-      // Process students with CORRECT attendance calculation
+      // 6. Process students with attendance stats
       const processedAlunos = alunosData.map((aluno) => {
         const stats = statsMap.get(aluno.id) || { total: 0, faltas: 0 };
-
-        // FÓRMULA CORRETA:
-        // Frequência = (Total de chamadas do aluno - Faltas não justificadas) / Total de chamadas * 100
-        // Se não há chamadas para o aluno, frequência = 100% (não negativo!)
         const frequencia = stats.total > 0
           ? Math.round(((stats.total - stats.faltas) / stats.total) * 100)
           : 100;
 
         return {
-          ...aluno,
+          id: aluno.id,
+          nome: aluno.nome,
+          matricula: aluno.matricula,
+          turma_id: aluno.turma_id,
           faltas: stats.faltas,
-          frequencia: Math.max(0, Math.min(100, frequencia)) // Garantir entre 0-100%
+          frequencia: Math.max(0, Math.min(100, frequencia))
         };
       });
 
-      // Atualizar turmaInfo com estatísticas completas
+      // 7. Update state
       setTurmaInfo({
-        ...turmaData,
+        id: turmaData.id,
+        nome: turmaData.nome,
+        numero_sala: turmaData.numero_sala || '',
         totalAlunos: alunosData.length,
         alunosFaltosos: faltososHoje,
         alunosPresentes: presentesHoje,
         percentualPresencaHoje
       });
 
-      setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)) as Aluno[]);
+      setAlunos(processedAlunos.sort((a, b) => a.nome.localeCompare(b.nome)));
+
+      // Log source for debugging
+      console.log('[useAlunosTurma] Data loaded', {
+        turmaSource: turmaResult.source,
+        alunosSource: alunosResult.source,
+        alunosCount: alunosData.length,
+        isOffline: !navigator.onLine
+      });
+
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
+      console.error("[useAlunosTurma] Error loading data:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [turmaId, user?.escola_id]);
 
+  // Listen for online/offline changes
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      fetchAlunos(); // Refresh when coming online
+    };
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [fetchAlunos]);
+
+  // Initial fetch
   useEffect(() => {
     fetchAlunos();
-  }, [turmaId]);
+  }, [fetchAlunos]);
 
-  const refreshAlunos = () => {
+  const refreshAlunos = useCallback(() => {
     fetchAlunos();
-  };
+  }, [fetchAlunos]);
 
   return {
     alunos,
     setAlunos,
     turmaInfo,
     loading,
-    refreshAlunos
+    refreshAlunos,
+    isOffline // Expose offline status for UI
   };
 }

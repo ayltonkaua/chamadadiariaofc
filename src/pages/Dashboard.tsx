@@ -6,7 +6,7 @@ import { InfoCards } from "@/components/dashboard/InfoCards";
 import { TurmasCards } from "@/components/TurmasCards";
 import OfflineManager from "@/components/offline/OfflineManager";
 import { ImportTurmasDialog } from "@/components/turmas/ImportTurmasDialog";
-import { getDadosEscolaOffline } from "@/lib/offlineChamada";
+import { getSchoolCache } from "@/lib/offlineStorage";
 import { WifiOff, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { turmaService, type TurmaComContagem } from "@/domains";
@@ -33,8 +33,8 @@ const Dashboard: React.FC = () => {
   // Função auxiliar para ler do IndexedDB
   const carregarDadosOffline = async () => {
     try {
-      console.log("Lendo IndexedDB...");
-      const dadosOffline = await getDadosEscolaOffline(user?.id);
+      console.log("[Dashboard] OFFLINE - reading from IndexedDB");
+      const dadosOffline = await getSchoolCache(user?.escola_id || '');
 
       if (dadosOffline && dadosOffline.turmas && dadosOffline.turmas.length > 0) {
         const turmasOffline = dadosOffline.turmas.map((t: any) => {

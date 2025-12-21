@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { clear } from 'idb-keyval'; // Importe isso no topo
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -46,8 +45,9 @@ import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
 import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
 import PerfilAlunoPage from "@/pages/aluno/PerfilAlunoPage";
 
-import { sincronizarChamadasOffline } from "@/lib/offlineChamada";
+import { triggerSync } from "@/lib/SyncManager";
 import { toast } from "@/components/ui/use-toast";
+import GlobalSyncStatus from "@/components/offline/GlobalSyncStatus";
 
 // Optimized QueryClient for caching
 const queryClient = new QueryClient({
@@ -85,31 +85,7 @@ const OfflineBanner = () => {
 };
 
 const App = () => {
-  // NOVO: Limpeza de Cache de Segurança
-  useEffect(() => {
-    const checkSecurityVersion = async () => {
-      const CURRENT_VERSION = 'v2_secure_rls'; // Mudamos a versão
-      const storedVersion = localStorage.getItem('app_version');
-
-      if (storedVersion !== CURRENT_VERSION) {
-        console.warn("Versão de segurança antiga detectada. Limpando cache local...");
-
-        // 1. Limpa o IndexedDB (onde as turmas antigas estão escondidas)
-        await clear();
-
-        // 2. Limpa LocalStorage
-        localStorage.clear();
-
-        // 3. Define nova versão
-        localStorage.setItem('app_version', CURRENT_VERSION);
-
-        // 4. Recarrega a página para garantir estado limpo
-        window.location.reload();
-      }
-    };
-
-    checkSecurityVersion();
-  }, []);
+  // Sync offline data when app loads or comes online
   useEffect(() => {
     const syncOfflineData = async () => {
       if (navigator.onLine) {
@@ -117,11 +93,13 @@ const App = () => {
           // Invalida todas as queries para forçar recarregamento dos dados
           queryClient.invalidateQueries();
 
-          const { success, count, error } = await sincronizarChamadasOffline();
-          if (success && count && count > 0) {
+          // Use new SyncManager instead of legacy sync
+          const results = await triggerSync();
+          const successCount = results.filter(r => r.success).length;
+          if (successCount > 0) {
             toast({
               title: "Sincronização Concluída",
-              description: `${count} chamadas offline foram enviadas com sucesso.`,
+              description: `${successCount} chamadas offline foram enviadas com sucesso.`,
             });
           }
         } catch (e) {
@@ -150,6 +128,9 @@ const App = () => {
             <TooltipProvider>
               <Toaster />
               <Sonner />
+
+              {/* Global sync status indicator (Phase 1 UX) */}
+              <GlobalSyncStatus />
 
               <Router>
                 <Routes>

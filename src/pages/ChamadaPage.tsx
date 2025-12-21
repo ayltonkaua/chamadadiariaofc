@@ -19,13 +19,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  getSessaoChamada,
-  salvarSessaoChamada,
-  limparSessaoChamada,
-  sincronizarChamadasOffline,
-  salvarChamadaOffline,
-  getAlunosDaTurmaOffline
-} from '@/lib/offlineChamada';
+  getSession,
+  upsertSession,
+  deleteSession,
+  getCachedAlunosByTurma
+} from '@/lib/offlineStorage';
+import { getAlunosByTurma } from '@/lib/dataProvider';
+import { triggerSync } from '@/lib/SyncManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 import {
@@ -36,6 +36,7 @@ import {
   type Aluno,
   type Atestado
 } from "@/domains";
+import VirtualizedAlunosList from "@/components/chamada/VirtualizedAlunosList";
 
 // Estado visual único. Não permite ambiguidade.
 type PresencaStatus = "presente" | "falta" | "atestado";
@@ -72,13 +73,16 @@ const ChamadaPage: React.FC = () => {
 
   // --- 1. MONITORAMENTO DE CONEXÃO ---
   useEffect(() => {
-    const handleStatusChange = () => {
+    const handleStatusChange = async () => {
       const status = navigator.onLine;
       setIsOnline(status);
       if (status) {
-        sincronizarChamadasOffline().then(res => {
-          if (res.success && res.count > 0) toast({ title: "Sincronizado", description: `${res.count} registros enviados.` });
-        });
+        // Use new SyncManager instead of legacy sync
+        const results = await triggerSync();
+        const successCount = results.filter(r => r.success).length;
+        if (successCount > 0) {
+          toast({ title: "Sincronizado", description: `${successCount} registros enviados.` });
+        }
       }
     };
     window.addEventListener('online', handleStatusChange);
@@ -100,16 +104,20 @@ const ChamadaPage: React.FC = () => {
 
       // A) SE OFFLINE: Vai direto para o cache
       if (!navigator.onLine) {
-        console.log("Modo Offline: Buscando alunos no cache...");
-        listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
+        console.log("[ChamadaPage] OFFLINE - reading from IndexedDB cache");
+        const cached = await getCachedAlunosByTurma(user?.escola_id || '', turmaId);
+        listaAlunos = cached as Aluno[];
       }
-      // B) SE ONLINE: Usa service com fallback para cache
+      // B) SE ONLINE: Usa dataProvider (offline-first)
       else {
         try {
-          listaAlunos = await alunoService.findByTurma(turmaId);
+          const result = await getAlunosByTurma(turmaId, user?.escola_id);
+          listaAlunos = result.data as Aluno[];
+          console.log(`[ChamadaPage] Loaded ${listaAlunos.length} alunos from ${result.source}`);
         } catch (err) {
-          console.warn("Erro ao buscar online. Usando cache.", err);
-          listaAlunos = await getAlunosDaTurmaOffline(turmaId, user?.id);
+          console.warn("[ChamadaPage] Error fetching, using cache", err);
+          const cached = await getCachedAlunosByTurma(user?.escola_id || '', turmaId);
+          listaAlunos = cached as Aluno[];
         }
       }
 
@@ -123,12 +131,12 @@ const ChamadaPage: React.FC = () => {
       setLocalEscolaId(escolaIdEncontrado);
 
       // Recuperar Rascunho ou Inicializar
-      const rascunho = await getSessaoChamada();
+      const dateStr = format(date, "yyyy-MM-dd");
+      const rascunho = await getSession(turmaId, dateStr);
       const mapaPresencas: Record<string, PresencaStatus> = {};
 
-      if (rascunho && rascunho.turmaId === turmaId) {
-        const [y, m, d] = rascunho.date.split('-').map(Number);
-        setDate(new Date(y, m - 1, d));
+      if (rascunho && rascunho.turma_id === turmaId) {
+        // Session exists, restore presences
         Object.entries(rascunho.presencas).forEach(([id, status]) => {
           if (status) mapaPresencas[id] = status as PresencaStatus;
         });
@@ -155,6 +163,9 @@ const ChamadaPage: React.FC = () => {
         }
       }
 
+      // Sort alphabetically by name
+      listaAlunos.sort((a, b) => a.nome.localeCompare(b.nome));
+
       setAlunos(listaAlunos);
       setPresencas(mapaPresencas);
       setAtestados(mapaAtestados);
@@ -175,25 +186,26 @@ const ChamadaPage: React.FC = () => {
   useEffect(() => {
     if (turmaId && Object.keys(presencas).length > 0) {
       const timer = setTimeout(() => {
-        salvarSessaoChamada({ turmaId, date: format(date, "yyyy-MM-dd"), presencas });
+        const dateStr = format(date, "yyyy-MM-dd");
+        upsertSession(turmaId, dateStr, presencas);
       }, 800);
       return () => clearTimeout(timer);
     }
   }, [presencas, date, turmaId]);
 
-  // --- AÇÕES ---
-  const toggleStatus = (alunoId: string) => {
+  // --- AÇÕES (MEMOIZED - Phase 3) ---
+  const toggleStatus = useCallback((alunoId: string) => {
     setPresencas(prev => {
       const atual = prev[alunoId];
       if (atual === "atestado") return prev;
       return { ...prev, [alunoId]: atual === "presente" ? "falta" : "presente" };
     });
-  };
+  }, []);
 
-  const setStatusManual = (alunoId: string, status: PresencaStatus, e: React.MouseEvent) => {
+  const setStatusManual = useCallback((alunoId: string, status: PresencaStatus, e: React.MouseEvent) => {
     e.stopPropagation();
     setPresencas(prev => ({ ...prev, [alunoId]: status }));
-  };
+  }, []);
 
   // --- SALVAR CHAMADA usando presencaService ---
   const handleSalvar = async () => {
@@ -228,7 +240,7 @@ const ChamadaPage: React.FC = () => {
         registros
       });
 
-      if (result.online) {
+      if (result.syncTriggered) {
         toast({ title: "Chamada salva!", className: "bg-green-600 text-white" });
       } else {
         toast({
@@ -302,32 +314,14 @@ const ChamadaPage: React.FC = () => {
       </div>
 
       {/* LISTA DE ALUNOS */}
-      <div className="max-w-3xl mx-auto p-4 space-y-3">
-        {alunos.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 border-2 border-dashed rounded-lg"><p>Nenhum aluno encontrado.</p></div>
-        ) : (
-          alunos.map((aluno) => {
-            const status = presencas[aluno.id];
-            const isPresente = status === "presente";
-            const isFalta = status === "falta";
-            const isAtestado = status === "atestado";
-            return (
-              <div key={aluno.id} onClick={() => toggleStatus(aluno.id)} className={`flex items-center justify-between p-3 rounded-lg border-l-[6px] shadow-sm cursor-pointer transition-all bg-white active:scale-[0.99] ${isPresente ? 'border-l-emerald-500' : isFalta ? 'border-l-red-500 bg-red-50/20' : 'border-l-blue-400'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm border transition-colors ${isPresente ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : isFalta ? 'bg-red-100 text-red-700 border-red-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>{aluno.nome.substring(0, 2).toUpperCase()}</div>
-                  <div>
-                    <p className={`font-semibold text-sm ${isFalta ? 'text-red-700' : 'text-slate-800'}`}>{aluno.nome}</p>
-                    <p className="text-xs text-slate-400 font-mono">{aluno.matricula}</p>
-                  </div>
-                </div>
-                <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-purple-600" onClick={() => setShowObservacao({ alunoId: aluno.id, alunoNome: aluno.nome })}><MessageSquare size={18} /></Button>
-                  <Button variant={isAtestado ? "default" : "ghost"} size="icon" className={`h-9 w-9 ${isAtestado ? 'bg-blue-500 text-white hover:bg-blue-600' : 'text-slate-300 hover:text-blue-500'}`} onClick={(e) => setStatusManual(aluno.id, isAtestado ? "presente" : "atestado", e)}><FileText size={18} /></Button>
-                </div>
-              </div>
-            );
-          })
-        )}
+      <div className="max-w-3xl mx-auto p-4">
+        <VirtualizedAlunosList
+          alunos={alunos}
+          presencas={presencas}
+          onToggleStatus={toggleStatus}
+          onSetStatus={setStatusManual}
+          onObservacao={(alunoId, alunoNome) => setShowObservacao({ alunoId, alunoNome })}
+        />
       </div>
 
       {/* FOOTER FLUTUANTE */}

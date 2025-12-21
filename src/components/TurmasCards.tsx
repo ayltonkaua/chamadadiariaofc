@@ -15,11 +15,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEscolaConfig } from "@/contexts/EscolaConfigContext"; // Seu contexto original
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { getDadosEscolaOffline } from "@/lib/offlineChamada";
-import { get, set, del } from "idb-keyval";
+import { getSchoolCache } from "@/lib/offlineStorage";
 
 // Modais
 import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
@@ -47,8 +46,8 @@ interface TurmasCardsProps {
   turno?: string;
 }
 
-// --- SUB-COMPONENTE: CARD VISUAL ---
-const TurmaCardItem = ({
+// --- SUB-COMPONENTE: CARD VISUAL (MEMOIZED - Phase 3) ---
+const TurmaCardItem = React.memo(({
   turma,
   onEdit,
   onDeleteRequest,
@@ -158,7 +157,9 @@ const TurmaCardItem = ({
       </CardFooter>
     </Card>
   );
-};
+});
+
+TurmaCardItem.displayName = 'TurmaCardItem';
 
 // --- COMPONENTE PRINCIPAL ---
 export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh, turno }: TurmasCardsProps) {
@@ -223,23 +224,17 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
 
           setLocalTurmas(formatadas);
           setIsOfflineMode(false);
-
-          // Salva o user_id atual no cache para validação futura
-          await set(CACHE_USER_KEY, user.id);
-
           return; // Sucesso, não precisa tentar cache
         } catch (error) {
-          console.warn("Erro ao buscar turmas online, tentando cache...", error);
-          // Continua para o fallback de cache
+          console.warn("[TurmasCards] Error fetching online, using cache...", error);
         }
       }
 
       // FALLBACK: Cache offline apenas se online falhou ou está offline
-      console.log("Buscando turmas do cache offline...");
-      const dadosOffline = await getDadosEscolaOffline(user.id);
+      console.log("[TurmasCards] OFFLINE - reading from IndexedDB");
+      const dadosOffline = await getSchoolCache(user?.escola_id || '');
 
       if (dadosOffline && dadosOffline.turmas) {
-        // Filtra turmas por turno (escola_id já está no cache offline)
         const turmasFiltradas = dadosOffline.turmas
           .filter((t: any) => (!turno || t.turno === turno))
           .map((t: any) => ({
@@ -248,7 +243,7 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
             escola_id: t.escola_id,
             numero_sala: t.numero_sala,
             turno: t.turno,
-            _count: { alunos: 0 }, // Cache não tem contagem
+            _count: { alunos: 0 },
             alunos: 0
           }));
 

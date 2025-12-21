@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, GraduationCap, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDadosEscolaOffline } from "@/lib/offlineChamada";
+import { getSchoolCache } from "@/lib/offlineStorage";
 import { useNavigate } from "react-router-dom";
 
 export function InfoCards() {
@@ -44,7 +44,7 @@ export function InfoCards() {
 
       // 2. FALLBACK OFFLINE
       try {
-        const dadosOffline = await getDadosEscolaOffline(user?.id);
+        const dadosOffline = await getSchoolCache(user?.escola_id || '');
         if (dadosOffline) {
           setStats({
             totalAlunos: dadosOffline.alunos.length,

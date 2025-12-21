@@ -1,159 +1,249 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * OfflineManager Component v2.0
+ * 
+ * REFATORADO para usar SyncManager exclusivamente.
+ * 
+ * Regras:
+ * ❌ NÃO acessa IndexedDB diretamente
+ * ❌ NÃO calcula pendências manualmente
+ * ✅ Usa apenas API pública do SyncManager
+ * ✅ Atualiza UI via onSyncProgress
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
-import { Download, Upload, Wifi, Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import {
-  baixarDadosEscola,
-  sincronizarChamadasOffline,
-  getChamadasPendentes
-} from '@/lib/offlineChamada';
 import { useAuth } from '@/contexts/AuthContext';
-import { Badge } from "@/components/ui/badge";
+import { SyncStatusBadge, type SyncState } from './SyncStatusBadge';
+
+// SyncManager API
+import {
+  syncManager,
+  onSyncProgress,
+  triggerSync,
+  retryFailedSyncs,
+  getPendingSyncCount,
+  type SyncProgress
+} from '@/lib/SyncManager';
+
+// School cache download (still uses offlineStorage directly for caching)
+import { saveSchoolCache, type SchoolCacheData } from '@/lib/offlineStorage';
+import { supabase } from '@/integrations/supabase/client';
 
 const OfflineManager: React.FC = () => {
   const { user } = useAuth();
-  const [pendencias, setPendencias] = useState(0);
-  const [loading, setLoading] = useState(false);
+
+  // State
+  const [syncState, setSyncState] = useState<SyncState>('synced');
+  const [pendingCount, setPendingCount] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isDownloading, setIsDownloading] = useState(false);
 
+  // ===========================================================================
+  // SYNC STATE MANAGEMENT
+  // ===========================================================================
+
+  const updateSyncState = useCallback(async () => {
+    try {
+      const count = await getPendingSyncCount();
+      setPendingCount(count);
+
+      const state = syncManager.getSyncState();
+
+      if (state.state === 'syncing') {
+        setSyncState('syncing');
+      } else if (count === 0) {
+        setSyncState('synced');
+      } else if (state.state === 'circuit_open') {
+        setSyncState('error');
+      } else {
+        // Has pending items
+        setSyncState(isOnline ? 'syncing' : 'saved-local');
+      }
+    } catch (err) {
+      console.error('[OfflineManager] Error checking sync state:', err);
+    }
+  }, [isOnline]);
+
+  // ===========================================================================
+  // EFFECTS
+  // ===========================================================================
+
+  // Subscribe to sync progress
   useEffect(() => {
-    const checkPendencias = async () => {
-      const p = await getChamadasPendentes();
-      setPendencias(p.length);
+    const unsubscribe = onSyncProgress((progress: SyncProgress) => {
+      const remaining = progress.total - progress.completed - progress.failed;
+      setPendingCount(remaining > 0 ? remaining : progress.failed);
+
+      // Check isComplete flag - CRITICAL to prevent infinite syncing
+      if (progress.isComplete) {
+        // Sync round is done - determine final state
+        const state = syncManager.getSyncState();
+
+        if (state.state === 'circuit_open') {
+          setSyncState('error');
+        } else if (progress.failed > 0) {
+          setSyncState('error');
+        } else if (progress.total === 0 || remaining === 0) {
+          setSyncState('synced');
+        } else {
+          // Still has pending but round is done
+          setSyncState(isOnline ? 'saved-local' : 'saved-local');
+        }
+      } else {
+        // Still syncing
+        setSyncState('syncing');
+      }
+    });
+
+    return unsubscribe;
+  }, [isOnline]);
+
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Trigger sync when coming online
+      triggerSync();
+      updateSyncState();
     };
 
-    const handleStatusChange = () => {
-      setIsOnline(navigator.onLine);
-      checkPendencias(); // Checa ao mudar rede
+    const handleOffline = () => {
+      setIsOnline(false);
+      updateSyncState();
     };
 
-    // Listener extra para quando salvar chamada em outra tela
-    const handleNovaChamada = () => checkPendencias();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-    window.addEventListener('online', handleStatusChange);
-    window.addEventListener('offline', handleStatusChange);
-    window.addEventListener('chamada-salva', handleNovaChamada); // Disparar isso no ChamadaPage
-
-    checkPendencias(); // Check inicial
+    // Initial state check
+    updateSyncState();
 
     return () => {
-      window.removeEventListener('online', handleStatusChange);
-      window.removeEventListener('offline', handleStatusChange);
-      window.removeEventListener('chamada-salva', handleNovaChamada);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [updateSyncState]);
 
-  const handleBaixarDados = async () => {
-    if (!user?.escola_id) {
-      toast({ title: "Erro", description: "Escola não identificada.", variant: "destructive" });
-      return;
-    }
+  // Listen for new chamadas (custom event from ChamadaPage)
+  useEffect(() => {
+    const handleNewChamada = () => {
+      updateSyncState();
+    };
 
-    setLoading(true);
+    window.addEventListener('chamada-salva', handleNewChamada);
+    return () => window.removeEventListener('chamada-salva', handleNewChamada);
+  }, [updateSyncState]);
+
+  // ===========================================================================
+  // HANDLERS
+  // ===========================================================================
+
+  const handleRetrySync = async () => {
+    toast({ description: "Tentando sincronizar novamente..." });
+
     try {
-      const result = await baixarDadosEscola(user.escola_id);
-      if (result.success) {
+      const results = await retryFailedSyncs();
+      const successful = results.filter(r => r.success).length;
+
+      if (successful > 0) {
         toast({
-          title: "Dados Baixados!",
-          description: `${result.turmasCount} turmas e ${result.alunosCount} alunos prontos para uso offline.`,
+          title: "Sincronização concluída!",
+          description: `${successful} chamada(s) sincronizada(s).`,
           className: "bg-green-100 border-green-500 text-green-800"
         });
-      } else {
-        throw new Error("Falha no download");
       }
-    } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível baixar os dados.", variant: "destructive" });
-    } finally {
-      setLoading(false);
+
+      await updateSyncState();
+    } catch (err) {
+      toast({
+        title: "Erro",
+        description: "Falha ao sincronizar. Tente novamente.",
+        variant: "destructive"
+      });
     }
   };
 
-  // Função disparada EXCLUSIVAMENTE pelo clique do botão
-  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
-
-  const handleSincronizar = async () => {
-    if (!isOnline) {
-      toast({ description: "Você precisa estar online para sincronizar." });
+  const handleDownloadData = async () => {
+    if (!user?.escola_id) {
+      toast({
+        title: "Erro",
+        description: "Escola não identificada.",
+        variant: "destructive"
+      });
       return;
     }
 
-    setLoading(true);
-    setSyncProgress({ current: 0, total: pendencias }); // Inicia
+    setIsDownloading(true);
 
     try {
-      const result = await sincronizarChamadasOffline((current, total) => {
-        setSyncProgress({ current, total });
+      // 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
+      const { syncSchoolCache } = await import('@/lib/dataProvider');
+      const result = await syncSchoolCache(user.escola_id, user.id);
+
+      if (result.turmasCount === 0) {
+        toast({ description: "Nenhuma turma encontrada." });
+        setIsDownloading(false);
+        return;
+      }
+
+      toast({
+        title: "Dados baixados!",
+        description: `${result.turmasCount} turmas e ${result.alunosCount} alunos prontos para uso offline.`,
+        className: "bg-green-100 border-green-500 text-green-800"
       });
 
-      if (result.success && result.count > 0) {
-        toast({
-          title: "Sucesso!",
-          description: "Sincronização realizada com sucesso.",
-          className: "bg-green-100 border-green-500 text-green-800"
-        });
-        setPendencias(0);
-      } else if (result.success && result.count === 0) {
-        toast({ description: "Não há chamadas pendentes." });
-      } else {
-        throw new Error("Erro na sincronização");
-      }
     } catch (error) {
-      toast({ title: "Erro de Sincronização", description: "Tente novamente.", variant: "destructive" });
+      console.error('[OfflineManager] Download error:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao baixar dados.",
+        variant: "destructive"
+      });
     } finally {
-      setLoading(false);
-      setSyncProgress(null);
+      setIsDownloading(false);
     }
   };
+
+  // ===========================================================================
+  // RENDER
+  // ===========================================================================
+
+  // Don't show anything if synced and online (clean state)
+  const showStatus = pendingCount > 0 || syncState === 'error' || !isOnline;
 
   return (
     <div className="flex items-center gap-2">
-      {/* Botão de Download: Sempre visível se online */}
+      {/* Download button (only when online) */}
       {isOnline && (
         <Button
           variant="outline"
           size="sm"
-          onClick={handleBaixarDados}
-          disabled={loading}
+          onClick={handleDownloadData}
+          disabled={isDownloading}
           className="gap-2 border-purple-200 hover:bg-purple-50 text-purple-700"
           title="Baixar turmas para usar offline"
         >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {isDownloading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
           <span className="hidden sm:inline">Baixar Dados</span>
         </Button>
       )}
 
-      {/* Botão de Sincronizar: Só aparece se tiver pendências E estiver online */}
-      {pendencias > 0 && isOnline && (
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleSincronizar}
-          disabled={loading}
-          className="gap-2 bg-amber-500 hover:bg-amber-600 shadow-md"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {syncProgress ? `Enviando ${syncProgress.current} de ${syncProgress.total}...` : "Sincronizando..."}
-            </>
-          ) : (
-            <>
-              <Upload className="h-4 w-4" />
-              <span>Sincronizar ({pendencias})</span>
-            </>
-          )}
-        </Button>
-      )}
-
-      {/* Indicador Offline */}
-      {!isOnline && (
-        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 gap-1 border-yellow-300">
-          <Wifi className="h-3 w-3" />
-          <span className="hidden sm:inline">Modo Offline</span>
-        </Badge>
+      {/* Sync status badge */}
+      {showStatus && (
+        <SyncStatusBadge
+          state={syncState}
+          pendingCount={pendingCount}
+          onClick={syncState === 'error' ? handleRetrySync : undefined}
+        />
       )}
     </div>
   );
 };
 
-export default OfflineManager; 
+export default OfflineManager;

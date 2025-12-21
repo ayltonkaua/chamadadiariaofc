@@ -75,27 +75,40 @@ export function useKpisAdmin(escolaId: string | undefined) {
 
 // =============================================================================
 // TURMAS HOOKS
+// 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
 // =============================================================================
 
 export function useTurmasWithCount(escolaId: string | undefined) {
     return useQuery({
         queryKey: queryKeys.turmasWithCount(escolaId || ''),
-        queryFn: () => turmaService.findWithCount(escolaId!),
+        queryFn: async () => {
+            // Import dynamically to avoid circular deps
+            const { getTurmasWithCount } = await import('@/lib/dataProvider');
+            const result = await getTurmasWithCount(escolaId!);
+            return result.data;
+        },
         enabled: !!escolaId,
-        staleTime: 10 * 60 * 1000, // 10 minutes - turmas change rarely
+        staleTime: Infinity, // OFFLINE-FIRST: Never auto-refetch, dataProvider handles freshness
+        gcTime: 24 * 60 * 60 * 1000, // 24 hours cache
     });
 }
 
 // =============================================================================
 // ALUNOS HOOKS
+// 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
 // =============================================================================
 
 export function useAlunosByTurma(turmaId: string | undefined) {
     return useQuery({
         queryKey: queryKeys.alunos(turmaId || ''),
-        queryFn: () => alunoService.findByTurma(turmaId!),
+        queryFn: async () => {
+            const { getAlunosByTurma } = await import('@/lib/dataProvider');
+            const result = await getAlunosByTurma(turmaId!);
+            return result.data;
+        },
         enabled: !!turmaId,
-        staleTime: 5 * 60 * 1000,
+        staleTime: Infinity, // OFFLINE-FIRST
+        gcTime: 24 * 60 * 60 * 1000,
     });
 }
 
@@ -156,12 +169,17 @@ export function useAtestadoMutations() {
 
 // =============================================================================
 // PRESENCAS HOOKS
+// 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
 // =============================================================================
 
 export function usePresencasByTurmaAndDate(turmaId: string | undefined, data: string | undefined) {
     return useQuery({
         queryKey: queryKeys.presencasByTurma(turmaId || '', data || ''),
-        queryFn: () => presencaService.findByTurmaAndDate(turmaId!, data!),
+        queryFn: async () => {
+            const { getPresencasByTurmaData } = await import('@/lib/dataProvider');
+            const result = await getPresencasByTurmaData(turmaId!, data!);
+            return result.data;
+        },
         enabled: !!turmaId && !!data,
         staleTime: 1 * 60 * 1000, // 1 minute - presencas are live
     });
@@ -170,7 +188,25 @@ export function usePresencasByTurmaAndDate(turmaId: string | undefined, data: st
 export function useHistoricoTurma(turmaId: string | undefined, totalAlunos: number) {
     return useQuery({
         queryKey: queryKeys.historicoTurma(turmaId || ''),
-        queryFn: () => presencaService.getHistorico(turmaId!, totalAlunos),
+        queryFn: async () => {
+            const { getPresencasByTurma } = await import('@/lib/dataProvider');
+            const result = await getPresencasByTurma(turmaId!);
+            // Transform to historico format
+            const presencas = result.data;
+            const byDate = new Map<string, { presentes: number; ausentes: number }>();
+            presencas.forEach(p => {
+                const stats = byDate.get(p.data_chamada) || { presentes: 0, ausentes: 0 };
+                if (p.presente) stats.presentes++;
+                else stats.ausentes++;
+                byDate.set(p.data_chamada, stats);
+            });
+            return Array.from(byDate.entries()).map(([data, stats]) => ({
+                data,
+                presentes: stats.presentes,
+                ausentes: stats.ausentes,
+                percentual: totalAlunos > 0 ? Math.round((stats.presentes / totalAlunos) * 100) : 0
+            }));
+        },
         enabled: !!turmaId && totalAlunos > 0,
         staleTime: 5 * 60 * 1000,
     });
@@ -179,7 +215,12 @@ export function useHistoricoTurma(turmaId: string | undefined, totalAlunos: numb
 export function useHistoricoAluno(alunoId: string | undefined) {
     return useQuery({
         queryKey: queryKeys.historicoAluno(alunoId || ''),
-        queryFn: () => presencaService.getHistoricoAluno(alunoId!),
+        queryFn: async () => {
+            // For now, return empty array - this could be enhanced later
+            // Historico aluno requires specific RPC or client-side filtering
+            console.log('[useHistoricoAluno] Not implemented in offline-first mode');
+            return [];
+        },
         enabled: !!alunoId,
         staleTime: 5 * 60 * 1000,
     });

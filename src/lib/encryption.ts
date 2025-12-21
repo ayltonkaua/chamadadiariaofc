@@ -5,7 +5,7 @@
  * Uses a device-specific key derived from browser fingerprint.
  */
 
-import CryptoJS from 'crypto-js';
+import * as CryptoJS from 'crypto-js';
 
 /**
  * Generates a deterministic encryption key based on device/browser characteristics.
