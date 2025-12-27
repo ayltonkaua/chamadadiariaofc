@@ -26,10 +26,6 @@ import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
 import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
-import PesquisasListPage from "@/pages/PesquisasListPage";
-import PesquisaCreatePage from "@/pages/PesquisaCreatePage";
-import PesquisaResultadosPage from "@/pages/PesquisaResultadosPage";
-import PesquisaPublicaPage from "@/pages/PesquisaPublicaPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 import RelatoriosPage from "@/pages/RelatoriosPage";
 import PortalAlunoPage from "@/pages/PortalAlunoPage";
@@ -38,9 +34,6 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import DisciplinasPage from "@/pages/DisciplinasPage";
-import MeuIngressoPage from "@/pages/aluno/MeuIngressoPage";
-import ScannerPage from "@/pages/evento/ScannerPage";
-import GerenciarEventosPage from "@/pages/gestor/GerenciarEventosPage";
 import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
 import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
 import PerfilAlunoPage from "@/pages/aluno/PerfilAlunoPage";
@@ -140,7 +133,6 @@ const App = () => {
                   <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
                   <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
                   <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
-                  <Route path="/responder-pesquisa" element={<Layout showSidebar={false}><PesquisaPublicaPage /></Layout>} />
                   <Route path="/student-query" element={<StudentQueryPage />} />
 
                   {/* --- Rotas Autenticadas (Todas/Comum) --- */}
@@ -162,11 +154,6 @@ const App = () => {
                       <Route path="/alertas" element={<AlertasPage />} />
                       <Route path="/disciplinas" element={<DisciplinasPage />} />
                       <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
-
-                      {/* Pesquisas */}
-                      <Route path="/pesquisas" element={<PesquisasListPage />} />
-                      <Route path="/pesquisas/nova" element={<PesquisaCreatePage />} />
-                      <Route path="/pesquisas/:pesquisaId/resultados" element={<PesquisaResultadosPage />} />
 
                       {/* Perfil */}
                       <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
@@ -193,23 +180,7 @@ const App = () => {
                     </Route>
                   </Route>
 
-                  {/* --- Rotas de Eventos --- */}
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor']} />}>
-                    {/* Adicione o wrapper de Layout aqui */}
-                    <Route element={<Layout><Outlet /></Layout>}>
-                      <Route path="/gestor/eventos" element={<GerenciarEventosPage />} />
-                    </Route>
-                  </Route>
-
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'professor', 'aluno', 'monitor']} />}>
-                    <Route path="/evento/scanner" element={<ScannerPage />} />
-                  </Route>
-
-                  <Route element={<ProtectedRoute allowedRoles={['aluno']} />}>
-                    <Route path="/aluno/ingresso" element={<MeuIngressoPage />} />
-                  </Route>
-
-                  {/* Benefícios do Aluno (Novo) */}
+                  {/* Benefícios do Aluno */}
                   <Route element={<ProtectedRoute allowedTypes={['aluno']} />}>
                     <Route path="/aluno/beneficios" element={<MeusBeneficiosPage />} />
                   </Route>

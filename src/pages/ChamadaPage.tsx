@@ -22,7 +22,9 @@ import {
   getSession,
   upsertSession,
   deleteSession,
-  getCachedAlunosByTurma
+  getCachedAlunosByTurma,
+  getCachedAtestadosVigentes,
+  saveAtestadosCache
 } from '@/lib/offlineStorage';
 import { getAlunosByTurma } from '@/lib/dataProvider';
 import { triggerSync } from '@/lib/SyncManager';
@@ -145,22 +147,52 @@ const ChamadaPage: React.FC = () => {
         listaAlunos.forEach(a => mapaPresencas[a.id] = "presente");
       }
 
-      // Buscar Atestados (Só Online) usando service
+      // Buscar Atestados - OFFLINE-FIRST
       let mapaAtestados: Record<string, Atestado[]> = {};
-      if (navigator.onLine) {
-        try {
+      const escolaIdParaAtestados = escolaIdEncontrado || user?.escola_id;
+
+      try {
+        if (navigator.onLine) {
+          // ONLINE: Fetch from server and cache
           const atestadosVigentes = await atestadosService.getAtestadosVigentes();
           mapaAtestados = atestadosService.groupByAluno(atestadosVigentes);
 
-          // Marca alunos com atestado automaticamente
-          Object.keys(mapaAtestados).forEach(alunoId => {
-            if (listaAlunos.some(al => al.id === alunoId)) {
-              mapaPresencas[alunoId] = "atestado";
+          // Cache for offline use
+          if (escolaIdParaAtestados && atestadosVigentes.length > 0) {
+            await saveAtestadosCache({
+              escola_id: escolaIdParaAtestados,
+              atestados: atestadosVigentes.map(a => ({
+                id: a.id,
+                aluno_id: a.aluno_id,
+                data_inicio: a.data_inicio,
+                data_fim: a.data_fim,
+                status: a.status
+              })),
+              cached_at: Date.now()
+            });
+          }
+        } else if (escolaIdParaAtestados) {
+          // OFFLINE: Use cached atestados
+          console.log('[ChamadaPage] OFFLINE - reading atestados from cache');
+          const cachedAtestados = await getCachedAtestadosVigentes(escolaIdParaAtestados);
+
+          // Convert to mapa format
+          for (const atestado of cachedAtestados) {
+            if (!mapaAtestados[atestado.aluno_id]) {
+              mapaAtestados[atestado.aluno_id] = [];
             }
-          });
-        } catch (err) {
-          console.error("Erro atestados", err);
+            mapaAtestados[atestado.aluno_id].push(atestado as unknown as Atestado);
+          }
         }
+
+        // Marca alunos com atestado automaticamente
+        Object.keys(mapaAtestados).forEach(alunoId => {
+          if (listaAlunos.some(al => al.id === alunoId)) {
+            mapaPresencas[alunoId] = "atestado";
+          }
+        });
+      } catch (err) {
+        console.error("Erro atestados", err);
       }
 
       // Sort alphabetically by name

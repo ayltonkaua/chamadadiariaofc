@@ -28,11 +28,9 @@ import {
   Bell,
   GraduationCap,
   ChevronRight,
-  ListChecks,
   Calendar as CalendarIcon,
   User,
-  AlertTriangle,
-  Ticket
+  AlertTriangle
 } from 'lucide-react';
 
 // --- Componente Visual: Gráfico de Frequência ---
@@ -473,36 +471,6 @@ const PortalAlunoPage: React.FC = () => {
                 </div>
               </DialogContent>
             </Dialog>
-
-            {/* 4.5. Meu Ingresso (NOVO) */}
-            <Button
-              variant="outline"
-              className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white hover:bg-purple-50 hover:text-purple-700 transition-all group"
-              onClick={() => navigate('/aluno/ingresso')}
-            >
-              <div className="p-3 bg-fuchsia-50 rounded-2xl text-fuchsia-600 group-hover:scale-110 transition-transform">
-                <Ticket className="h-6 w-6" />
-              </div>
-              <div className="text-center">
-                <span className="text-xs font-bold block text-gray-700 group-hover:text-purple-700">Meu Ingresso</span>
-                <span className="text-[10px] text-gray-400 font-normal">Ver QR Code</span>
-              </div>
-            </Button>
-
-            {/* 5. Pesquisas (Em Breve) */}
-            <Button
-              variant="outline"
-              className="h-auto flex-col gap-3 py-6 border-none shadow-sm bg-white opacity-70 cursor-not-allowed hover:bg-white"
-              disabled
-            >
-              <div className="p-3 bg-gray-100 rounded-2xl text-gray-400">
-                <ListChecks className="h-6 w-6" />
-              </div>
-              <div className="text-center">
-                <span className="text-xs font-bold block text-gray-400">Pesquisas</span>
-                <Badge variant="secondary" className="text-[9px] px-1.5 h-4 mt-0.5 bg-gray-100 text-gray-500 hover:bg-gray-100">Em Breve</Badge>
-              </div>
-            </Button>
 
           </div>
         </section>

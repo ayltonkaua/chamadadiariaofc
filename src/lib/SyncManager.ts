@@ -16,7 +16,11 @@
 import { supabase } from '@/integrations/supabase/client';
 import {
     type ChamadaAtom,
+    type ObservacaoAtom,
+    type SyncableAtom,
+    type SyncAtomType,
     getPendingChamadas,
+    getAllPendingSyncAtoms,
     updateChamadaAtom,
     removeSyncedChamada,
     addSyncLog,
@@ -44,9 +48,62 @@ const CONFIG = {
     JITTER_MS: 200,
 
     // Circuit breaker - does NOT auto-reset
-    CIRCUIT_BREAK_THRESHOLD: 5,    // consecutive failures
-    CIRCUIT_BREAK_DURATION_MS: 5 * 60 * 1000  // 5 minutes minimum
+    CIRCUIT_BREAK_THRESHOLD: 5,
+    CIRCUIT_BREAK_DURATION_MS: 5 * 60 * 1000,  // 5 minutes minimum
+
+    // Telemetry
+    CLIENT_VERSION: '2.1.0',
+    CLIENT_PLATFORM: 'web'
 } as const;
+
+// =============================================================================
+// SYNC STRATEGIES - Defines how each atom type is synced
+// =============================================================================
+
+interface SyncStrategy {
+    rpcName: string;
+    buildParams: (atom: SyncableAtom) => Record<string, unknown>;
+}
+
+const SYNC_STRATEGIES: Record<SyncAtomType, SyncStrategy> = {
+    chamada: {
+        rpcName: 'salvar_chamada',
+        buildParams: (atom: SyncableAtom) => {
+            const chamada = atom as ChamadaAtom;
+            return {
+                p_idempotency_key: chamada.idempotencyKey,
+                p_turma_id: chamada.turma_id,
+                p_data_chamada: chamada.data_chamada,
+                p_registros: chamada.registros,
+                p_client_timestamp: chamada.created_at
+            };
+        }
+    },
+    observacao: {
+        rpcName: 'salvar_observacao',  // RPC to be created
+        buildParams: (atom: SyncableAtom) => {
+            const obs = atom as ObservacaoAtom;
+            return {
+                p_idempotency_key: obs.idempotencyKey,
+                p_escola_id: obs.escola_id,
+                p_turma_id: obs.turma_id,
+                p_aluno_id: obs.aluno_id,
+                p_user_id: obs.user_id,
+                p_data_observacao: obs.data_observacao,
+                p_titulo: obs.titulo,
+                p_descricao: obs.descricao,
+                p_client_timestamp: obs.created_at
+            };
+        }
+    },
+    atestado: {
+        rpcName: 'salvar_atestado',  // RPC to be created in future
+        buildParams: (atom: SyncableAtom) => {
+            // Placeholder - will be implemented when atestado offline is added
+            return { p_idempotency_key: atom.idempotencyKey };
+        }
+    }
+};
 
 // =============================================================================
 // TYPES
@@ -69,6 +126,7 @@ export interface SyncProgress {
     failed: number;
     current?: string;
     isComplete: boolean;  // NEW: indicates if sync round is done
+    retryAfterSeconds?: number;  // Rate limit countdown in seconds
 }
 
 export interface SyncStateData {
@@ -89,6 +147,9 @@ class SyncManager {
     private circuitOpenUntil?: number;
     private lastSync?: number;
     private isProcessing = false;
+
+    // Track in-flight chamadas to prevent duplicate RPC calls
+    private inFlightIds: Set<string> = new Set();
 
     // Event listeners
     private onlineHandler: (() => void) | null = null;
@@ -175,12 +236,13 @@ class SyncManager {
         this.isProcessing = true;
         this.state = 'syncing';
         const results: SyncResult[] = [];
+        const syncStartTime = Date.now();
 
         try {
-            const pending = await getPendingChamadas();
+            const allPending = await getPendingChamadas();
 
             // Log recovery of 'syncing' chamadas (indicates previous crashed sync)
-            const recovering = pending.filter(c => c.status === 'syncing');
+            const recovering = allPending.filter(c => c.status === 'syncing');
             if (recovering.length > 0) {
                 console.warn(`[SyncManager] Recovering ${recovering.length} orphaned 'syncing' chamadas from crashed sync`);
                 for (const orphan of recovering) {
@@ -190,6 +252,9 @@ class SyncManager {
                     });
                 }
             }
+
+            // CRITICAL: Filter out any chamadas already in-flight (prevents race condition)
+            const pending = allPending.filter(c => !this.inFlightIds.has(c.id));
 
             if (pending.length === 0) {
                 console.log('[SyncManager] No pending chamadas');
@@ -244,10 +309,22 @@ class SyncManager {
             }
 
             this.lastSync = Date.now();
-            console.log(`[SyncManager] Completed: ${results.filter(r => r.success).length}/${results.length} successful`);
+            const successful = results.filter(r => r.success).length;
+            console.log(`[SyncManager] Completed: ${successful}/${results.length} successful`);
 
-        } catch (error) {
+            // Telemetry: Log sync completion
+            this.logTelemetry(
+                results.length > 0 && results.every(r => r.success) ? 'sync_success' :
+                    results.length > 0 ? 'sync_partial' : 'sync_error',
+                syncStartTime,
+                results.length,
+                successful,
+                results.length - successful
+            );
+
+        } catch (error: any) {
             console.error('[SyncManager] Fatal error:', error);
+            this.logTelemetry('sync_error', syncStartTime, 0, 0, 0, 'FATAL', error.message);
         } finally {
             // ALWAYS reset state and notify completion
             this.isProcessing = false;
@@ -257,6 +334,37 @@ class SyncManager {
         }
 
         return results;
+    }
+
+    /**
+     * Log sync telemetry to server (fire-and-forget)
+     */
+    private logTelemetry(
+        eventType: 'sync_start' | 'sync_success' | 'sync_error' | 'sync_partial',
+        startTime: number,
+        total: number,
+        success: number,
+        failed: number,
+        errorCode?: string,
+        errorMessage?: string
+    ): void {
+        const durationMs = Date.now() - startTime;
+
+        // Fire and forget - don't block sync
+        (supabase.rpc as any)('log_sync_metrics', {
+            p_event_type: eventType,
+            p_duration_ms: durationMs,
+            p_items_total: total,
+            p_items_success: success,
+            p_items_failed: failed,
+            p_error_code: errorCode || null,
+            p_error_message: errorMessage || null,
+            p_client_version: CONFIG.CLIENT_VERSION,
+            p_client_platform: CONFIG.CLIENT_PLATFORM,
+            p_client_timestamp: new Date().toISOString()
+        }).catch((err: any) => {
+            console.warn('[SyncManager] Telemetry failed:', err.message);
+        });
     }
 
     async retryFailed(): Promise<SyncResult[]> {
@@ -369,12 +477,25 @@ class SyncManager {
     private async syncOne(chamada: ChamadaAtom): Promise<SyncResult> {
         const startTime = Date.now();
 
+        // CRITICAL: Mark as in-flight to prevent duplicate processing
+        if (this.inFlightIds.has(chamada.id)) {
+            console.warn(`[SyncManager] Skipping duplicate sync for ${chamada.id}`);
+            return {
+                success: true,
+                status: 'already_synced',
+                message: 'Sync já em andamento',
+                chamadaId: chamada.id,
+                attempts: chamada.attempts,
+                durationMs: 0
+            };
+        }
+        this.inFlightIds.add(chamada.id);
+
         this.currentProgress.current = chamada.id;
 
-        // Update status to syncing
-        await updateChamadaAtom(chamada.id, { status: 'syncing' });
-
         try {
+            // Update status to syncing
+            await updateChamadaAtom(chamada.id, { status: 'syncing' });
             // Call RPC with TIMEOUT to prevent infinite waiting
             const result = await this.callRpcWithTimeout(chamada);
             const durationMs = Date.now() - startTime;
@@ -445,6 +566,9 @@ class SyncManager {
                     this.circuitOpenUntil = Date.now() + (retryAfter * 1000);
                     this.state = 'circuit_open';
 
+                    // Update progress with retry countdown for UI
+                    this.currentProgress.retryAfterSeconds = retryAfter;
+
                     return {
                         success: false,
                         status: 'retry',
@@ -461,36 +585,60 @@ class SyncManager {
         } catch (error: any) {
             const durationMs = Date.now() - startTime;
             return await this.handleError(chamada, error, durationMs);
+        } finally {
+            // CRITICAL: Always remove from in-flight set
+            this.inFlightIds.delete(chamada.id);
         }
     }
 
     /**
      * Call RPC with timeout - CRITICAL for preventing infinite spinner
+     * 
+     * Uses Promise.race to ensure timeout actually works regardless of
+     * whether the underlying fetch supports AbortController.
+     * 
+     * NEW: Supports multiple atom types via SYNC_STRATEGIES
      */
-    private async callRpcWithTimeout(chamada: ChamadaAtom): Promise<{ data: any; error: any }> {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.RPC_TIMEOUT_MS);
+    private async callRpcWithTimeout(atom: SyncableAtom): Promise<{ data: any; error: any }> {
+        // Get strategy for this atom type
+        const strategy = SYNC_STRATEGIES[atom.type];
+        if (!strategy) {
+            return {
+                data: null,
+                error: { message: `No sync strategy for type: ${atom.type}`, code: 'NO_STRATEGY' }
+            };
+        }
 
-        try {
-            const { data, error } = await (supabase.rpc as any)('salvar_chamada', {
-                p_idempotency_key: chamada.idempotencyKey,
-                p_turma_id: chamada.turma_id,
-                p_data_chamada: chamada.data_chamada,
-                p_registros: chamada.registros,
-                p_client_timestamp: chamada.created_at
-            });
+        // Create timeout promise that rejects after CONFIG.RPC_TIMEOUT_MS
+        const timeoutPromise = new Promise<{ data: null; error: { message: string; code: string } }>((_, reject) => {
+            setTimeout(() => {
+                reject({
+                    data: null,
+                    error: {
+                        message: `Timeout: servidor não respondeu em ${CONFIG.RPC_TIMEOUT_MS / 1000}s`,
+                        code: 'TIMEOUT'
+                    }
+                });
+            }, CONFIG.RPC_TIMEOUT_MS);
+        });
 
-            clearTimeout(timeoutId);
-            return { data, error };
-
-        } catch (err: any) {
-            clearTimeout(timeoutId);
-
-            if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-                return { data: null, error: { message: 'Timeout: servidor não respondeu em 15s', code: 'TIMEOUT' } };
+        // Create RPC promise using strategy
+        const rpcPromise = (async () => {
+            try {
+                const params = strategy.buildParams(atom);
+                const { data, error } = await (supabase.rpc as any)(strategy.rpcName, params);
+                return { data, error };
+            } catch (err: any) {
+                return { data: null, error: err };
             }
+        })();
 
-            return { data: null, error: err };
+        // Race between RPC and timeout
+        try {
+            return await Promise.race([rpcPromise, timeoutPromise]);
+        } catch (timeoutResult: any) {
+            // Timeout won the race - return timeout error
+            return timeoutResult;
         }
     }
 

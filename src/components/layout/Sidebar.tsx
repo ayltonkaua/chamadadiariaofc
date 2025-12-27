@@ -19,10 +19,7 @@ import {
   UserCheck,
   LineChart,
   Shield,
-  BookOpen, // <--- ADICIONADO (Causava o erro)
-  PartyPopper, // <--- ADICIONADO (Para Eventos)
-  ScanLine,    // <--- ADICIONADO (Para Scanner)
-  Ticket,      // <--- ADICIONADO (Para Ingresso)
+  BookOpen,
   HandCoins
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -38,27 +35,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [isEventStaff, setIsEventStaff] = useState(false);
-
-  // Verifica se o usuário é Staff de Eventos
-  useEffect(() => {
-    const checkStaff = async () => {
-      if (!user) return;
-
-      // Se for user normal (admin/prof)
-      let query = supabase.from('eventos_staff').select('id').eq('user_id', user.id);
-
-      // Se for aluno logado
-      if (user.type === 'aluno' && user.aluno_id) {
-        query = supabase.from('eventos_staff').select('id').eq('aluno_id', user.aluno_id);
-      }
-
-      const { data } = await query;
-      if (data && data.length > 0) setIsEventStaff(true);
-    };
-    checkStaff();
-  }, [user]);
-
   const handleSignOut = async () => {
     try {
       await logout();
@@ -86,14 +62,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
       ]
     },
     { title: 'Disciplinas', icon: BookOpen, href: '/disciplinas', description: 'Grade' },
-    {
-      title: 'Pesquisas', icon: FileText, href: '/pesquisas',
-      subItems: [
-        { title: 'Minhas Pesquisas', href: '/pesquisas', icon: FileText },
-        { title: 'Nova Pesquisa', href: '/pesquisas/nova', icon: Plus },
-        { title: 'Responder Pesquisa', href: '/responder-pesquisa', icon: Search },
-      ]
-    },
     { title: 'Relatórios', icon: LineChart, href: '/gestor/dashboard', roles: ['admin', 'diretor'] },
     { title: 'Programas Sociais', icon: HandCoins, href: '/gestor/programas', roles: ['admin', 'diretor'] },
     { title: 'Atestados', icon: ClipboardList, href: '/atestados' },
@@ -101,35 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     { title: 'Perfil da Escola', icon: Settings, href: '/perfil-escola', roles: ['admin'] },
     { title: 'Acessos', icon: Shield, href: '/gestao-acesso', roles: ['admin'] },
   ];
-
-  // --- INJEÇÃO DE ITENS DE EVENTO ---
-
-  // 1. Scanner (Para Staff ou Admin)
-  if (isEventStaff || user?.role === 'admin' || user?.role === 'diretor') {
-    menuItems.push({
-      title: 'Controlar Acesso',
-      href: '/evento/scanner',
-      icon: ScanLine
-    });
-  }
-
-  // 2. Gestão de Eventos (Para Admin/Diretor)
-  if (user?.role === 'admin' || user?.role === 'diretor') {
-    menuItems.push({
-      title: 'Gestão de Eventos',
-      href: '/gestor/eventos',
-      icon: PartyPopper
-    });
-  }
-
-  // 3. Ingresso (Para Aluno)
-  if (user?.type === 'aluno') {
-    menuItems.push({
-      title: 'Meus Ingressos',
-      href: '/aluno/ingresso',
-      icon: Ticket
-    });
-  }
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return location.pathname === href;

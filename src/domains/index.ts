@@ -95,15 +95,3 @@ export type { StudentData, MeusAtestados, Beneficio, PortalAlunoData } from './p
 // Programas Sociais (Social Programs)
 export { programasService } from './programas';
 export type { ProgramaSocialRow, ProgramaRegistro, MappingColumns } from './programas';
-
-// Eventos (Events)
-export { eventosService } from './eventos';
-export type { Evento, EventoStaff, EventoConvidado } from './eventos';
-
-// Pesquisas (Surveys)
-export { pesquisasService } from './pesquisas';
-export type { Pesquisa, PerguntaPesquisa, RespostaPesquisa } from './pesquisas';
-
-// Ingresso (Event Tickets)
-export { ingressoService } from './ingresso';
-export type { EventoPublico, CheckinRegistro, AlunoIngresso } from './ingresso';

@@ -67,8 +67,8 @@ export const DashboardMenu: React.FC = () => {
             Configurações da Escola
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem 
-          className="cursor-pointer" 
+        <DropdownMenuItem
+          className="cursor-pointer"
           onClick={handleTrocarSenha}
           disabled={loading}
         >
@@ -85,13 +85,6 @@ export const DashboardMenu: React.FC = () => {
           <Link to="/alertas" className="flex items-center">
             <AlertTriangle className="h-4 w-4 mr-2" />
             Alertas
-          </Link>
-        </DropdownMenuItem>
-        {/* NOVO ITEM DE MENU PARA PESQUISAS */}
-        <DropdownMenuItem className="cursor-pointer" asChild>
-          <Link to="/pesquisas" className="flex items-center">
-            <ListChecks className="h-4 w-4 mr-2" />
-            Pesquisas
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer" asChild>

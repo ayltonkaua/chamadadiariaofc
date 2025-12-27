@@ -216,10 +216,9 @@ export function useHistoricoAluno(alunoId: string | undefined) {
     return useQuery({
         queryKey: queryKeys.historicoAluno(alunoId || ''),
         queryFn: async () => {
-            // For now, return empty array - this could be enhanced later
-            // Historico aluno requires specific RPC or client-side filtering
-            console.log('[useHistoricoAluno] Not implemented in offline-first mode');
-            return [];
+            // Use existing gestorService which wraps the RPC
+            const presencas = await gestorService.getUltimasPresencasAluno(alunoId!);
+            return presencas;
         },
         enabled: !!alunoId,
         staleTime: 5 * 60 * 1000,

@@ -18,13 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Clock, ArrowLeft, Search, FileText, AlertCircle } from "lucide-react";
+import { Clock, ArrowLeft, Search, AlertCircle, CheckCircle, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Tables } from "@/integrations/supabase/types";
 import { useEscolasCadastradas } from '@/hooks/useEscolasCadastradas';
-import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
-import { Badge } from '@/components/ui/badge';
-import { Calendar, CheckCircle, XCircle } from 'lucide-react';
 
 interface Aluno {
   id: string;
@@ -32,21 +28,19 @@ interface Aluno {
   matricula: string;
 }
 
-interface RegistroFalta {
-  id: string;
-  aluno_id: string;
-  data_falta: string;
-  justificativa: string;
-  tipo: "falta" | "atestado";
-  criado_em: string;
-}
-
 interface RegistroAtraso {
   id: string;
   aluno_id: string;
   data_atraso: string;
   horario_registro: string;
-  criado_em: string;
+}
+
+interface PresencaFalta {
+  id: string;
+  aluno_id: string;
+  data_chamada: string;
+  presente: boolean;
+  falta_justificada: boolean;
 }
 
 export default function ConsultarFaltasPage() {
@@ -55,9 +49,8 @@ export default function ConsultarFaltasPage() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
-  const [registros, setRegistros] = useState<RegistroFalta[]>([]);
   const [registrosAtraso, setRegistrosAtraso] = useState<RegistroAtraso[]>([]);
-  const [faltasJustificadas, setFaltasJustificadas] = useState<Tables<'justificativa_faltas'>[]>([]);
+  const [presencasFaltas, setPresencasFaltas] = useState<PresencaFalta[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const { escolas, loading: escolasLoading } = useEscolasCadastradas();
   const [escolaSelecionada, setEscolaSelecionada] = useState<string>("");
@@ -75,15 +68,9 @@ export default function ConsultarFaltasPage() {
     }
     if (!escolaSelecionada) return;
     fetchAlunos();
-    fetchRegistros();
     fetchRegistrosAtraso();
+    fetchPresencasFaltas();
   }, [user, navigate, escolaSelecionada]);
-
-  useEffect(() => {
-    if (user && alunos.length > 0) {
-      fetchFaltasJustificadas();
-    }
-  }, [user, alunos]);
 
   const fetchAlunos = async () => {
     try {
@@ -104,27 +91,9 @@ export default function ConsultarFaltasPage() {
     }
   };
 
-  const fetchRegistros = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("registros_faltas")
-        .select(`*, alunos (nome, matricula, escola_id)`)
-        .order("data_falta", { ascending: false });
-      if (error) throw error;
-      setRegistros((data || []).filter((r: any) => r.alunos?.escola_id === escolaSelecionada));
-    } catch (error) {
-      console.error("Erro ao buscar registros:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os registros de falta.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const fetchRegistrosAtraso = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("registros_atrasos")
         .select(`*, alunos (nome, matricula, escola_id)`)
         .order("data_atraso", { ascending: false });
@@ -140,24 +109,19 @@ export default function ConsultarFaltasPage() {
     }
   };
 
-  const fetchFaltasJustificadas = async () => {
+  const fetchPresencasFaltas = async () => {
     try {
-      let alunoId = alunos.length > 0 ? alunos[0].id : null;
-      if (!alunoId) return;
-      const { data, error } = await supabase
-        .from("justificativa_faltas")
-        .select("*")
-        .eq("aluno_id", alunoId)
-        .order("data", { ascending: false });
+      const { data, error } = await (supabase as any)
+        .from("presencas")
+        .select("id, aluno_id, data_chamada, presente, falta_justificada")
+        .eq('escola_id', escolaSelecionada)
+        .eq('presente', false)
+        .order("data_chamada", { ascending: false })
+        .limit(100);
       if (error) throw error;
-      setFaltasJustificadas(data || []);
+      setPresencasFaltas(data || []);
     } catch (error) {
-      console.error("Erro ao buscar faltas justificadas:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as faltas justificadas.",
-        variant: "destructive",
-      });
+      console.error("Erro ao buscar faltas:", error);
     }
   };
 
@@ -165,47 +129,36 @@ export default function ConsultarFaltasPage() {
     return text
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-      .replace(/\s+/g, ' ') // Substitui múltiplos espaços por um único espaço
-      .trim(); // Remove espaços no início e fim
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   };
 
-  const registrosFormatados = useMemo(() => registros.map((registro) => ({
-    ...registro,
-    dataFormatada: format(new Date(registro.data_falta + 'T03:00:00'), "dd/MM/yyyy", { locale: ptBR })
-  })), [registros]);
-
-  const registrosFiltrados = useMemo(() => {
-    if (!searchTerm) return registrosFormatados;
-    const searchNormalized = normalizeText(searchTerm);
-    return registrosFormatados.filter(
-      (registro) =>
-        (registro.nome && normalizeText(registro.nome).includes(searchNormalized)) ||
-        (registro.matricula && normalizeText(registro.matricula).includes(searchNormalized))
-    );
-  }, [registrosFormatados, searchTerm]);
-
-  const registrosAtrasoFormatados = useMemo(() => registrosAtraso.map((registro) => ({
-    ...registro
-  })), [registrosAtraso]);
-
   const registrosAtrasoFiltrados = useMemo(() => {
-    if (!searchTerm) return registrosAtrasoFormatados;
+    if (!searchTerm) return registrosAtraso;
     const searchNormalized = normalizeText(searchTerm);
-    return registrosAtrasoFormatados.filter(
-      (registro) =>
-        (registro.nome && normalizeText(registro.nome).includes(searchNormalized)) ||
-        (registro.matricula && normalizeText(registro.matricula).includes(searchNormalized))
+    return registrosAtraso.filter(
+      (registro: any) =>
+        (registro.alunos?.nome && normalizeText(registro.alunos.nome).includes(searchNormalized)) ||
+        (registro.alunos?.matricula && normalizeText(registro.alunos.matricula).includes(searchNormalized))
     );
-  }, [registrosAtrasoFormatados, searchTerm]);
+  }, [registrosAtraso, searchTerm]);
 
-  const totalAtrasos = useMemo(() => {
-    return registrosAtraso.length;
-  }, [registrosAtraso]);
+  const presencasFaltasFiltradas = useMemo(() => {
+    if (!searchTerm) return presencasFaltas;
+    const searchNormalized = normalizeText(searchTerm);
+    return presencasFaltas.filter((p) => {
+      const aluno = alunos.find(a => a.id === p.aluno_id);
+      return aluno && (
+        normalizeText(aluno.nome).includes(searchNormalized) ||
+        normalizeText(aluno.matricula).includes(searchNormalized)
+      );
+    });
+  }, [presencasFaltas, searchTerm, alunos]);
 
-  const totalAtestados = useMemo(() => {
-    return registros.filter((registro) => registro.tipo === "atestado").length;
-  }, [registros]);
+  const totalAtrasos = registrosAtraso.length;
+  const totalFaltasNaoJustificadas = presencasFaltas.filter(p => !p.falta_justificada).length;
+  const totalFaltasJustificadas = presencasFaltas.filter(p => p.falta_justificada).length;
 
   const getAlunoInfo = (aluno_id: string) => {
     const aluno = alunos.find((a) => a.id === aluno_id);
@@ -218,7 +171,7 @@ export default function ConsultarFaltasPage() {
   return (
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-purple-700">Consultar Faltas</h1>
+        <h1 className="text-2xl font-bold text-purple-700">Consultar Faltas e Atrasos</h1>
         <div className="flex items-center gap-2">
           <Label htmlFor="escola-select">Escola:</Label>
           <select
@@ -254,42 +207,40 @@ export default function ConsultarFaltasPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Atestados</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Faltas Não Justificadas</CardTitle>
+              <XCircle className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalAtestados}</div>
+              <div className="text-2xl font-bold text-red-600">{totalFaltasNaoJustificadas}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Faltas</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Faltas Justificadas</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {registros.filter((registro) => registro.tipo === "falta").length}
-              </div>
+              <div className="text-2xl font-bold text-green-600">{totalFaltasJustificadas}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Lista de Registros de Faltas e Atestados */}
+        {/* Busca */}
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+          <Input
+            type="text"
+            placeholder="Filtrar por nome ou matrícula do aluno..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+
+        {/* Lista de Faltas (baseada em presencas) */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-4">
-              <CardTitle>Registros de Faltas e Atestados</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-                <Input
-                  type="text"
-                  placeholder="Filtrar por nome ou matrícula do aluno..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-            </div>
+            <CardTitle>Registros de Faltas (últimas 100)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -299,36 +250,31 @@ export default function ConsultarFaltasPage() {
                     <TableHead>Aluno</TableHead>
                     {!isMobile && <TableHead>Matrícula</TableHead>}
                     <TableHead>Data</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Justificativa</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {registrosFiltrados.map((registro) => (
-                    <TableRow key={registro.id}>
-                      <TableCell className="font-medium">{alunos.length > 0 ? getAlunoInfo(registro.aluno_id).nome : '-'}</TableCell>
-                      {!isMobile && <TableCell>{alunos.length > 0 ? getAlunoInfo(registro.aluno_id).matricula : '-'}</TableCell>}
-                      <TableCell>{registro.dataFormatada}</TableCell>
+                  {presencasFaltasFiltradas.map((falta) => (
+                    <TableRow key={falta.id}>
+                      <TableCell className="font-medium">{getAlunoInfo(falta.aluno_id).nome}</TableCell>
+                      {!isMobile && <TableCell>{getAlunoInfo(falta.aluno_id).matricula}</TableCell>}
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            registro.tipo === "atestado"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {registro.tipo === "atestado" ? "Atestado" : "Falta"}
+                        {format(new Date(falta.data_chamada + 'T03:00:00'), "dd/MM/yyyy", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${falta.falta_justificada ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                          }`}>
+                          {falta.falta_justificada ? "Justificada" : "Não Justificada"}
                         </span>
                       </TableCell>
-                      <TableCell>{registro.justificativa}</TableCell>
                     </TableRow>
                   ))}
-                  {registrosFiltrados.length === 0 && (
+                  {presencasFaltasFiltradas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isMobile ? 4 : 5} className="text-center py-4 text-gray-500">
+                      <TableCell colSpan={isMobile ? 3 : 4} className="text-center py-4 text-gray-500">
                         {searchTerm
-                          ? `Nenhum registro encontrado com "${searchTerm}"`
-                          : "Nenhum registro de falta ou atestado encontrado"}
+                          ? `Nenhuma falta encontrada com "${searchTerm}"`
+                          : "Nenhum registro de falta encontrado"}
                       </TableCell>
                     </TableRow>
                   )}
@@ -355,14 +301,12 @@ export default function ConsultarFaltasPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {registrosAtrasoFiltrados.map((registro) => (
+                  {registrosAtrasoFiltrados.map((registro: any) => (
                     <TableRow key={registro.id}>
-                      <TableCell className="font-medium">{alunos.length > 0 ? getAlunoInfo(registro.aluno_id).nome : '-'}</TableCell>
-                      {!isMobile && <TableCell>{alunos.length > 0 ? getAlunoInfo(registro.aluno_id).matricula : '-'}</TableCell>}
+                      <TableCell className="font-medium">{registro.alunos?.nome || '-'}</TableCell>
+                      {!isMobile && <TableCell>{registro.alunos?.matricula || '-'}</TableCell>}
                       <TableCell>
-                        {format(new Date(registro.data_atraso), "dd/MM/yyyy", {
-                          locale: ptBR,
-                        })}
+                        {format(new Date(registro.data_atraso), "dd/MM/yyyy", { locale: ptBR })}
                       </TableCell>
                       <TableCell>{registro.horario_registro}</TableCell>
                     </TableRow>
@@ -381,45 +325,7 @@ export default function ConsultarFaltasPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Lista de Faltas Justificadas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Faltas Justificadas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Aluno</TableHead>
-                    {!isMobile && <TableHead>Matrícula</TableHead>}
-                    <TableHead>Data</TableHead>
-                    <TableHead>Motivo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {faltasJustificadas.map((falta) => (
-                    <TableRow key={falta.id}>
-                      <TableCell className="font-medium">{alunos.length > 0 ? getAlunoInfo(falta.aluno_id).nome : '-'}</TableCell>
-                      {!isMobile && <TableCell>{alunos.length > 0 ? getAlunoInfo(falta.aluno_id).matricula : '-'}</TableCell>}
-                      <TableCell>{format(new Date(falta.data + 'T03:00:00'), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                      <TableCell>{falta.motivo}</TableCell>
-                    </TableRow>
-                  ))}
-                  {faltasJustificadas.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={isMobile ? 3 : 4} className="text-center py-4 text-gray-500">
-                        Nenhuma falta justificada encontrada
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
-} 
+}

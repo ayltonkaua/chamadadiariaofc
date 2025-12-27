@@ -77,6 +77,24 @@ const GlobalSyncStatus: React.FC = memo(() => {
     const [pendingCount, setPendingCount] = useState(0);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [visible, setVisible] = useState(false);
+    const [countdown, setCountdown] = useState<number | null>(null);
+
+    // Countdown timer for rate limit
+    useEffect(() => {
+        if (countdown === null || countdown <= 0) return;
+
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev === null || prev <= 1) {
+                    clearInterval(timer);
+                    return null;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [countdown]);
 
     // Determine global status from various inputs
     const updateStatus = useCallback(async () => {
@@ -119,6 +137,10 @@ const GlobalSyncStatus: React.FC = memo(() => {
                 if (state.state === 'circuit_open') {
                     setStatus('paused');
                     setVisible(true);
+                    // Set countdown from progress if available
+                    if (progress.retryAfterSeconds && progress.retryAfterSeconds > 0) {
+                        setCountdown(progress.retryAfterSeconds);
+                    }
                 } else if (progress.failed > 0) {
                     setStatus('error');
                     setVisible(true);
@@ -192,7 +214,10 @@ const GlobalSyncStatus: React.FC = memo(() => {
             />
             <span className="text-sm font-medium">
                 {config.label}
-                {pendingCount > 0 && status !== 'online' && (
+                {status === 'paused' && countdown !== null && countdown > 0 && (
+                    <span className="ml-1 opacity-90">({countdown}s)</span>
+                )}
+                {pendingCount > 0 && status !== 'online' && status !== 'paused' && (
                     <span className="ml-1 opacity-90">({pendingCount})</span>
                 )}
             </span>
