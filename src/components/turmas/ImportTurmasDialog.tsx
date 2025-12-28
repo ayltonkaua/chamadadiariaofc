@@ -216,14 +216,14 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
               placeholder="Ex: 101"
             />
           </div>
-          <div>
+          <div className="md:col-span-3">
             <Label>Turno *</Label>
-            <div className="flex gap-2 mt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
               {[
                 { value: 'Manhã', icon: Sun, label: 'Manhã' },
                 { value: 'Tarde', icon: Sunset, label: 'Tarde' },
                 { value: 'Noite', icon: Moon, label: 'Noite' },
-                { value: 'Integral', icon: Clock, label: 'Integral' },
+                { value: 'Integral', icon: Clock, label: 'Int.' },
               ].map(({ value, icon: Icon, label }) => (
                 <Button
                   key={value}
@@ -231,10 +231,10 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
                   variant={turno === value ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setTurno(value as Turno)}
-                  className="flex-1"
+                  className="w-full"
                 >
                   <Icon className="h-4 w-4 mr-1" />
-                  {label}
+                  <span className="truncate">{label}</span>
                 </Button>
               ))}
             </div>
@@ -381,49 +381,63 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
 
   return (
     <Dialog open={externalOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="w-[95vw] max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6 border-b shrink-0">
+          <DialogTitle className="text-lg sm:text-xl">
             {etapa === 'upload' && '📁 Importar Turma via Excel'}
             {etapa === 'mapeamento' && '⚙️ Configurar Mapeamento'}
             {etapa === 'preview' && '✅ Confirmar Importação'}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             {etapa === 'upload' && 'Selecione um arquivo Excel com a lista de alunos.'}
             {etapa === 'mapeamento' && 'Configure os dados da turma e as colunas do Excel.'}
             {etapa === 'preview' && 'Revise os dados antes de importar.'}
           </DialogDescription>
         </DialogHeader>
 
-        {etapa === 'upload' && renderUpload()}
-        {etapa === 'mapeamento' && renderMapeamento()}
-        {etapa === 'preview' && renderPreview()}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6">
+          {etapa === 'upload' && renderUpload()}
+          {etapa === 'mapeamento' && renderMapeamento()}
+          {etapa === 'preview' && renderPreview()}
+        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 mt-4">
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
-            Cancelar
-          </Button>
+        <DialogFooter className="flex flex-col sm:flex-row gap-2 px-4 py-4 sm:px-6 border-t shrink-0">
+          {etapa === 'upload' && (
+            <Button variant="outline" onClick={() => handleOpenChange(false)} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+          )}
 
           {etapa === 'mapeamento' && (
-            <div className="flex gap-2 w-full sm:w-auto justify-end">
-              <Button variant="secondary" onClick={() => setEtapa('upload')}>
-                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading} className="sm:mr-auto">
+                Cancelar
               </Button>
-              <Button onClick={gerarPreview} disabled={!nomeTurma}>
-                Pré-visualizar <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setEtapa('upload')} className="flex-1 sm:flex-none">
+                  <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+                </Button>
+                <Button onClick={gerarPreview} disabled={!nomeTurma} className="flex-1 sm:flex-none">
+                  Continuar <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
 
           {etapa === 'preview' && (
-            <div className="flex gap-2 w-full sm:w-auto justify-end">
-              <Button variant="secondary" onClick={() => setEtapa('mapeamento')} disabled={loading}>
-                <ArrowLeft className="mr-2 h-4 w-4" /> Ajustar
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading} className="sm:mr-auto">
+                Cancelar
               </Button>
-              <Button onClick={handleImportar} disabled={loading} className="bg-green-600 hover:bg-green-700">
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}
-                {loading ? 'Importando...' : 'Confirmar Importação'}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setEtapa('mapeamento')} disabled={loading} className="flex-1 sm:flex-none">
+                  <ArrowLeft className="mr-1 h-4 w-4" /> Ajustar
+                </Button>
+                <Button onClick={handleImportar} disabled={loading} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700">
+                  {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileUp className="mr-1 h-4 w-4" />}
+                  {loading ? 'Importando...' : 'Confirmar'}
+                </Button>
+              </div>
             </div>
           )}
         </DialogFooter>
