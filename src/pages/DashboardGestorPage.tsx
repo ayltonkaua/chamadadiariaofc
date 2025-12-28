@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useAuth } from '@/contexts/AuthContext';
+import { useDashboardGestor } from '@/hooks';
 import {
   gestorService,
   type KpiData,
@@ -102,145 +102,41 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 
 // --- PÁGINA PRINCIPAL ---
 export default function DashboardGestorPage() {
-  const { user } = useAuth();
+  // --- USANDO CUSTOM HOOK ---
+  const {
+    kpis,
+    kpisAdmin,
+    ultimasObservacoes,
+    filteredTurmaData,
+    filteredAlunosRisco,
+    filteredAlunosConsecutivos,
+    chartAusenciasSemana,
+    paginatedRisco,
+    paginatedConsecutivos,
+    riscoCurrentPage,
+    setRiscoCurrentPage,
+    consecutivasCurrentPage,
+    setConsecutivasCurrentPage,
+    turmasDisponiveis,
+    filtroTurno,
+    setFiltroTurno,
+    turmasSelecionadas,
+    setTurmasSelecionadas,
+    filtroAno,
+    setFiltroAno,
+    activeTurmaIds,
+    loading,
+    statusMsg,
+    refresh
+  } = useDashboardGestor();
 
-  // --- ESTADOS ---
-  const [kpis, setKpis] = useState<KpiData | null>(null);
-  const [kpisAdmin, setKpisAdmin] = useState<KpiAdminData | null>(null);
-  const [rawTurmaData, setRawTurmaData] = useState<TurmaComparisonData[]>([]);
-  const [rawAlunosRisco, setRawAlunosRisco] = useState<AlunoRiscoData[]>([]);
-  const [rawAlunosConsecutivos, setRawAlunosConsecutivos] = useState<AlunoFaltasConsecutivasData[]>([]);
-  const [rawPresencasRecentes, setRawPresencasRecentes] = useState<PresencaRecente[]>([]);
-  const [ultimasObservacoes, setUltimasObservacoes] = useState<UltimaObservacaoData[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [statusMsg, setStatusMsg] = useState("Inicializando...");
-
-  const [turmasDisponiveis, setTurmasDisponiveis] = useState<TurmaMetadata[]>([]);
-  const [filtroTurno, setFiltroTurno] = useState<string>("todos");
-  const [turmasSelecionadas, setTurmasSelecionadas] = useState<string[]>([]);
-  const [filtroAno, setFiltroAno] = useState<string>(new Date().getFullYear().toString());
-
-  const [riscoCurrentPage, setRiscoCurrentPage] = useState(1);
-  const [consecutivasCurrentPage, setConsecutivasCurrentPage] = useState(1);
-
-  // --- FUNÇÃO DE CARREGAMENTO USANDO gestorService ---
-  const fetchAllData = async () => {
-    try {
-      setLoading(true);
-      setStatusMsg("Identificando escola...");
-
-      if (!user?.escola_id) {
-        console.log("⏳ ID da escola ainda não encontrado. Aguardando...");
-        return;
-      }
-
-      const activeEscolaId = user.escola_id;
-      console.log("✅ Escola confirmada:", activeEscolaId, "- Iniciando download de dados...");
-      setStatusMsg("Baixando dados pedagógicos...");
-
-      // Usa gestorService para carregar todos os dados
-      const data = await gestorService.getDashboardData(activeEscolaId);
-
-      setKpis(data.kpis);
-      setKpisAdmin(data.kpisAdmin);
-      setRawTurmaData(data.turmaComparison);
-      setRawAlunosRisco(data.alunosRisco);
-      setRawAlunosConsecutivos(data.alunosConsecutivos);
-      setUltimasObservacoes(data.ultimasObservacoes);
-      setTurmasDisponiveis(data.turmasDisponiveis);
-      setRawPresencasRecentes(data.presencasRecentes);
-
-      setStatusMsg("Dados carregados.");
-      setLoading(false);
-
-    } catch (err) {
-      console.error("❌ Erro fatal no dashboard:", err);
-      setStatusMsg("Erro ao carregar dados.");
-      setLoading(false);
-    }
+  // Toggle turma selection helper
+  const toggleTurma = (turmaId: string) => {
+    const newSelection = turmasSelecionadas.includes(turmaId)
+      ? turmasSelecionadas.filter(id => id !== turmaId)
+      : [...turmasSelecionadas, turmaId];
+    setTurmasSelecionadas(newSelection);
   };
-
-  useEffect(() => {
-    if (user) {
-      fetchAllData();
-    }
-  }, [user, filtroAno]);
-
-  // --- LÓGICA DE FILTRAGEM (MEMOIZED) ---
-  const activeTurmas = useMemo(() => {
-    let filtered = turmasDisponiveis;
-    if (filtroTurno !== "todos") {
-      filtered = filtered.filter(t => t.turno === filtroTurno);
-    }
-    if (turmasSelecionadas.length > 0) {
-      filtered = filtered.filter(t => turmasSelecionadas.includes(t.id));
-    }
-    return filtered;
-  }, [turmasDisponiveis, filtroTurno, turmasSelecionadas]);
-
-  const activeTurmaIds = useMemo(() => activeTurmas.map(t => t.id), [activeTurmas]);
-  const activeTurmaNomes = useMemo(() => activeTurmas.map(t => t.nome), [activeTurmas]);
-
-  const filteredTurmaData = useMemo(() => {
-    if (!rawTurmaData || rawTurmaData.length === 0) return [];
-    if (activeTurmaNomes.length === 0) return rawTurmaData;
-    return rawTurmaData.filter(item => activeTurmaNomes.includes(item.turma_nome));
-  }, [rawTurmaData, activeTurmaNomes]);
-
-  const chartAusenciasSemana = useMemo(() => {
-    const presencasFiltradas = rawPresencasRecentes.filter(p => {
-      if (!activeTurmaIds || activeTurmaIds.length === 0) return true;
-      return activeTurmaIds.includes(p.turma_id);
-    });
-
-    const diasMap = new Map<string, { total: number; faltas: number }>();
-    const ordemDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-    ordemDias.forEach(d => diasMap.set(d, { total: 0, faltas: 0 }));
-
-    presencasFiltradas.forEach(p => {
-      try {
-        const data = typeof p.data_chamada === 'string' ? parseISO(p.data_chamada) : new Date(p.data_chamada);
-        const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', '');
-        const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1);
-        const chave = diaCapitalized.substring(0, 3);
-        if (!diasMap.has(chave)) diasMap.set(chave, { total: 0, faltas: 0 });
-        const entry = diasMap.get(chave)!;
-        entry.total++;
-        if (!p.presente) entry.faltas++;
-      } catch (err) { }
-    });
-
-    return ordemDias.map(chave => {
-      const dados = diasMap.get(chave) ?? { total: 0, faltas: 0 };
-      return {
-        dia_semana_nome: chave,
-        percentual_faltas: dados.total > 0 ? parseFloat(((dados.faltas / dados.total) * 100).toFixed(1)) : 0
-      };
-    });
-  }, [rawPresencasRecentes, activeTurmaIds]);
-
-  const filteredAlunosRisco = useMemo(() => {
-    if (!rawAlunosRisco) return [];
-    if (activeTurmaNomes.length === 0) return rawAlunosRisco;
-    return rawAlunosRisco.filter(item => activeTurmaNomes.includes(item.turma_nome));
-  }, [rawAlunosRisco, activeTurmaNomes]);
-
-  const filteredAlunosConsecutivos = useMemo(() => {
-    if (!rawAlunosConsecutivos) return [];
-    if (activeTurmaNomes.length === 0) return rawAlunosConsecutivos;
-    return rawAlunosConsecutivos.filter(item => activeTurmaNomes.includes(item.turma_nome));
-  }, [rawAlunosConsecutivos, activeTurmaNomes]);
-
-  const paginatedRisco = useMemo(() => {
-    const start = (riscoCurrentPage - 1) * ITEMS_PER_PAGE;
-    return filteredAlunosRisco.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredAlunosRisco, riscoCurrentPage]);
-
-  const paginatedConsecutivos = useMemo(() => {
-    const start = (consecutivasCurrentPage - 1) * ITEMS_PER_PAGE;
-    return filteredAlunosConsecutivos.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredAlunosConsecutivos, consecutivasCurrentPage]);
 
   const formatPercent = (num?: number | null) => {
     if (typeof num !== 'number') return '0%';
@@ -276,7 +172,7 @@ export default function DashboardGestorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchAllData} title="Atualizar dados">
+          <Button variant="outline" size="sm" onClick={refresh} title="Atualizar dados">
             <RefreshCw className="h-4 w-4" />
           </Button>
 
@@ -320,9 +216,7 @@ export default function DashboardGestorPage() {
                       <CommandItem
                         key={turma.id}
                         value={turma.nome}
-                        onSelect={() => {
-                          setTurmasSelecionadas(prev => prev.includes(turma.id) ? prev.filter(id => id !== turma.id) : [...prev, turma.id])
-                        }}
+                        onSelect={() => toggleTurma(turma.id)}
                       >
                         <Check className={cn("mr-2 h-4 w-4", turmasSelecionadas.includes(turma.id) ? "opacity-100" : "opacity-0")} />
                         {turma.nome}

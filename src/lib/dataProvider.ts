@@ -53,7 +53,7 @@ export interface PresencaData {
     escola_id: string;
     data_chamada: string;
     presente: boolean;
-    justificada?: boolean;
+    falta_justificada?: boolean;
 }
 
 export interface DataProviderResult<T> {
@@ -589,14 +589,14 @@ export async function getPresencasByTurmaData(
     try {
         const { data, error } = await supabase
             .from('presencas')
-            .select('id, aluno_id, turma_id, escola_id, data_chamada, presente, justificada')
+            .select('id, aluno_id, turma_id, escola_id, data_chamada, presente, falta_justificada')
             .eq('turma_id', turmaId)
             .eq('data_chamada', dataChamada);
 
         if (error) throw error;
 
         return {
-            data: (data || []) as PresencaData[],
+            data: (data || []) as unknown as PresencaData[],
             source: 'network',
             stale: false
         };
@@ -622,13 +622,13 @@ export async function getPresencasByTurma(turmaId: string): Promise<DataProvider
     try {
         const { data, error } = await supabase
             .from('presencas')
-            .select('id, aluno_id, turma_id, escola_id, data_chamada, presente, justificada')
+            .select('id, aluno_id, turma_id, escola_id, data_chamada, presente, falta_justificada')
             .eq('turma_id', turmaId);
 
         if (error) throw error;
 
         return {
-            data: (data || []) as PresencaData[],
+            data: (data || []) as unknown as PresencaData[],
             source: 'network',
             stale: false
         };

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
-import { portalAlunoService, type StudentData, type MeusAtestados as MeusAtestadosType, type Beneficio } from '@/domains';
+import { usePortalAluno } from '@/hooks';
+import { type Beneficio } from '@/domains';
 
 // Componentes UI
 import { Button } from '@/components/ui/button';
@@ -12,10 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import JustificarFaltaForm from '@/components/justificativa/JustificarFaltaForm';
-import { toast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 
-// Componente de Boletim (Importação Nova)
+// Componentes Extraídos
+import { AttendanceRing } from '@/components/features/portal-aluno';
 import { BoletimAluno } from "@/components/notas/BoletimAluno";
 import { DadosCadastraisTab } from "@/components/aluno/DadosCadastraisTab";
 
@@ -33,156 +34,40 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// --- Componente Visual: Gráfico de Frequência ---
-const AttendanceRing = ({ percentage }: { percentage: number }) => {
-  const radius = 30;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  const color = percentage >= 75 ? "text-green-500" : percentage >= 60 ? "text-yellow-500" : "text-red-500";
-
-  return (
-    <div className="relative flex items-center justify-center w-20 h-20">
-      <svg className="transform -rotate-90 w-full h-full">
-        <circle
-          className="text-gray-200"
-          strokeWidth="6"
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx="40"
-          cy="40"
-        />
-        <circle
-          className={`${color} transition - all duration - 1000 ease - out`}
-          strokeWidth="6"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          stroke="currentColor"
-          fill="transparent"
-          r={radius}
-          cx="40"
-          cy="40"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className={`text - sm font - bold ${color} `}>{Math.round(percentage)}%</span>
-        <span className="text-[8px] text-gray-400 uppercase">Freq.</span>
-      </div>
-    </div>
-  );
-};
-
-// --- Interfaces moved to domain types ---
-
 // --- Página Principal ---
 const PortalAlunoPage: React.FC = () => {
   const { user, logout } = useAuth();
   const { config: escolaConfig } = useEscolaConfig();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
-  // Estados para controle da UI
-  const [isJustifyDialogOpen, setIsJustifyDialogOpen] = useState(false);
-  const [showCarteirinha, setShowCarteirinha] = useState(false);
-  const [isBoletimOpen, setIsBoletimOpen] = useState(false); // Estado para o Boletim
-  const [beneficios, setBeneficios] = useState<any[]>([]);
-
-  // Estado para visualização segura de atestados
-  const [isMeusAtestadosOpen, setIsMeusAtestadosOpen] = useState(false);
-  const [meusAtestados, setMeusAtestados] = useState<MeusAtestadosType[]>([]);
-  const [loadingAtestados, setLoadingAtestados] = useState(false);
-
-  // Estado para Meus Dados
-  const [isMeusDadosOpen, setIsMeusDadosOpen] = useState(false);
-  const [showUpdateAlert, setShowUpdateAlert] = useState(false);
-
-  // Estado para dados reais do aluno - using domain type
-  const [studentData, setStudentData] = useState<StudentData>({
-    turma: "Carregando...",
-    matricula: "---",
-    frequencia: 100,
-    status: "Excelente",
-    totalAulas: 0,
-    totalFaltas: 0,
-    dadosIncompletos: false
-  });
-  const [loadingData, setLoadingData] = useState(true);
-
-  // --- EFEITO: Listener de URL para Navegação Mobile ---
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'atestados') {
-      setIsMeusAtestadosOpen(true);
-    } else if (tab === 'justificar') {
-      setIsJustifyDialogOpen(true);
-    } else if (tab === 'boletim') { // Adicionado listener para boletim
-      setIsBoletimOpen(true);
-    }
-  }, [searchParams]);
-
-  // Busca dados reais do aluno ao carregar - USING SERVICE
-  const fetchStudentData = async () => {
-    if (!user?.aluno_id) return;
-
-    try {
-      setLoadingData(true);
-      const data = await portalAlunoService.getStudentData(user.aluno_id);
-      setStudentData(data);
-
-      // If data is incomplete, show update alert
-      if (data.dadosIncompletos) {
-        setShowUpdateAlert(true);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar dados do aluno:", error);
-      toast({ title: "Erro", description: "Não foi possível carregar seus dados escolares.", variant: "destructive" });
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStudentData();
-  }, [user?.aluno_id]);
-
-  // Carregar benefícios - USING SERVICE
-  const carregarBeneficios = async () => {
-    const data = await portalAlunoService.getBeneficios();
-    setBeneficios(data);
-  };
-
-  useEffect(() => {
-    carregarBeneficios();
-  }, []);
-
-  // Buscar atestados do aluno - USING SERVICE
-  const fetchMeusAtestados = async () => {
-    if (!user?.aluno_id) return;
-    setLoadingAtestados(true);
-    try {
-      const data = await portalAlunoService.getMeusAtestados(user.aluno_id);
-      setMeusAtestados(data);
-    } catch (error) {
-      toast({ title: "Erro", description: "Erro ao carregar histórico de atestados.", variant: "destructive" });
-    } finally {
-      setLoadingAtestados(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isMeusAtestadosOpen) {
-      fetchMeusAtestados();
-    }
-  }, [isMeusAtestadosOpen]);
+  // --- USANDO CUSTOM HOOK ---
+  const {
+    studentData,
+    beneficios,
+    meusAtestados,
+    loadingData,
+    loadingAtestados,
+    showCarteirinha,
+    setShowCarteirinha,
+    isJustifyDialogOpen,
+    setIsJustifyDialogOpen,
+    isBoletimOpen,
+    setIsBoletimOpen,
+    isMeusAtestadosOpen,
+    setIsMeusAtestadosOpen,
+    isMeusDadosOpen,
+    setIsMeusDadosOpen,
+    showUpdateAlert,
+    setShowUpdateAlert,
+    refreshData
+  } = usePortalAluno();
 
   const handleLogout = async () => {
     try {
       await logout();
       navigate('/');
     } catch (error) {
-      toast({ title: "Erro", description: "Erro ao sair.", variant: "destructive" });
+      console.error("Erro ao sair:", error);
     }
   };
 
@@ -348,7 +233,7 @@ const PortalAlunoPage: React.FC = () => {
                   alunoId={user?.aluno_id || ""}
                   onUpdate={() => {
                     setIsMeusDadosOpen(false);
-                    fetchStudentData(); // Atualiza localmente
+                    refreshData(); // Atualiza localmente
                   }}
                 />
               </DialogContent>

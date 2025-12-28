@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // Only for Realtime channels
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -186,10 +186,7 @@ export default function GerenciarAcessoPage() {
         }
         setActionLoading(true);
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, {
-                redirectTo: `${window.location.origin}/update-password`
-            });
-            if (error) throw error;
+            await acessoService.sendPasswordReset(selectedUser.email);
             toast({
                 title: "Link enviado!",
                 description: `E-mail de recuperação enviado para ${selectedUser.email}`
@@ -209,10 +206,7 @@ export default function GerenciarAcessoPage() {
         try {
             if (selectedUser.tipo === 'aluno') {
                 // Remove vinculo do aluno (não deleta o registro do aluno)
-                await supabase
-                    .from('alunos')
-                    .update({ user_id: null } as any)
-                    .eq('user_id', selectedUser.id);
+                await acessoService.unlinkStudentAccount(selectedUser.id);
             } else {
                 // Remove da equipe
                 await acessoService.removerAcessoStaff(selectedUser.id);
@@ -228,7 +222,8 @@ export default function GerenciarAcessoPage() {
     };
 
     // --- 4. FILTROS ---
-    const filtrarEquipe = () => {
+    // --- 4. FILTROS MEMOIZADOS ---
+    const filteredEquipe = useMemo(() => {
         return equipe.filter(m => {
             const termo = busca.toLowerCase();
             const match = (m.nome || "").toLowerCase().includes(termo) || (m.email || "").toLowerCase().includes(termo);
@@ -237,9 +232,9 @@ export default function GerenciarAcessoPage() {
             if (filtroStatus === 'offline' && isOnline) return false;
             return match;
         });
-    };
+    }, [equipe, busca, filtroStatus, onlineUsers]);
 
-    const filtrarAlunos = () => {
+    const filteredAlunos = useMemo(() => {
         return alunos.filter(a => {
             const termo = busca.toLowerCase();
             const match = a.nome.toLowerCase().includes(termo) || a.matricula.toLowerCase().includes(termo);
@@ -247,7 +242,7 @@ export default function GerenciarAcessoPage() {
             if (filtroAlunoAcesso === 'sem_conta' && a.user_id) return false;
             return match;
         });
-    };
+    }, [alunos, busca, filtroAlunoAcesso]);
 
     const OnlineIndicator = ({ isOnline, lastSeen }: { isOnline: boolean, lastSeen?: string }) => (
         <div className="flex flex-col items-start">
@@ -337,14 +332,14 @@ export default function GerenciarAcessoPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filtrarEquipe().length === 0 ? (
+                                        {filteredEquipe.length === 0 ? (
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                                                     Nenhum membro encontrado.
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            filtrarEquipe().map((m) => (
+                                            filteredEquipe.map((m) => (
                                                 <TableRow key={m.user_id}>
                                                     <TableCell className="flex items-center gap-3">
                                                         <Avatar className="h-9 w-9 border bg-slate-100">
@@ -406,14 +401,14 @@ export default function GerenciarAcessoPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filtrarAlunos().length === 0 ? (
+                                        {filteredAlunos.length === 0 ? (
                                             <TableRow>
                                                 <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                                                     Nenhum aluno encontrado.
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            filtrarAlunos().map((a) => (
+                                            filteredAlunos.map((a) => (
                                                 <TableRow key={a.id}>
                                                     <TableCell className="flex items-center gap-3">
                                                         <Avatar className="h-9 w-9 border bg-blue-50">

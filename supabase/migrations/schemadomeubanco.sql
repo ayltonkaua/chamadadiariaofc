@@ -55,6 +55,18 @@ CREATE TABLE public.chamadas_sync_log (
   CONSTRAINT chamadas_sync_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
   CONSTRAINT chamadas_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id)
 );
+CREATE TABLE public.change_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  entity_type text NOT NULL,
+  entity_id uuid NOT NULL,
+  escola_id uuid NOT NULL,
+  operation text NOT NULL CHECK (operation = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])),
+  changed_at timestamp with time zone NOT NULL DEFAULT now(),
+  changed_by uuid,
+  CONSTRAINT change_log_pkey PRIMARY KEY (id),
+  CONSTRAINT change_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT change_log_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.convites_acesso (
   email text NOT NULL,
   escola_id uuid NOT NULL,
@@ -90,61 +102,13 @@ CREATE TABLE public.escola_configuracao (
   status text DEFAULT 'aprovada'::text CHECK (status = ANY (ARRAY['pendente'::text, 'aprovada'::text, 'rejeitada'::text])),
   CONSTRAINT escola_configuracao_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.eventos (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  nome text NOT NULL,
-  data_evento date NOT NULL,
-  ativo boolean DEFAULT true,
+CREATE TABLE public.escola_rate_limit (
   escola_id uuid NOT NULL,
-  CONSTRAINT eventos_pkey PRIMARY KEY (id),
-  CONSTRAINT eventos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
-);
-CREATE TABLE public.eventos_checkins (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  evento_id uuid,
-  aluno_id uuid,
-  data_entrada timestamp with time zone DEFAULT now(),
-  controller_id uuid,
-  controller_aluno_id uuid,
-  CONSTRAINT eventos_checkins_pkey PRIMARY KEY (id),
-  CONSTRAINT eventos_checkins_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT eventos_checkins_controller_id_fkey FOREIGN KEY (controller_id) REFERENCES auth.users(id),
-  CONSTRAINT eventos_checkins_controller_aluno_id_fkey FOREIGN KEY (controller_aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT eventos_checkins_evento_id_fkey FOREIGN KEY (evento_id) REFERENCES public.eventos(id)
-);
-CREATE TABLE public.eventos_convidados (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  evento_id uuid,
-  nome text NOT NULL,
-  tipo text DEFAULT 'Convidado'::text,
-  observacao text,
-  criado_por uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT eventos_convidados_pkey PRIMARY KEY (id),
-  CONSTRAINT eventos_convidados_evento_id_fkey FOREIGN KEY (evento_id) REFERENCES public.eventos(id),
-  CONSTRAINT eventos_convidados_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id)
-);
-CREATE TABLE public.eventos_convidados_checkins (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  evento_id uuid,
-  convidado_id uuid,
-  data_entrada timestamp with time zone DEFAULT now(),
-  controller_id uuid,
-  CONSTRAINT eventos_convidados_checkins_pkey PRIMARY KEY (id),
-  CONSTRAINT eventos_convidados_checkins_controller_id_fkey FOREIGN KEY (controller_id) REFERENCES auth.users(id),
-  CONSTRAINT eventos_convidados_checkins_convidado_id_fkey FOREIGN KEY (convidado_id) REFERENCES public.eventos_convidados(id),
-  CONSTRAINT eventos_convidados_checkins_evento_id_fkey FOREIGN KEY (evento_id) REFERENCES public.eventos(id)
-);
-CREATE TABLE public.eventos_staff (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  evento_id uuid,
-  aluno_id uuid,
-  user_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT eventos_staff_pkey PRIMARY KEY (id),
-  CONSTRAINT eventos_staff_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT eventos_staff_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
-  CONSTRAINT eventos_staff_evento_id_fkey FOREIGN KEY (evento_id) REFERENCES public.eventos(id)
+  window_start timestamp with time zone NOT NULL DEFAULT now(),
+  request_count integer NOT NULL DEFAULT 0,
+  last_request_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT escola_rate_limit_pkey PRIMARY KEY (escola_id),
+  CONSTRAINT escola_rate_limit_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
 );
 CREATE TABLE public.grade_horaria (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -204,48 +168,27 @@ CREATE TABLE public.observacoes_alunos (
   CONSTRAINT observacoes_alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
   CONSTRAINT observacoes_alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.observacoes_sync_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  idempotency_key text NOT NULL UNIQUE,
+  escola_id uuid NOT NULL,
+  aluno_id uuid NOT NULL,
+  turma_id uuid NOT NULL,
+  synced_at timestamp with time zone NOT NULL DEFAULT now(),
+  synced_by uuid,
+  client_timestamp bigint,
+  CONSTRAINT observacoes_sync_log_pkey PRIMARY KEY (id),
+  CONSTRAINT observacoes_sync_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT observacoes_sync_log_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT observacoes_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
+  CONSTRAINT observacoes_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.pesquisa_destinatarios (
   pesquisa_id uuid NOT NULL,
   aluno_id uuid NOT NULL,
   status_resposta character varying NOT NULL DEFAULT 'pendente'::character varying,
   CONSTRAINT pesquisa_destinatarios_pkey PRIMARY KEY (pesquisa_id, aluno_id),
-  CONSTRAINT pesquisa_destinatarios_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT pesquisa_destinatarios_pesquisa_id_fkey FOREIGN KEY (pesquisa_id) REFERENCES public.pesquisas(id)
-);
-CREATE TABLE public.pesquisa_perguntas (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  pesquisa_id uuid NOT NULL,
-  texto_pergunta text NOT NULL,
-  tipo_pergunta character varying NOT NULL DEFAULT 'multipla_escolha'::character varying,
-  opcoes jsonb,
-  ordem integer NOT NULL DEFAULT 0,
-  CONSTRAINT pesquisa_perguntas_pkey PRIMARY KEY (id),
-  CONSTRAINT pesquisa_perguntas_pesquisa_id_fkey FOREIGN KEY (pesquisa_id) REFERENCES public.pesquisas(id)
-);
-CREATE TABLE public.pesquisa_respostas (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  pesquisa_id uuid NOT NULL,
-  pergunta_id uuid NOT NULL,
-  aluno_id uuid NOT NULL,
-  resposta text NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT pesquisa_respostas_pkey PRIMARY KEY (id),
-  CONSTRAINT pesquisa_respostas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT pesquisa_respostas_pergunta_id_fkey FOREIGN KEY (pergunta_id) REFERENCES public.pesquisa_perguntas(id),
-  CONSTRAINT pesquisa_respostas_pesquisa_id_fkey FOREIGN KEY (pesquisa_id) REFERENCES public.pesquisas(id)
-);
-CREATE TABLE public.pesquisas (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  titulo text NOT NULL,
-  descricao text,
-  status character varying NOT NULL DEFAULT 'ativa'::character varying,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone,
-  escola_id uuid,
-  CONSTRAINT pesquisas_pkey PRIMARY KEY (id),
-  CONSTRAINT pesquisas_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT pesquisas_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  CONSTRAINT pesquisa_destinatarios_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );
 CREATE TABLE public.presencas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -304,6 +247,25 @@ CREATE TABLE public.registros_contato_busca_ativa (
   escola_id uuid NOT NULL,
   CONSTRAINT registros_contato_busca_ativa_pkey PRIMARY KEY (id),
   CONSTRAINT registros_contato_busca_ativa_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
+CREATE TABLE public.sync_metrics (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  user_id uuid,
+  event_type text NOT NULL CHECK (event_type = ANY (ARRAY['sync_start'::text, 'sync_success'::text, 'sync_error'::text, 'sync_partial'::text])),
+  duration_ms integer,
+  items_total integer,
+  items_success integer,
+  items_failed integer,
+  error_code text,
+  error_message text,
+  client_version text,
+  client_platform text,
+  client_timestamp timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT sync_metrics_pkey PRIMARY KEY (id),
+  CONSTRAINT sync_metrics_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT sync_metrics_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.transferencias_alunos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

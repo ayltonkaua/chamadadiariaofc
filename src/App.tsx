@@ -9,6 +9,7 @@ import { EscolaConfigProvider } from "@/contexts/EscolaConfigContext";
 import EscolaThemeProvider from "@/components/EscolaThemeProvider";
 import Layout from "@/components/layout/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
 // Importações de Páginas
 import LoginPage from "@/pages/LoginPage";
@@ -113,86 +114,88 @@ const App = () => {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <OfflineBanner />
-      <AuthProvider>
-        <EscolaConfigProvider>
-          <EscolaThemeProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <OfflineBanner />
+        <AuthProvider>
+          <EscolaConfigProvider>
+            <EscolaThemeProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
 
-              {/* Global sync status indicator (Phase 1 UX) */}
-              <GlobalSyncStatus />
+                {/* Global sync status indicator (Phase 1 UX) */}
+                <GlobalSyncStatus />
 
-              <Router>
-                <Routes>
-                  {/* --- Rotas Públicas --- */}
-                  <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
-                  <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
-                  <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
-                  <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
-                  <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
-                  <Route path="/student-query" element={<StudentQueryPage />} />
+                <Router>
+                  <Routes>
+                    {/* --- Rotas Públicas --- */}
+                    <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
+                    <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
+                    <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
+                    <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
+                    <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
+                    <Route path="/student-query" element={<StudentQueryPage />} />
 
-                  {/* --- Rotas Autenticadas (Todas/Comum) --- */}
-                  <Route element={<ProtectedRoute />}>
-                    <Route element={<Layout><Outlet /></Layout>}>
-                      <Route path="/dashboard" element={<Dashboard />} />
+                    {/* --- Rotas Autenticadas (Todas/Comum) --- */}
+                    <Route element={<ProtectedRoute />}>
+                      <Route element={<Layout><Outlet /></Layout>}>
+                        <Route path="/dashboard" element={<Dashboard />} />
 
-                      {/* Funcionalidades Comuns */}
-                      <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
-                      <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
-                      <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
-                      <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
-                      <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
-                      <Route path="/aluno/:alunoId/perfil" element={<PerfilAlunoPage />} />
+                        {/* Funcionalidades Comuns */}
+                        <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
+                        <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
+                        <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
+                        <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
+                        <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
+                        <Route path="/aluno/:alunoId/perfil" element={<PerfilAlunoPage />} />
 
-                      <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
-                      <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
-                      <Route path="/atestados" element={<AtestadosPage />} />
-                      <Route path="/alertas" element={<AlertasPage />} />
-                      <Route path="/disciplinas" element={<DisciplinasPage />} />
-                      <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
+                        <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
+                        <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
+                        <Route path="/atestados" element={<AtestadosPage />} />
+                        <Route path="/alertas" element={<AlertasPage />} />
+                        <Route path="/disciplinas" element={<DisciplinasPage />} />
+                        <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
 
-                      {/* Perfil */}
-                      <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
+                        {/* Perfil */}
+                        <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
 
-                      {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
-                      <Route path="/portal-aluno" element={<PortalAlunoPage />} />
+                        {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
+                        <Route path="/portal-aluno" element={<PortalAlunoPage />} />
+                      </Route>
                     </Route>
-                  </Route>
 
-                  {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
-                  <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
-                    <Route element={<Layout><Outlet /></Layout>}>
-                      <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
-                      <Route path="/relatorios" element={<RelatoriosPage />} />
-                      <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
-                      <Route path="/notificacoes" element={<NotificacoesPage />} />
+                    {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
+                    <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
+                      <Route element={<Layout><Outlet /></Layout>}>
+                        <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
+                        <Route path="/relatorios" element={<RelatoriosPage />} />
+                        <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
+                        <Route path="/notificacoes" element={<NotificacoesPage />} />
+                      </Route>
                     </Route>
-                  </Route>
 
-                  {/* Gestão de Programas Sociais (Novo) */}
-                  <Route element={<ProtectedRoute allowedTypes={['admin', 'diretor']} />}>
-                    <Route element={<Layout><Outlet /></Layout>}>
-                      <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                    {/* Gestão de Programas Sociais (Novo) */}
+                    <Route element={<ProtectedRoute allowedTypes={['admin', 'diretor']} />}>
+                      <Route element={<Layout><Outlet /></Layout>}>
+                        <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                      </Route>
                     </Route>
-                  </Route>
 
-                  {/* Benefícios do Aluno */}
-                  <Route element={<ProtectedRoute allowedTypes={['aluno']} />}>
-                    <Route path="/aluno/beneficios" element={<MeusBeneficiosPage />} />
-                  </Route>
+                    {/* Benefícios do Aluno */}
+                    <Route element={<ProtectedRoute allowedTypes={['aluno']} />}>
+                      <Route path="/aluno/beneficios" element={<MeusBeneficiosPage />} />
+                    </Route>
 
-                  <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
-                </Routes>
-              </Router>
-            </TooltipProvider>
-          </EscolaThemeProvider>
-        </EscolaConfigProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+                    <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
+                  </Routes>
+                </Router>
+              </TooltipProvider>
+            </EscolaThemeProvider>
+          </EscolaConfigProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

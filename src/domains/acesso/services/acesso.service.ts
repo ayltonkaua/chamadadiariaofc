@@ -47,7 +47,7 @@ export const acessoService = {
             .order('nome');
 
         if (error) {
-            log.error('Failed to get alunos acesso', error);
+            log.error('Failed to get alunos acesso', { message: error.message });
             return [];
         }
 
@@ -72,8 +72,8 @@ export const acessoService = {
         log.info('Sending convite', { email: convite.email, role: convite.role });
 
         // 1. UPSERT invitation (handles both new and resend)
-        const { data, error: dbError } = await supabase
-            .from('convites_acesso')
+        const { data, error: dbError } = await (supabase
+            .from('convites_acesso' as any)
             .upsert(
                 {
                     email: convite.email.trim().toLowerCase(),
@@ -82,22 +82,23 @@ export const acessoService = {
                     invited_by: invitedBy,
                     reenviado_em: new Date().toISOString(),
                     status: 'pendente'
-                } as any,
+                },
                 {
                     onConflict: 'email,escola_id',
                     ignoreDuplicates: false
                 }
             )
             .select()
-            .single();
+            .single() as any);
 
         if (dbError) {
-            log.error('Failed to save convite', dbError);
+            log.error('Failed to save convite', { message: dbError.message });
             throw new Error(dbError.message);
         }
 
-        const isResend = data?.criado_em && data?.reenviado_em &&
-            new Date(data.criado_em).getTime() !== new Date(data.reenviado_em).getTime();
+        const typedData = data as { criado_em?: string; reenviado_em?: string } | null;
+        const isResend = typedData?.criado_em && typedData?.reenviado_em &&
+            new Date(typedData.criado_em).getTime() !== new Date(typedData.reenviado_em).getTime();
 
         if (isResend) {
             log.info('Convite reenviado', { email: convite.email });
@@ -148,7 +149,7 @@ export const acessoService = {
             .eq('escola_id', escolaId);
 
         if (error) {
-            log.error('Failed to update role', error);
+            log.error('Failed to update role', { message: error.message });
             throw new Error(error.message);
         }
     },
@@ -165,7 +166,7 @@ export const acessoService = {
             .eq('user_id', userId);
 
         if (error) {
-            log.error('Failed to remove staff access', error);
+            log.error('Failed to remove staff access', { message: error.message });
             throw new Error(error.message);
         }
     },
@@ -182,7 +183,40 @@ export const acessoService = {
             .eq('user_id', userId);
 
         if (error) {
-            log.error('Failed to remove aluno access', error);
+            log.error('Failed to remove aluno access', { message: error.message });
+            throw new Error(error.message);
+        }
+    },
+
+    /**
+     * Sends password reset email to a user
+     */
+    async sendPasswordReset(email: string): Promise<void> {
+        log.info('Sending password reset', { email });
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/update-password`
+        });
+
+        if (error) {
+            log.error('Failed to send password reset', { message: error.message });
+            throw new Error(error.message);
+        }
+    },
+
+    /**
+     * Unlinks a student account (removes user_id from aluno record)
+     */
+    async unlinkStudentAccount(userId: string): Promise<void> {
+        log.info('Unlinking student account', { userId });
+
+        const { error } = await supabase
+            .from('alunos')
+            .update({ user_id: null } as any)
+            .eq('user_id', userId);
+
+        if (error) {
+            log.error('Failed to unlink student account', { message: error.message });
             throw new Error(error.message);
         }
     }
