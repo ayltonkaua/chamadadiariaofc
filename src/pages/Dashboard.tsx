@@ -1,3 +1,10 @@
+/**
+ * Dashboard - Main Page
+ * 
+ * Dashboard principal com visual moderno e responsivo.
+ * Mobile-first design com cards vibrantes.
+ */
+
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,7 +14,7 @@ import { TurmasCards } from "@/components/TurmasCards";
 import OfflineManager from "@/components/offline/OfflineManager";
 import { ImportTurmasDialog } from "@/components/turmas/ImportTurmasDialog";
 import { getSchoolCache } from "@/lib/offlineStorage";
-import { WifiOff, Loader2, RefreshCw } from "lucide-react";
+import { WifiOff, Loader2, RefreshCw, Sunrise, Sun, Moon, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { turmaService, type TurmaComContagem } from "@/domains";
 
@@ -15,11 +22,11 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState("turmas");
+  const [turnoTab, setTurnoTab] = useState("todos");
   const [loading, setLoading] = useState(true);
   const [todasTurmas, setTodasTurmas] = useState<TurmaComContagem[]>([]);
   const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
 
-  // Monitora conexão em tempo real
   useEffect(() => {
     const handleStatus = () => setIsOfflineMode(!navigator.onLine);
     window.addEventListener('online', handleStatus);
@@ -30,12 +37,9 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
-  // Função auxiliar para ler do IndexedDB
   const carregarDadosOffline = async () => {
     try {
-      console.log("[Dashboard] OFFLINE - reading from IndexedDB");
       const dadosOffline = await getSchoolCache(user?.escola_id || '');
-
       if (dadosOffline && dadosOffline.turmas && dadosOffline.turmas.length > 0) {
         const turmasOffline = dadosOffline.turmas.map((t: any) => {
           const qtdAlunos = dadosOffline.alunos.filter((a: any) => a.turma_id === t.id).length;
@@ -51,7 +55,6 @@ const Dashboard: React.FC = () => {
             alunos: qtdAlunos
           };
         });
-
         turmasOffline.sort((a: any, b: any) => a.nome.localeCompare(b.nome));
         setTodasTurmas(turmasOffline);
         setIsOfflineMode(true);
@@ -63,29 +66,18 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- LÓGICA DE DADOS USANDO turmaService ---
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
-
-    // ESTRATÉGIA OFFLINE-FIRST
     if (!navigator.onLine) {
       await carregarDadosOffline();
       setLoading(false);
       return;
     }
-
-    // ESTRATÉGIA ONLINE COM FALLBACK
     try {
-      if (!user) {
-        throw new Error("Usuário não autenticado");
-      }
-
-      // Usa turmaService em vez de supabase direto
+      if (!user) throw new Error("Usuário não autenticado");
       const turmasComContagem = await turmaService.findWithCount(user.escola_id);
-
       setTodasTurmas(turmasComContagem);
       setIsOfflineMode(false);
-
     } catch (err) {
       console.warn("Falha ao buscar dados online. Ativando modo offline...", err);
       await carregarDadosOffline();
@@ -98,91 +90,136 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Usa turmaService.groupByTurno para filtrar
   const grouped = turmaService.groupByTurno(todasTurmas);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { text: "Bom dia", icon: Sunrise, color: "text-amber-500" };
+    if (hour < 18) return { text: "Boa tarde", icon: Sun, color: "text-orange-500" };
+    return { text: "Boa noite", icon: Moon, color: "text-indigo-500" };
+  };
+
+  const greeting = getGreeting();
+  const GIcon = greeting.icon;
+
+  const turnoTabs = [
+    { value: "todos", label: "Todas", count: todasTurmas.length },
+    { value: "manha", label: "Manhã", count: grouped.manha.length },
+    { value: "tarde", label: "Tarde", count: grouped.tarde.length },
+    { value: "noite", label: "Noite", count: grouped.noite.length },
+  ];
+
+  const turmasFiltradas = turnoTab === "todos" ? todasTurmas : grouped[turnoTab as keyof typeof grouped] || [];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full min-h-screen flex-col gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-gray-500">Carregando seus dados...</p>
+      <div className="flex items-center justify-center h-full min-h-screen flex-col gap-4 bg-gray-50">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-purple-200 rounded-full animate-pulse"></div>
+          <Loader2 className="h-8 w-8 animate-spin text-purple-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+        </div>
+        <p className="text-gray-500 font-medium">Carregando seus dados...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 animate-in fade-in pb-20">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-            Página Inicial
-            {isOfflineMode && (
-              <span className="text-sm bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full border border-yellow-200 font-medium flex items-center gap-2">
-                <WifiOff size={16} /> Offline
-              </span>
-            )}
-          </h1>
-          <p className="text-gray-600">Bem-vindo ao sistema de chamadas</p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <OfflineManager />
-          <ImportTurmasDialog onSuccess={fetchDashboardData} />
-        </div>
-      </div>
-
-      {/* InfoCards */}
-      <div className="mb-8">
-        <InfoCards />
-      </div>
-
-      {/* Área Principal (Turmas) */}
-      <div className="mb-8">
-        {todasTurmas.length === 0 ? (
-          <div className="bg-white p-8 rounded-lg shadow-sm border flex flex-col items-center justify-center text-center">
-            <RefreshCw className="h-10 w-10 text-gray-300 mb-3" />
-            <h3 className="text-lg font-semibold text-gray-700">Nenhuma turma disponível</h3>
-            <p className="text-gray-500 max-w-md mt-2">
-              {isOfflineMode
-                ? "Você está offline e não há dados salvos. Conecte-se para baixar."
-                : "Não encontramos turmas vinculadas."}
-            </p>
-            <Button variant="outline" onClick={fetchDashboardData} className="mt-4">
-              Tentar Recarregar
-            </Button>
-          </div>
-        ) : (
-          <Tabs defaultValue="turmas" value={tabValue} onValueChange={setTabValue}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="turmas">Turmas</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="turmas">
-              <div className="bg-white p-6 rounded-lg shadow-sm border">
-                <Tabs defaultValue="manha" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-6">
-                    <TabsTrigger value="manha">Manhã ({grouped.manha.length})</TabsTrigger>
-                    <TabsTrigger value="tarde">Tarde ({grouped.tarde.length})</TabsTrigger>
-                    <TabsTrigger value="noite">Noite ({grouped.noite.length})</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="manha">
-                    <TurmasCards turmas={grouped.manha} loading={false} onRefresh={fetchDashboardData} turno="Manhã" />
-                  </TabsContent>
-
-                  <TabsContent value="tarde">
-                    <TurmasCards turmas={grouped.tarde} loading={false} onRefresh={fetchDashboardData} turno="Tarde" />
-                  </TabsContent>
-
-                  <TabsContent value="noite">
-                    <TurmasCards turmas={grouped.noite} loading={false} onRefresh={fetchDashboardData} turno="Noite" />
-                  </TabsContent>
-                </Tabs>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="p-4 sm:p-6 lg:p-8 pb-24 animate-in fade-in duration-500">
+        {/* Header */}
+        <div className="flex flex-col gap-4 mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <GIcon className={`h-5 w-5 ${greeting.color}`} />
+                <span className={`text-sm font-medium ${greeting.color}`}>{greeting.text}</span>
+                {isOfflineMode && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                    <WifiOff size={12} /> Offline
+                  </span>
+                )}
               </div>
-            </TabsContent>
-          </Tabs>
-        )}
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                Página Inicial
+              </h1>
+              <p className="text-gray-500 text-sm sm:text-base mt-1">
+                Realize chamadas e gerencie suas turmas
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <OfflineManager />
+              <ImportTurmasDialog onSuccess={fetchDashboardData} />
+            </div>
+          </div>
+        </div>
+
+        {/* Info Cards */}
+        <div className="mb-6 sm:mb-8">
+          <InfoCards />
+        </div>
+
+        {/* Turmas Section */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Section Header */}
+          <div className="p-4 sm:p-6 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-xl">
+                  <LayoutGrid className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Minhas Turmas</h2>
+                  <p className="text-sm text-gray-500">{todasTurmas.length} turmas encontradas</p>
+                </div>
+              </div>
+
+              {/* Turno Filter */}
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
+                {turnoTabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setTurnoTab(tab.value)}
+                    className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${turnoTab === tab.value
+                      ? "bg-white text-purple-600 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    {tab.label} ({tab.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Turmas Grid */}
+          <div className="p-4 sm:p-6">
+            {turmasFiltradas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <RefreshCw className="h-8 w-8 text-gray-300" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Nenhuma turma disponível</h3>
+                <p className="text-gray-500 max-w-sm mb-4">
+                  {isOfflineMode
+                    ? "Você está offline e não há dados salvos. Conecte-se para baixar."
+                    : "Não encontramos turmas vinculadas ao seu perfil."}
+                </p>
+                <Button variant="outline" onClick={fetchDashboardData}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Tentar Recarregar
+                </Button>
+              </div>
+            ) : (
+              <TurmasCards
+                turmas={turmasFiltradas}
+                loading={false}
+                onRefresh={fetchDashboardData}
+                turno={turnoTab === "todos" ? undefined : turnoTab}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

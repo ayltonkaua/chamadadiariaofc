@@ -4,36 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Building2, GraduationCap, User, Mail, Lock, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast"; // Importe o toast para feedback visual melhor
-
-type AccountType = "aluno" | "escola";
+import { Building2, Mail, Lock, Loader2, AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [accountType, setAccountType] = useState<AccountType>("aluno");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [matricula, setMatricula] = useState("");
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  // Matricula validation state
-  const [matriculaStatus, setMatriculaStatus] = useState<{
-    checking: boolean;
-    valid: boolean | null;
-    message: string;
-    alunoNome?: string;
-  }>({ checking: false, valid: null, message: '' });
 
   // Limpa qualquer sessão antiga ao entrar na página de registro
   useEffect(() => {
@@ -53,60 +40,27 @@ export default function Register() {
       // 1. Validações
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) throw new Error("Por favor, insira um e-mail válido.");
-      if (accountType === "aluno" && !matricula.trim()) throw new Error("Por favor, informe sua matrícula.");
-      if (!name.trim()) throw new Error(accountType === "escola" ? "Informe o nome da escola." : "Informe seu nome completo.");
+      if (!name.trim()) throw new Error("Informe o nome da escola.");
       if (password.length < 6) throw new Error("A senha deve ter no mínimo 6 caracteres.");
 
-      // NOVA VALIDAÇÃO: Verificar se matrícula já está vinculada
-      if (accountType === "aluno") {
-        const { data: check, error: checkError } = await (supabase.rpc as any)(
-          'verificar_matricula_disponivel',
-          { p_matricula: matricula.trim() }
-        );
-
-        if (checkError) {
-          console.error('Erro ao verificar matrícula:', checkError);
-          // Continue anyway, the vincular function will also check
-        } else if (check && !check.available) {
-          throw new Error(check.message || 'Esta matrícula já está vinculada a outra conta.');
-        }
-      }
-
-      // 2. Criar Usuário (O Supabase loga automaticamente se o email confirm for desligado)
+      // 2. Criar Usuário
       const response = await register(name, email, password);
 
       if (!response.success) {
         throw new Error(response.error || "Erro ao criar conta.");
       }
 
-      // Pequeno delay para garantir que a sessão foi estabelecida (se auto-confirm)
+      // Pequeno delay para garantir que a sessão foi estabelecida
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. Chamar a RPC para vincular
-      let rpcName = "";
-      let rpcParams = {};
-
-      if (accountType === "aluno") {
-        rpcName = "vincular_aluno_usuario";
-        rpcParams = {
-          p_matricula: matricula.trim(),
-          p_email: email.trim().toLowerCase()
-        };
-      } else {
-        rpcName = "registrar_escola_admin";
-        rpcParams = {
-          nome_escola: name.trim()
-        };
-      }
-
-      // Chama a RPC. Se o usuário não estiver logado (email pendente), a RPC roda como 'anon',
-      // mas como demos permissão GRANT EXECUTE TO anon, vai funcionar.
+      // 3. Chamar a RPC para registrar escola (status = pendente)
       // @ts-ignore
-      const { data: rpcData, error: rpcError } = await supabase.rpc(rpcName, rpcParams);
+      const { data: rpcData, error: rpcError } = await supabase.rpc("registrar_escola_admin", {
+        nome_escola: name.trim()
+      });
 
       if (rpcError) {
         console.error("Erro RPC Detalhado:", rpcError);
-        // Se o erro for 403, é permissão. Se for outro, é lógica.
         if (rpcError.code === '42501' || rpcError.code === 'PGRST301') {
           throw new Error("Erro de permissão no servidor. Contate o suporte.");
         }
@@ -117,27 +71,27 @@ export default function Register() {
         throw new Error((rpcData as any).message || "Falha lógica ao vincular.");
       }
 
-      // 4. Sucesso e Logout de Segurança
-      setSuccess("Conta criada e vinculada! Redirecionando...");
+      // 4. Sucesso
+      setSuccess("Cadastro realizado! Aguarde a aprovação do administrador.");
 
-      // Forçamos logout para que o usuário faça login limpo e carregue os novos vínculos (roles/aluno_id)
+      // Forçamos logout para que o usuário faça login limpo após aprovação
       await supabase.auth.signOut();
 
       toast({
-        title: "Cadastro realizado!",
-        description: "Sua conta foi criada. Faça login para entrar.",
-        duration: 4000,
+        title: "Cadastro enviado!",
+        description: "Sua escola foi registrada e aguarda aprovação.",
+        duration: 5000,
       });
 
       setTimeout(() => {
         navigate("/login");
-      }, 2000);
+      }, 3000);
 
     } catch (err: any) {
       console.error("Erro no registro:", err);
       let msg = err.message;
       if (msg.includes("duplicate key") || msg.includes("User already registered")) {
-        msg = "Este e-mail ou matrícula já estão cadastrados.";
+        msg = "Este e-mail já está cadastrado.";
       }
       setError(msg);
       toast({
@@ -153,39 +107,29 @@ export default function Register() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
       <Card className="w-full max-w-md shadow-xl border-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-8 text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo(a)</h1>
-          <p className="text-violet-100">Crie sua conta no Chamada Diária</p>
+        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-8 text-center">
+          <Building2 className="h-12 w-12 text-white mx-auto mb-3" />
+          <h1 className="text-3xl font-bold text-white mb-2">Cadastro de Escola</h1>
+          <p className="text-indigo-100">Registre sua instituição no Chamada Diária</p>
         </div>
 
         <CardContent className="pt-6">
-          <Tabs defaultValue="aluno" value={accountType} onValueChange={(v) => setAccountType(v as AccountType)} className="w-full mb-6">
-            <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 rounded-lg">
-              <TabsTrigger value="aluno" className="data-[state=active]:bg-white data-[state=active]:text-violet-700 data-[state=active]:shadow-sm flex items-center gap-2 transition-all">
-                <GraduationCap className="h-4 w-4" />
-                Sou Aluno
-              </TabsTrigger>
-              <TabsTrigger value="escola" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm flex items-center gap-2 transition-all">
-                <Building2 className="h-4 w-4" />
-                Sou Escola
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Aviso de Aprovação */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6 flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-blue-800">
+              <strong>Importante:</strong> Após o cadastro, sua escola passará por uma aprovação antes de poder utilizar o sistema.
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-gray-700">
-                {accountType === "escola" ? "Nome da Escola" : "Nome Completo"}
-              </Label>
+              <Label htmlFor="name" className="text-gray-700">Nome da Escola</Label>
               <div className="relative">
-                {accountType === "escola" ? (
-                  <Building2 className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                ) : (
-                  <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                )}
+                <Building2 className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <Input
                   id="name"
-                  placeholder={accountType === "escola" ? "Ex: Escola Municipal..." : "Ex: João da Silva"}
+                  placeholder="Ex: Escola Municipal João da Silva"
                   className="pl-10 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -195,13 +139,13 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-gray-700">E-mail</Label>
+              <Label htmlFor="email" className="text-gray-700">E-mail Institucional</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="seu@email.com"
+                  placeholder="contato@escola.edu.br"
                   className="pl-10 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -227,25 +171,6 @@ export default function Register() {
               </div>
             </div>
 
-            {accountType === "aluno" && (
-              <div className="space-y-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100 animate-in slide-in-from-top-2 fade-in duration-300">
-                <Label htmlFor="matricula" className="text-blue-900 font-medium">
-                  Número da Matrícula
-                </Label>
-                <Input
-                  id="matricula"
-                  placeholder="Ex: 2024001"
-                  className="bg-white border-blue-200 focus:border-blue-400"
-                  value={matricula}
-                  onChange={(e) => setMatricula(e.target.value)}
-                  required={accountType === "aluno"}
-                />
-                <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Necessário para vincular seus dados.
-                </p>
-              </div>
-            )}
-
             {error && (
               <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-bottom-1 border border-red-100">
                 <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
@@ -261,16 +186,13 @@ export default function Register() {
 
             <Button
               type="submit"
-              className={`w-full h-11 text-base font-medium shadow-lg transition-all hover:scale-[1.02] ${accountType === "escola"
-                ? "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
-                : "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
-                }`}
+              className="w-full h-11 text-base font-medium shadow-lg transition-all hover:scale-[1.02] bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
               disabled={isLoading}
             >
               {isLoading ? (
                 <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processando...</>
               ) : (
-                accountType === "escola" ? "Registrar Escola" : "Cadastrar Aluno"
+                "Cadastrar Escola"
               )}
             </Button>
           </form>

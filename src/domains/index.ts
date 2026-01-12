@@ -88,10 +88,6 @@ export type { MembroEquipe, AlunoAcesso, ConviteAcesso } from './acesso';
 export { atrasosService } from './atrasos';
 export type { RegistroAtraso, RegistroAtrasoInsert, RegistroAtrasoFormatado } from './atrasos';
 
-// Portal Aluno (Student Portal)
-export { portalAlunoService } from './portalAluno';
-export type { StudentData, MeusAtestados, Beneficio, PortalAlunoData } from './portalAluno';
-
 // Programas Sociais (Social Programs)
 export { programasService } from './programas';
 export type { ProgramaSocialRow, ProgramaRegistro, MappingColumns } from './programas';

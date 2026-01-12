@@ -22,6 +22,7 @@ import {
     saveSchoolCache,
     getAllSchoolCaches,
     clearSchoolCache,
+    getAllChamadas,
     type SchoolCacheData,
     type CacheVersionData
 } from './offlineStorage';
@@ -614,9 +615,28 @@ export async function getPresencasByTurmaData(
  * Get all presencas for a turma (historical) - OFFLINE-FIRST
  */
 export async function getPresencasByTurma(turmaId: string): Promise<DataProviderResult<PresencaData[]>> {
+    // 1. Get local pending/synced chamadas (Always read local first)
+    let localPresencas: PresencaData[] = [];
+    try {
+        const allChamadas = await getAllChamadas();
+        // Filtrar por turma e achatar registros
+        localPresencas = allChamadas
+            .filter(c => c.turma_id === turmaId)
+            .flatMap(c => c.registros.map(r => ({
+                aluno_id: r.aluno_id,
+                turma_id: c.turma_id,
+                escola_id: c.escola_id,
+                data_chamada: c.data_chamada,
+                presente: r.presente,
+                falta_justificada: r.falta_justificada
+            })));
+    } catch (err) {
+        console.warn('[DataProvider] Failed to read local chamadas:', err);
+    }
+
     if (!navigator.onLine) {
-        console.log('[DataProvider] Offline - historical presencas not available');
-        return { data: [], source: 'cache', stale: true };
+        console.log(`[DataProvider] Offline - returning ${localPresencas.length} local presencas records`);
+        return { data: localPresencas, source: 'cache', stale: true };
     }
 
     try {
@@ -627,14 +647,45 @@ export async function getPresencasByTurma(turmaId: string): Promise<DataProvider
 
         if (error) throw error;
 
+        const remotePresencas = (data || []) as unknown as PresencaData[];
+
+        // MERGE STRATEGY: 
+        // Group by data_chamada. If local exists for a date, use local (it's the latest edit).
+        // Otherwise use remote.
+
+        const presencasByDate = new Map<string, PresencaData[]>();
+
+        // 1. Populate with remote first
+        remotePresencas.forEach(p => {
+            const list = presencasByDate.get(p.data_chamada) || [];
+            list.push(p);
+            presencasByDate.set(p.data_chamada, list);
+        });
+
+        // 2. Override with local (if present)
+        // Check which dates exist locally
+        const localDates = new Set(localPresencas.map(p => p.data_chamada));
+
+        localDates.forEach(date => {
+            const localForDate = localPresencas.filter(p => p.data_chamada === date);
+            if (localForDate.length > 0) {
+                // Completely replace remote for this date with local
+                presencasByDate.set(date, localForDate);
+            }
+        });
+
+        // Flatten back to array
+        const merged = Array.from(presencasByDate.values()).flat();
+
         return {
-            data: (data || []) as unknown as PresencaData[],
+            data: merged,
             source: 'network',
             stale: false
         };
     } catch (error) {
         console.warn('[DataProvider] Error fetching presencas:', error);
-        return { data: [], source: 'cache', stale: true };
+        // Fallback to local only
+        return { data: localPresencas, source: 'cache', stale: true };
     }
 }
 

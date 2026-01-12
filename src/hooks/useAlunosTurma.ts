@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getAlunosByTurma,
@@ -65,17 +66,19 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
       const alunosResult = await getAlunosByTurma(turmaId, user?.escola_id);
       const alunosData = alunosResult.data;
 
-      // 3. Get presencas (OPTIONAL - only if online)
+      // 3. Get presencas (ALWAYS fetch - provider handles offline/merge)
       let presencasData: any[] = [];
       let presencasHojeData: any[] = [];
 
-      if (navigator.onLine) {
+      try {
         const presencasResult = await getPresencasByTurma(turmaId);
         presencasData = presencasResult.data;
 
         // Filter today's presencas
-        const hoje = new Date().toISOString().split('T')[0];
-        presencasHojeData = presencasData.filter(p => p.data_chamada === hoje);
+        const hoje = format(new Date(), 'yyyy-MM-dd');
+        presencasHojeData = presencasData.filter((p: any) => p.data_chamada === hoje);
+      } catch (err) {
+        console.warn('Error fetching presencas:', err);
       }
 
       // 4. Calculate stats per student

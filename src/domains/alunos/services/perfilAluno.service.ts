@@ -464,5 +464,107 @@ export const perfilAlunoService = {
             monitorResponsavel: c.monitor_responsavel,
             linkArquivo: c.link_arquivo || undefined
         }));
+    },
+
+    // =====================
+    // CRUD OBSERVAÇÕES
+    // =====================
+
+    /**
+     * Atualiza uma observação existente
+     */
+    async updateObservacao(
+        observacaoId: string,
+        titulo: string,
+        descricao: string
+    ): Promise<void> {
+        log.info('Updating observacao', { observacaoId, titulo });
+
+        const { error } = await db
+            .from('observacoes_alunos')
+            .update({
+                titulo,
+                descricao,
+                atualizado_em: new Date().toISOString()
+            })
+            .eq('id', observacaoId);
+
+        if (error) {
+            log.error('Failed to update observacao', { error: error.message });
+            throw new Error('Erro ao atualizar observação');
+        }
+    },
+
+    /**
+     * Exclui uma observação
+     */
+    async deleteObservacao(observacaoId: string): Promise<void> {
+        log.info('Deleting observacao', { observacaoId });
+
+        const { error } = await db
+            .from('observacoes_alunos')
+            .delete()
+            .eq('id', observacaoId);
+
+        if (error) {
+            log.error('Failed to delete observacao', { error: error.message });
+            throw new Error('Erro ao excluir observação');
+        }
+    },
+
+    // =====================
+    // CRUD CONTATOS BUSCA ATIVA
+    // =====================
+
+    /**
+     * Adiciona um novo contato de busca ativa
+     */
+    async addContatoBuscaAtiva(
+        alunoId: string,
+        escolaId: string,
+        data: {
+            dataContato: string;
+            formaContato: string;
+            justificativaFaltas?: string;
+            monitorResponsavel?: string;
+            linkArquivo?: string;
+        }
+    ): Promise<void> {
+        log.info('Adding contato busca ativa', { alunoId, formaContato: data.formaContato });
+
+        const { error } = await db
+            .from('registros_contato_busca_ativa')
+            .insert({
+                aluno_id: alunoId,
+                escola_id: escolaId,
+                data_contato: data.dataContato,
+                forma_contato: data.formaContato,
+                justificativa_faltas: data.justificativaFaltas || null,
+                monitor_responsavel: data.monitorResponsavel || null,
+                link_arquivo: data.linkArquivo || null
+            });
+
+        if (error) {
+            log.error('Failed to add contato', { error: error.message });
+            throw new Error('Erro ao registrar contato');
+        }
+    },
+
+    /**
+     * Exclui um contato de busca ativa
+     */
+    async deleteContatoBuscaAtiva(contatoId: string): Promise<void> {
+        log.info('Deleting contato busca ativa', { contatoId });
+
+        const { error } = await db
+            .from('registros_contato_busca_ativa')
+            .delete()
+            .eq('id', contatoId);
+
+        if (error) {
+            log.error('Failed to delete contato', { error: error.message });
+            throw new Error('Erro ao excluir contato');
+        }
     }
 };
+

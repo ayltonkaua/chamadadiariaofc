@@ -77,7 +77,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
-                    <Link to={`/aluno/${aluno.id}/perfil`} className="w-full">
+                    <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`} className="w-full">
                       <User className="mr-2 h-4 w-4" /> Ver Perfil
                     </Link>
                   </DropdownMenuItem>
@@ -120,7 +120,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     {/* Perfil */}
-                    <Link to={`/aluno/${aluno.id}/perfil`}>
+                    <Link to={`/turmas/${aluno.turma_id}/alunos/${aluno.id}`}>
                       <Button
                         variant="ghost"
                         size="icon"

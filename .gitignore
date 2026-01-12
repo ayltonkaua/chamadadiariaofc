@@ -66,3 +66,9 @@ coverage/
 # IMPORTANTE: Não ignora a pasta 'supabase/functions' e 'supabase/migrations',
 # que devem ser versionadas.
 .supabase/
+
+# Módulos Secundários (Ignorados a pedido do usuário)
+portal-aluno-frontend/
+portal-aluno-api/
+super-admin-frontend/
+super-admin-api/

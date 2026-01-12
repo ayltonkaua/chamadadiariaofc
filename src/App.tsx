@@ -22,22 +22,19 @@ import ChamadaPage from "@/pages/ChamadaPage";
 import GerenciarAlunosPage from "@/pages/GerenciarAlunosPage";
 import HistoricoChamadaPage from "@/pages/HistoricoChamadaPage";
 import AtestadosPage from "@/pages/AtestadosPage";
-import AlertasPage from "@/pages/AlertasPage";
 import RegistroAtrasosPage from "@/pages/RegistroAtrasosPage";
 import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
 import RelatoriosPage from "@/pages/RelatoriosPage";
-import PortalAlunoPage from "@/pages/PortalAlunoPage";
 import DashboardGestorPage from "@/pages/DashboardGestorPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import DisciplinasPage from "@/pages/DisciplinasPage";
 import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
-import MeusBeneficiosPage from "@/pages/aluno/MeusBeneficiosPage";
-import PerfilAlunoPage from "@/pages/aluno/PerfilAlunoPage";
+
 
 import { triggerSync } from "@/lib/SyncManager";
 import { toast } from "@/components/ui/use-toast";
@@ -148,20 +145,18 @@ const App = () => {
                         <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
                         <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
                         <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
-                        <Route path="/aluno/:alunoId/perfil" element={<PerfilAlunoPage />} />
+
 
                         <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
                         <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />
                         <Route path="/atestados" element={<AtestadosPage />} />
-                        <Route path="/alertas" element={<AlertasPage />} />
                         <Route path="/disciplinas" element={<DisciplinasPage />} />
                         <Route path="/registro-atrasos" element={<RegistroAtrasosPage />} />
 
                         {/* Perfil */}
                         <Route path="/perfil-escola" element={<PerfilEscolaPage />} />
 
-                        {/* Portal Aluno - Protected but specific redirect logic if wrong? Portal Aluno page accessible if auth as Aluno */}
-                        <Route path="/portal-aluno" element={<PortalAlunoPage />} />
+
                       </Route>
                     </Route>
 
@@ -182,10 +177,7 @@ const App = () => {
                       </Route>
                     </Route>
 
-                    {/* Benefícios do Aluno */}
-                    <Route element={<ProtectedRoute allowedTypes={['aluno']} />}>
-                      <Route path="/aluno/beneficios" element={<MeusBeneficiosPage />} />
-                    </Route>
+
 
                     <Route path="*" element={<Layout showSidebar={false}><NotFound /></Layout>} />
                   </Routes>
