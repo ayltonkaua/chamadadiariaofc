@@ -243,13 +243,37 @@ const ChamadaPage: React.FC = () => {
       setAtestados(mapaAtestados);
       setAtestadosAprovados(alunosComAtestadoAprovado);
 
+      // IMPORTANTE: Inicializar presenças na primeira carga (todos presentes por padrão)
+      const dateStr = format(date, "yyyy-MM-dd");
+      const rascunho = await getSession(turmaId, dateStr);
+      const mapaPresencas: Record<string, PresencaStatus> = {};
+
+      if (rascunho && rascunho.turma_id === turmaId) {
+        Object.entries(rascunho.presencas).forEach(([id, status]) => {
+          if (status) mapaPresencas[id] = status as PresencaStatus;
+        });
+        listaAlunos.forEach(a => { if (!mapaPresencas[a.id]) mapaPresencas[a.id] = "presente"; });
+      } else {
+        // Marca todos como presentes por padrão
+        listaAlunos.forEach(a => mapaPresencas[a.id] = "presente");
+      }
+
+      // Auto-marca alunos com atestado APROVADO
+      alunosComAtestadoAprovado.forEach(alunoId => {
+        if (listaAlunos.some(al => al.id === alunoId)) {
+          mapaPresencas[alunoId] = "atestado";
+        }
+      });
+
+      setPresencas(mapaPresencas);
+
     } catch (err) {
       console.error(err);
       toast({ variant: "destructive", title: "Erro ao carregar dados" });
     } finally {
       setIsLoading(false);
     }
-  }, [turmaId, user]);
+  }, [turmaId, user, date]);
 
   // Carregar apenas dados da data selecionada (rascunho) - rápido
   const carregarDadosDaData = useCallback(async () => {
