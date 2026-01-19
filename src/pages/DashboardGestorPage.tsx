@@ -101,7 +101,13 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 }
 
 // --- PÁGINA PRINCIPAL ---
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
+
 export default function DashboardGestorPage() {
+  const { config } = useEscolaConfig();
+  const corPrimaria = config?.cor_primaria || "#3B82F6"; // Azul padrão se falhar
+  const corSecundaria = config?.cor_secundaria || "#F59E0B";
+
   // --- USANDO CUSTOM HOOK ---
   const {
     kpis,
@@ -152,7 +158,7 @@ export default function DashboardGestorPage() {
   if (loading) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-gray-50/50">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <Loader2 className="h-10 w-10 animate-spin" style={{ color: corPrimaria }} />
         <p className="text-gray-500 font-medium animate-pulse">{statusMsg}</p>
         <Button variant="link" onClick={() => window.location.reload()} className="text-xs text-gray-400 mt-4">
           Demorando muito? Recarregar
@@ -254,10 +260,14 @@ export default function DashboardGestorPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={filteredTurmaData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="turma_nome" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={12} tickLine={false} axisLine={false} unit="%" />
-                  <Tooltip cursor={{ fill: '#F3F4F6' }} contentStyle={{ borderRadius: "8px" }} />
-                  <Bar dataKey="taxa_presenca" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Presença" />
+                  <XAxis dataKey="turma_nome" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} minTickGap={5} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} unit="%" width={35} />
+                  <Tooltip
+                    cursor={{ fill: '#F3F4F6' }}
+                    contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                    labelStyle={{ color: "#374151", fontWeight: 600, marginBottom: "5px" }}
+                  />
+                  <Bar dataKey="taxa_presenca" fill={corPrimaria} radius={[6, 6, 0, 0]} name="Presença" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -275,10 +285,14 @@ export default function DashboardGestorPage() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartAusenciasSemana} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="dia_semana_nome" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} unit="%" />
-                <Tooltip cursor={{ fill: '#F3F4F6' }} contentStyle={{ borderRadius: "8px" }} />
-                <Bar dataKey="percentual_faltas" fill="#F59E0B" radius={[4, 4, 0, 0]} name="% Faltas" />
+                <XAxis dataKey="dia_semana_nome" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} />
+                <YAxis fontSize={11} tickLine={false} axisLine={false} unit="%" width={35} />
+                <Tooltip
+                  cursor={{ fill: '#F3F4F6' }}
+                  contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                  labelStyle={{ color: "#374151", fontWeight: 600, marginBottom: "5px" }}
+                />
+                <Bar dataKey="percentual_faltas" fill={corSecundaria} radius={[6, 6, 0, 0]} name="% Faltas" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

@@ -144,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   );
 
   return (
-    <div className="flex h-screen w-full bg-gray-50 overflow-hidden">
+    <div className="flex h-[100dvh] w-full bg-gray-50 overflow-hidden">
       <aside className="hidden md:flex w-64 flex-col border-r bg-white shadow-sm z-20">
         <SidebarContent />
       </aside>
@@ -165,13 +165,13 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
           </Sheet>
 
           <div className="flex-1 flex items-center justify-center mr-8">
-            <h1 className="font-bold text-lg text-purple-700 text-center truncate">
+            <h1 className="font-bold text-lg text-center truncate" style={{ color: config?.cor_primaria || '#7c3aed' }}>
               {config?.nome || 'Chamada Diária'}
             </h1>
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 scroll-smooth">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 scroll-smooth overscroll-y-contain">
           {children}
         </main>
       </div>

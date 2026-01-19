@@ -178,7 +178,26 @@ const OfflineManager: React.FC = () => {
     setIsDownloading(true);
 
     try {
-      // 🚫 DO NOT ACCESS SUPABASE HERE - Use dataProvider only
+      // Verificar se já tem dados em cache
+      const { getSchoolCache } = await import('@/lib/offlineStorage');
+      const existingCache = await getSchoolCache(user.escola_id);
+
+      if (existingCache && existingCache.turmas && existingCache.turmas.length > 0) {
+        const cacheAge = Date.now() - (existingCache.cached_at || 0);
+        const cacheAgeMinutes = Math.round(cacheAge / (1000 * 60));
+
+        // Se cache tem menos de 30 minutos, apenas informa que já está atualizado
+        if (cacheAgeMinutes < 30) {
+          toast({
+            title: "Dados já baixados",
+            description: `${existingCache.turmas.length} turmas e ${existingCache.alunos?.length || 0} alunos já estão disponíveis offline. Baixado há ${cacheAgeMinutes} min.`,
+          });
+          setIsDownloading(false);
+          return;
+        }
+      }
+
+      // Baixar novos dados
       const { syncSchoolCache } = await import('@/lib/dataProvider');
       const result = await syncSchoolCache(user.escola_id, user.id);
 
@@ -189,7 +208,7 @@ const OfflineManager: React.FC = () => {
       }
 
       toast({
-        title: "Dados baixados!",
+        title: "Dados atualizados!",
         description: `${result.turmasCount} turmas e ${result.alunosCount} alunos prontos para uso offline.`,
         className: "bg-green-100 border-green-500 text-green-800"
       });

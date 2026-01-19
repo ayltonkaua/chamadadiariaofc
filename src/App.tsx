@@ -140,8 +140,6 @@ const App = () => {
                         <Route path="/dashboard" element={<Dashboard />} />
 
                         {/* Funcionalidades Comuns */}
-                        <Route path="/chamadas/:turmaId" element={<ChamadaPage />} />
-                        <Route path="/turmas/:turmaId/chamada" element={<ChamadaPage />} />
                         <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
                         <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
                         <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
@@ -158,6 +156,10 @@ const App = () => {
 
 
                       </Route>
+
+                      {/* Chamada - Layout limpo sem sidebar para foco total */}
+                      <Route path="/chamadas/:turmaId" element={<Layout showSidebar={false}><ChamadaPage /></Layout>} />
+                      <Route path="/turmas/:turmaId/chamada" element={<Layout showSidebar={false}><ChamadaPage /></Layout>} />
                     </Route>
 
                     {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}

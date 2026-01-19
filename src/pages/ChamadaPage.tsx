@@ -83,7 +83,7 @@ const ChamadaPage: React.FC = () => {
   const [atestados, setAtestados] = useState<Record<string, Atestado[]>>({});
   const [turmaNome, setTurmaNome] = useState<string>("");
   const [date, setDate] = useState<Date>(new Date());
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarCollapsed, setCalendarCollapsed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const isSubmittingRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,6 +91,11 @@ const ChamadaPage: React.FC = () => {
   const [localEscolaId, setLocalEscolaId] = useState<string | null>(null);
   const hasChangesRef = useRef(false);
   const [showAtestadoAlert, setShowAtestadoAlert] = useState(false);
+
+  // Refs para valores atuais (evita stale closure no cleanup)
+  const presencasRef = useRef<Record<string, PresencaStatus>>({});
+  const dateRef = useRef<Date>(new Date());
+  const turmaIdRef = useRef<string | undefined>(turmaId);
 
   // Modal observação
   const [showObservacao, setShowObservacao] = useState<{ alunoId: string; alunoNome: string } | null>(null);
@@ -101,16 +106,31 @@ const ChamadaPage: React.FC = () => {
   const corPrimaria = config?.cor_primaria || "#6D28D9";
   const hasChangesToastShownRef = useRef(false);
 
-  // Salvar rascunho APENAS ao sair da página (não a cada mudança)
+  // Manter refs sincronizados com state
   useEffect(() => {
-    // Cleanup function - chamada quando componente desmonta
+    presencasRef.current = presencas;
+  }, [presencas]);
+
+  useEffect(() => {
+    dateRef.current = date;
+  }, [date]);
+
+  useEffect(() => {
+    turmaIdRef.current = turmaId;
+  }, [turmaId]);
+
+  // Salvar rascunho ao sair da página
+  useEffect(() => {
     return () => {
-      if (hasChangesRef.current && turmaId && Object.keys(presencas).length > 0 && !hasChangesToastShownRef.current) {
-        const dateStr = format(date, "yyyy-MM-dd");
-        upsertSession(turmaId, dateStr, presencas);
+      const currentPresencas = presencasRef.current;
+      const currentDate = dateRef.current;
+      const currentTurmaId = turmaIdRef.current;
+
+      if (hasChangesRef.current && currentTurmaId && Object.keys(currentPresencas).length > 0 && !hasChangesToastShownRef.current) {
+        const dateStr = format(currentDate, "yyyy-MM-dd");
+        upsertSession(currentTurmaId, dateStr, currentPresencas);
         hasChangesToastShownRef.current = true;
-        // O toast será mostrado pelo navegador antes de sair
-        toast({ title: "📝 Rascunho salvo", description: "Sua chamada foi salva como rascunho." });
+        toast({ title: "Rascunho salvo", description: "Suas alterações foram salvas automaticamente." });
       }
     };
   }, []);
@@ -136,11 +156,15 @@ const ChamadaPage: React.FC = () => {
     };
   }, []);
 
-  // Carregar dados
-  const carregarDados = useCallback(async () => {
+  // Estado para indicar carregamento apenas da data (mais leve)
+  const [isLoadingDate, setIsLoadingDate] = useState(false);
+  const alunosCacheRef = useRef<Aluno[]>([]);
+  const atestadosCacheRef = useRef<{ mapa: Record<string, Atestado[]>; aprovados: Set<string> } | null>(null);
+
+  // Carregar dados iniciais (alunos, turma, atestados) - executado apenas uma vez
+  const carregarDadosIniciais = useCallback(async () => {
     if (!turmaId) return;
     setIsLoading(true);
-    hasChangesRef.current = false;
 
     try {
       let listaAlunos: Aluno[] = [];
@@ -173,21 +197,7 @@ const ChamadaPage: React.FC = () => {
       }
       setLocalEscolaId(escolaIdEncontrado);
 
-      // Recuperar rascunho
-      const dateStr = format(date, "yyyy-MM-dd");
-      const rascunho = await getSession(turmaId, dateStr);
-      const mapaPresencas: Record<string, PresencaStatus> = {};
-
-      if (rascunho && rascunho.turma_id === turmaId) {
-        Object.entries(rascunho.presencas).forEach(([id, status]) => {
-          if (status) mapaPresencas[id] = status as PresencaStatus;
-        });
-        listaAlunos.forEach(a => { if (!mapaPresencas[a.id]) mapaPresencas[a.id] = "presente"; });
-      } else {
-        listaAlunos.forEach(a => mapaPresencas[a.id] = "presente");
-      }
-
-      // Atestados - buscar APENAS aprovados
+      // Atestados - buscar APENAS aprovados (cache para todas as datas)
       let mapaAtestados: Record<string, Atestado[]> = {};
       const alunosComAtestadoAprovado = new Set<string>();
       const escolaIdParaAtestados = escolaIdEncontrado || user?.escola_id;
@@ -195,12 +205,8 @@ const ChamadaPage: React.FC = () => {
       try {
         if (navigator.onLine) {
           const atestadosVigentes = await atestadosService.getAtestadosVigentes();
-
-          // Filtrar APENAS aprovados
           const aprovados = atestadosVigentes.filter(a => a.status === 'aprovado');
           mapaAtestados = atestadosService.groupByAluno(aprovados);
-
-          // Marcar alunos com atestado aprovado
           aprovados.forEach(a => alunosComAtestadoAprovado.add(a.aluno_id));
 
           if (escolaIdParaAtestados && atestadosVigentes.length > 0) {
@@ -226,21 +232,16 @@ const ChamadaPage: React.FC = () => {
             }
           }
         }
-
-        // Auto-marca alunos com atestado APROVADO
-        alunosComAtestadoAprovado.forEach(alunoId => {
-          if (listaAlunos.some(al => al.id === alunoId)) {
-            mapaPresencas[alunoId] = "atestado";
-          }
-        });
-
-        setAtestadosAprovados(alunosComAtestadoAprovado);
       } catch { }
 
+      // Ordenar e cachear alunos
       listaAlunos.sort((a, b) => a.nome.localeCompare(b.nome));
+      alunosCacheRef.current = listaAlunos;
+      atestadosCacheRef.current = { mapa: mapaAtestados, aprovados: alunosComAtestadoAprovado };
+
       setAlunos(listaAlunos);
-      setPresencas(mapaPresencas);
       setAtestados(mapaAtestados);
+      setAtestadosAprovados(alunosComAtestadoAprovado);
 
     } catch (err) {
       console.error(err);
@@ -248,11 +249,59 @@ const ChamadaPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [turmaId, user, date]);
+  }, [turmaId, user]);
 
+  // Carregar apenas dados da data selecionada (rascunho) - rápido
+  const carregarDadosDaData = useCallback(async () => {
+    if (!turmaId || alunosCacheRef.current.length === 0) return;
+    setIsLoadingDate(true);
+    hasChangesRef.current = false;
+
+    try {
+      const listaAlunos = alunosCacheRef.current;
+      const alunosComAtestadoAprovado = atestadosCacheRef.current?.aprovados || new Set<string>();
+
+      // Recuperar rascunho da data
+      const dateStr = format(date, "yyyy-MM-dd");
+      const rascunho = await getSession(turmaId, dateStr);
+      const mapaPresencas: Record<string, PresencaStatus> = {};
+
+      if (rascunho && rascunho.turma_id === turmaId) {
+        Object.entries(rascunho.presencas).forEach(([id, status]) => {
+          if (status) mapaPresencas[id] = status as PresencaStatus;
+        });
+        listaAlunos.forEach(a => { if (!mapaPresencas[a.id]) mapaPresencas[a.id] = "presente"; });
+      } else {
+        listaAlunos.forEach(a => mapaPresencas[a.id] = "presente");
+      }
+
+      // Auto-marca alunos com atestado APROVADO
+      alunosComAtestadoAprovado.forEach(alunoId => {
+        if (listaAlunos.some(al => al.id === alunoId)) {
+          mapaPresencas[alunoId] = "atestado";
+        }
+      });
+
+      setPresencas(mapaPresencas);
+
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingDate(false);
+    }
+  }, [turmaId, date]);
+
+  // Carregar dados iniciais na montagem
   useEffect(() => {
-    carregarDados();
-  }, [carregarDados]);
+    carregarDadosIniciais();
+  }, [carregarDadosIniciais]);
+
+  // Carregar dados da data quando muda (rápido, usa cache)
+  useEffect(() => {
+    if (alunosCacheRef.current.length > 0) {
+      carregarDadosDaData();
+    }
+  }, [date, carregarDadosDaData]);
 
   // Auto-save rascunho silencioso (sem toast)
   useEffect(() => {
@@ -288,7 +337,7 @@ const ChamadaPage: React.FC = () => {
     setPresencas(novasPresencas);
     hasChangesRef.current = false;
 
-    toast({ title: "🗑️ Rascunho limpo", description: "Todos marcados como presentes." });
+    toast({ title: "Rascunho redefinido", description: "Status de presença restaurado para o padrão." });
   }, [turmaId, date, alunos, atestadosAprovados]);
 
   // Toggle status com verificação de atestado aprovado
@@ -347,9 +396,9 @@ const ChamadaPage: React.FC = () => {
       hasChangesRef.current = false;
 
       if (result.syncTriggered) {
-        toast({ title: "✅ Chamada salva!", className: "bg-green-600 text-white" });
+        toast({ title: "Chamada Registrada", description: "Dados sincronizados com sucesso.", className: "bg-green-600 text-white border-green-600" });
       } else {
-        toast({ title: "📱 Salvo offline", description: "Será enviado quando conectar." });
+        toast({ title: "Salvo Localmente", description: "Será sincronizado quando houver internet." });
       }
 
       navigate("/dashboard");
@@ -405,7 +454,7 @@ const ChamadaPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header FIXO */}
       <div className="bg-white border-b fixed top-0 left-0 right-0 z-20 shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-4">
+        <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
@@ -419,19 +468,15 @@ const ChamadaPage: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Botão Calendário */}
-              <Button variant="outline" size="sm" className="gap-1" onClick={() => setCalendarOpen(true)}>
-                <CalendarIcon className="h-4 w-4" />
-                <span>{format(date, "dd/MM")}</span>
-              </Button>
-
               {isOnline ? (
                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1">
                   <Wifi size={12} />
+                  <span className="hidden sm:inline">Online</span>
                 </Badge>
               ) : (
                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
                   <WifiOff size={12} />
+                  <span className="hidden sm:inline">Offline</span>
                 </Badge>
               )}
             </div>
@@ -441,33 +486,88 @@ const ChamadaPage: React.FC = () => {
 
       {/* Conteúdo com padding para header fixo e footer fixo */}
       <div className="pt-20 pb-28">
-        {/* Data selecionada */}
-        <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm">
+        {/* Layout com Calendário Fixo */}
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          {/* Botão para colapsar/expandir calendário */}
+          <button
+            onClick={() => setCalendarCollapsed(!calendarCollapsed)}
+            className="flex items-center justify-between w-full bg-white p-3 rounded-lg border shadow-sm mb-3 hover:bg-gray-50 transition-colors"
+          >
             <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">
+              <CalendarIcon className="h-5 w-5" style={{ color: corPrimaria }} />
+              <span className="text-sm font-semibold text-gray-700">
                 {format(date, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
               </span>
+              {isLoadingDate && (
+                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+              )}
               {format(date, "yyyy-MM-dd") !== format(new Date(), "yyyy-MM-dd") && (
-                <Badge variant="secondary" className="text-xs">Retroativa</Badge>
+                <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">Retroativa</Badge>
               )}
             </div>
-            {/* Botão Desfazer */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLimparRascunho}
-              className="text-orange-600 border-orange-300 hover:bg-orange-50 gap-2"
-            >
-              <RotateCcw className="h-4 w-4" />
-              <span>Desfazer</span>
-            </Button>
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">
+                {calendarCollapsed ? "Mostrar calendário" : "Ocultar calendário"}
+              </span>
+              <svg
+                className={`h-4 w-4 text-gray-400 transition-transform ${calendarCollapsed ? '' : 'rotate-180'}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Calendário Fixo Sempre Visível */}
+          {!calendarCollapsed && (
+            <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div className="flex-1 flex justify-center w-full">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={(newDate) => {
+                      if (newDate) {
+                        setDate(newDate);
+                      }
+                    }}
+                    locale={ptBR}
+                    disabled={(d) => d > new Date()}
+                    className="rounded-md border-0"
+                  />
+                </div>
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                  {/* Botão Hoje */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDate(new Date())}
+                    className="gap-2 justify-center"
+                    disabled={format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")}
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    Ir para Hoje
+                  </Button>
+                  {/* Botão Desfazer */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLimparRascunho}
+                    className="text-orange-600 border-orange-300 hover:bg-orange-50 gap-2 justify-center"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Limpar Rascunho
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Instruções */}
-        <div className="max-w-2xl mx-auto px-4 pb-3">
+        <div className="max-w-4xl mx-auto px-4 pb-3">
           <div className="flex items-center gap-2 text-sm text-gray-500 bg-blue-50 p-3 rounded-lg border border-blue-100">
             <Info className="h-4 w-4 text-blue-500 shrink-0" />
             <span>Toque em um aluno para alternar entre <strong className="text-green-600">presente</strong> e <strong className="text-red-600">falta</strong></span>
@@ -475,7 +575,7 @@ const ChamadaPage: React.FC = () => {
         </div>
 
         {/* Contadores */}
-        <div className="max-w-2xl mx-auto px-4 mb-4">
+        <div className="max-w-4xl mx-auto px-4 mb-4">
           <div className="grid grid-cols-3 gap-2">
             <Card className="border-green-200 bg-green-50">
               <CardContent className="p-3 text-center">
@@ -508,7 +608,7 @@ const ChamadaPage: React.FC = () => {
         </div>
 
         {/* Lista de Alunos */}
-        <div className="max-w-2xl mx-auto px-4">
+        <div className="max-w-4xl mx-auto px-4">
           <div className="space-y-2">
             {alunos.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
@@ -589,7 +689,7 @@ const ChamadaPage: React.FC = () => {
 
         {/* Footer Fixo */}
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-30 p-4 safe-area-bottom">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <Button
               onClick={handleSalvar}
               disabled={isSaving || alunos.length === 0}
@@ -611,32 +711,6 @@ const ChamadaPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Modal Calendário */}
-        <Dialog open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5" />
-                Selecionar Data
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex justify-center py-2">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(newDate) => {
-                  if (newDate) {
-                    setDate(newDate);
-                    setCalendarOpen(false);
-                  }
-                }}
-                locale={ptBR}
-                disabled={(d) => d > new Date()}
-                className="rounded-md border"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
 
         {/* Alert Dialog para atestado aprovado */}
         <AlertDialog open={showAtestadoAlert} onOpenChange={setShowAtestadoAlert}>

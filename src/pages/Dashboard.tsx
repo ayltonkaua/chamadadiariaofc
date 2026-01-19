@@ -8,6 +8,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InfoCards } from "@/components/dashboard/InfoCards";
 import { TurmasCards } from "@/components/TurmasCards";
@@ -20,9 +21,11 @@ import { turmaService, type TurmaComContagem } from "@/domains";
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const { config } = useEscolaConfig();
+  const corPrimaria = config?.cor_primaria || "#6D28D9";
   const navigate = useNavigate();
-  const [tabValue, setTabValue] = useState("turmas");
-  const [turnoTab, setTurnoTab] = useState("todos");
+  // Inicializa a tab como vazia, será definida após carregar turmas
+  const [turnoTab, setTurnoTab] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [todasTurmas, setTodasTurmas] = useState<TurmaComContagem[]>([]);
   const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
@@ -102,22 +105,33 @@ const Dashboard: React.FC = () => {
   const greeting = getGreeting();
   const GIcon = greeting.icon;
 
-  const turnoTabs = [
-    { value: "todos", label: "Todas", count: todasTurmas.length },
-    { value: "manha", label: "Manhã", count: grouped.manha.length },
-    { value: "tarde", label: "Tarde", count: grouped.tarde.length },
-    { value: "noite", label: "Noite", count: grouped.noite.length },
+  const allTurnos = [
+    { value: "manha", label: "Manhã", count: grouped.manha?.length || 0 },
+    { value: "tarde", label: "Tarde", count: grouped.tarde?.length || 0 },
+    { value: "noite", label: "Noite", count: grouped.noite?.length || 0 },
+    { value: "integral", label: "Integral", count: grouped.integral?.length || 0 },
   ];
 
-  const turmasFiltradas = turnoTab === "todos" ? todasTurmas : grouped[turnoTab as keyof typeof grouped] || [];
+  // Filtra apenas turnos com turmas
+  const turnosAtivos = allTurnos.filter(t => t.count > 0);
+
+  // Define tab inicial se não definida ou se a atual ficou vazia
+  useEffect(() => {
+    if (turnosAtivos.length > 0) {
+      if (!turnoTab || !turnosAtivos.find(t => t.value === turnoTab)) {
+        setTurnoTab(turnosAtivos[0].value);
+      }
+    }
+  }, [turnosAtivos, turnoTab]);
+
+  const turmasFiltradas = turnoTab
+    ? (grouped[turnoTab as keyof typeof grouped] || [])
+    : [];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen flex-col gap-4 bg-gray-50">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-purple-200 rounded-full animate-pulse"></div>
-          <Loader2 className="h-8 w-8 animate-spin text-purple-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
-        </div>
+        <Loader2 className="h-10 w-10 animate-spin" style={{ color: corPrimaria }} />
         <p className="text-gray-500 font-medium">Carregando seus dados...</p>
       </div>
     );
@@ -165,8 +179,8 @@ const Dashboard: React.FC = () => {
           <div className="p-4 sm:p-6 border-b border-gray-100">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-xl">
-                  <LayoutGrid className="h-5 w-5 text-purple-600" />
+                <div className="p-2 rounded-xl bg-opacity-10" style={{ backgroundColor: `${corPrimaria}15` }}>
+                  <LayoutGrid className="h-5 w-5" style={{ color: corPrimaria }} />
                 </div>
                 <div>
                   <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Minhas Turmas</h2>
@@ -175,15 +189,17 @@ const Dashboard: React.FC = () => {
               </div>
 
               {/* Turno Filter */}
-              <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-                {turnoTabs.map((tab) => (
+              {/* Turno Filter */}
+              <div className="flex gap-1 overflow-x-auto pb-2 sm:pb-0">
+                {turnosAtivos.map((tab) => (
                   <button
                     key={tab.value}
                     onClick={() => setTurnoTab(tab.value)}
-                    className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap ${turnoTab === tab.value
-                      ? "bg-white text-purple-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                    className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all whitespace-nowrap border ${turnoTab === tab.value
+                      ? "bg-white shadow-sm border-gray-200"
+                      : "text-gray-500 border-transparent hover:bg-gray-50"
                       }`}
+                    style={turnoTab === tab.value ? { color: corPrimaria, borderColor: corPrimaria } : {}}
                   >
                     {tab.label} ({tab.count})
                   </button>

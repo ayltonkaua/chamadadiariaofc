@@ -21,11 +21,14 @@ import AddEditStudentDialog from "@/components/alunos/AddEditStudentDialog";
 import { ImportarNotasDialog } from "@/components/notas/ImportarNotasDialog"; // MODIFICADO: Importação adicionada
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 
 const GerenciarAlunosPage: React.FC = () => {
   const { turmaId } = useParams<{ turmaId: string }>();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { config } = useEscolaConfig();
+  const corPrimaria = config?.cor_primaria || "#6D28D9";
   // Lógica de permissão (Professor e Aluno não são managers)
   const isManager = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin'].includes(user?.role || '');
   const [alunoParaRemover, setAlunoParaRemover] = useState<{
@@ -109,7 +112,7 @@ const GerenciarAlunosPage: React.FC = () => {
             <ArrowLeft size={22} />
           </Button>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800 text-center sm:text-left w-full">
-            Gerenciar Alunos{turmaInfo ? ` - ${turmaInfo.nome}` : ""}
+            Gerenciar Alunos {turmaInfo ? <span style={{ color: corPrimaria }}>- {turmaInfo.nome}</span> : ""}
           </h1>
         </div>
 

@@ -157,13 +157,16 @@ export const turmaService = {
             manha: [],
             tarde: [],
             noite: [],
+            integral: [],
             outros: []
         };
 
         for (const turma of turmas) {
             const turno = (turma.turno || '').toLowerCase();
 
-            if (turno.includes('manhã') || turno.includes('manha') || turno.includes('matutino')) {
+            if (turno.includes('integral')) {
+                groups.integral.push(turma);
+            } else if (turno.includes('manhã') || turno.includes('manha') || turno.includes('matutino')) {
                 groups.manha.push(turma);
             } else if (turno.includes('tarde') || turno.includes('vespertino')) {
                 groups.tarde.push(turma);
