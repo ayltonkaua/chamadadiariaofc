@@ -77,7 +77,8 @@ export type {
     TurmaMetadata,
     PresencaRecente,
     DashboardGestorData,
-    UltimaPresenca
+    UltimaPresenca,
+    FrequenciaDisciplinaData
 } from './gestor';
 
 // Acesso (User Access Management)
@@ -91,3 +92,14 @@ export type { RegistroAtraso, RegistroAtrasoInsert, RegistroAtrasoFormatado } fr
 // Programas Sociais (Social Programs)
 export { programasService } from './programas';
 export type { ProgramaSocialRow, ProgramaRegistro, MappingColumns } from './programas';
+
+// Ano Letivo (Academic Year Management)
+export { anoLetivoService } from './anoLetivo';
+export type {
+    AnoLetivo,
+    AnoLetivoInsert,
+    AnoLetivoUpdate,
+    AnoLetivoStatus,
+    AnoLetivoComStats,
+    MigracaoResult
+} from './anoLetivo';

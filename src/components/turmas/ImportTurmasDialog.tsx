@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import { Loader2, FileUp, ArrowRight, ArrowLeft, Sun, Moon, Sunset, Clock, Check
 interface AlunoImportado {
   nome: string;
   matricula: string;
+  data_nascimento?: string;
 }
 
 interface DadosBrutos {
@@ -52,6 +53,11 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
     return null; // Don't render anything for non-managers
   }
 
+  // Estado interno para controle quando não for controlado externamente
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = externalOpen !== undefined;
+  const open = isControlled ? externalOpen : internalOpen;
+
   const [etapa, setEtapa] = useState<EtapaImportacao>('upload');
   const [loading, setLoading] = useState(false);
   const [dadosBrutos, setDadosBrutos] = useState<DadosBrutos | null>(null);
@@ -60,11 +66,16 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
   const [turno, setTurno] = useState<Turno>("Manhã");
   const [colunaMatricula, setColunaMatricula] = useState<string>("0");
   const [colunaNome, setColunaNome] = useState<string>("1");
+  const [colunaDataNascimento, setColunaDataNascimento] = useState<string>("-1"); // -1 = não usar
   const [linhaInicio, setLinhaInicio] = useState<number>(2);
   const [alunosProcessados, setAlunosProcessados] = useState<AlunoImportado[]>([]);
 
   const handleOpenChange = (newOpen: boolean) => {
-    onOpenChange?.(newOpen);
+    if (isControlled) {
+      onOpenChange?.(newOpen);
+    } else {
+      setInternalOpen(newOpen);
+    }
     if (!newOpen) {
       setTimeout(() => {
         setEtapa('upload');
@@ -124,13 +135,29 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
     if (!dadosBrutos) return;
     const idxMatricula = parseInt(colunaMatricula);
     const idxNome = parseInt(colunaNome);
+    const idxDataNascimento = parseInt(colunaDataNascimento);
     const alunos: AlunoImportado[] = [];
 
     for (let i = linhaInicio; i < dadosBrutos.linhas.length; i++) {
       const row = dadosBrutos.linhas[i];
       const matricula = String(row[idxMatricula] || "").trim();
       const nome = String(row[idxNome] || "").trim();
-      if (matricula && nome) alunos.push({ matricula, nome });
+      let dataNascimento: string | undefined = undefined;
+
+      if (idxDataNascimento >= 0 && row[idxDataNascimento]) {
+        const rawDate = row[idxDataNascimento];
+        // Tentar converter número Excel para data
+        if (typeof rawDate === 'number') {
+          const excelDate = new Date((rawDate - 25569) * 86400 * 1000);
+          dataNascimento = excelDate.toISOString().split('T')[0];
+        } else {
+          dataNascimento = String(rawDate).trim();
+        }
+      }
+
+      if (matricula && nome) {
+        alunos.push({ matricula, nome, data_nascimento: dataNascimento });
+      }
     }
 
     if (alunos.length === 0) {
@@ -246,7 +273,7 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
           <h4 className="font-medium mb-4 flex items-center gap-2">
             📊 Mapeamento de Colunas
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <Label>Coluna Matrícula *</Label>
               <Select value={colunaMatricula} onValueChange={setColunaMatricula}>
@@ -269,6 +296,22 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  {colunas.map((col, idx) => (
+                    <SelectItem key={idx} value={String(idx)}>
+                      Coluna {idx + 1}: {String(col).slice(0, 20) || `(vazia)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Coluna Data Nasc. (opcional)</Label>
+              <Select value={colunaDataNascimento} onValueChange={setColunaDataNascimento}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Não usar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-1">— Não importar —</SelectItem>
                   {colunas.map((col, idx) => (
                     <SelectItem key={idx} value={String(idx)}>
                       Coluna {idx + 1}: {String(col).slice(0, 20) || `(vazia)`}
@@ -353,6 +396,7 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
         </div>
         <p className="text-sm text-green-700">
           <strong>{alunosProcessados.length}</strong> alunos serão importados para a turma <strong>{nomeTurma}</strong>
+          {parseInt(colunaDataNascimento) >= 0 && ' (com data de nascimento)'}
         </p>
       </div>
 
@@ -363,6 +407,7 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
               <TableHead className="w-12">#</TableHead>
               <TableHead>Matrícula</TableHead>
               <TableHead>Nome</TableHead>
+              {parseInt(colunaDataNascimento) >= 0 && <TableHead>Data Nasc.</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -371,6 +416,9 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
                 <TableCell className="font-mono text-xs">{idx + 1}</TableCell>
                 <TableCell className="font-mono">{aluno.matricula}</TableCell>
                 <TableCell>{aluno.nome}</TableCell>
+                {parseInt(colunaDataNascimento) >= 0 && (
+                  <TableCell className="text-sm text-gray-600">{aluno.data_nascimento || '—'}</TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -380,7 +428,16 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
   );
 
   return (
-    <Dialog open={externalOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {/* Botão trigger quando não controlado externamente */}
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <FileUp className="h-4 w-4" />
+            Importar Turma
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="w-[95vw] max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6 border-b shrink-0">
           <DialogTitle className="text-lg sm:text-xl">

@@ -26,6 +26,11 @@ interface Aluno {
   faltas: number;
   frequencia: number;
   turma_id: string;
+  nome_responsavel?: string;
+  telefone_responsavel?: string;
+  data_nascimento?: string;
+  endereco?: string;
+  [key: string]: any; // Allow additional fields
 }
 
 interface TurmaInfo {
@@ -100,7 +105,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
         ? Math.round((presentesHoje / totalRegistrosHoje) * 100)
         : undefined;
 
-      // 6. Process students with attendance stats
+      // 6. Process students with attendance stats - Include all fields from aluno
       const processedAlunos = alunosData.map((aluno) => {
         const stats = statsMap.get(aluno.id) || { total: 0, faltas: 0 };
         const frequencia = stats.total > 0
@@ -108,10 +113,7 @@ export function useAlunosTurma(turmaId?: string, campos: string[] = ["id", "nome
           : 100;
 
         return {
-          id: aluno.id,
-          nome: aluno.nome,
-          matricula: aluno.matricula,
-          turma_id: aluno.turma_id,
+          ...aluno, // Spread all fields from original aluno data
           faltas: stats.faltas,
           frequencia: Math.max(0, Math.min(100, frequencia))
         };

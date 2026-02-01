@@ -18,56 +18,90 @@ import type {
     TurmaMetadata,
     PresencaRecente,
     DashboardGestorData,
-    UltimaPresenca
+    UltimaPresenca,
+    FrequenciaDisciplinaData
 } from '../types/gestor.types';
 
 const log = logger.child('GestorService');
 
 /**
- * Helper function to call RPC with type coercion.
- * Called at runtime to ensure supabase is initialized.
+ * Helper function to call RPC with type coercion and error handling.
  */
-function callRpc(name: string, params?: Record<string, unknown>) {
-    return (supabase.rpc as (name: string, params?: Record<string, unknown>) => ReturnType<typeof supabase.rpc>)(name, params);
+async function safeCallRpc(name: string, params?: Record<string, unknown>) {
+    try {
+        const result = await (supabase.rpc as (name: string, params?: Record<string, unknown>) => ReturnType<typeof supabase.rpc>)(name, params);
+        return result;
+    } catch (e) {
+        log.warn(`RPC ${name} failed`, { error: String(e) });
+        return { data: null, error: e };
+    }
 }
 
 export const gestorService = {
     /**
      * Gets all dashboard data in parallel
      */
-    async getDashboardData(escolaId: string): Promise<DashboardGestorData> {
-        log.info('Loading dashboard data', { escolaId });
+    async getDashboardData(escolaId: string, filtroAnoLetivoId?: string): Promise<DashboardGestorData> {
+        log.info('Loading dashboard data', { escolaId, filtroAnoLetivoId });
+
+        // Safe RPC calls with error handling
+        const kpiPromise = safeCallRpc('get_escola_kpis', { _escola_id: escolaId });
+        const kpiAdminPromise = safeCallRpc('get_kpis_administrativos', { _escola_id: escolaId });
+        const comparativoPromise = safeCallRpc('get_comparativo_turmas', {
+            p_escola_id: escolaId,
+            p_ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
+        });
+        // Alunos em risco: Limite de 5 faltas (ajuste conforme regra da escola)
+        const riscoPromise = safeCallRpc('get_alunos_em_risco_anual', { limite_faltas: 5, _escola_id: escolaId });
+        const consecPromise = safeCallRpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId });
+        const obsPromise = safeCallRpc('get_ultimas_observacoes', { limite: 10, _escola_id: escolaId });
+        const freqPromise = safeCallRpc('get_frequencia_por_disciplina', {
+            p_escola_id: escolaId,
+            p_ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
+        });
+
+        // Direct Supabase queries - turmas table doesn't have 'ativo' column
+        const turmasPromise = supabase.from('turmas').select('id, nome, turno').eq('escola_id', escolaId).order('nome');
+        const presencasPromise = supabase.from('presencas').select('data_chamada, presente, turma_id, escola_id')
+            .gte('data_chamada', subDays(new Date(), 15).toISOString());
 
         const [
             kpiRes,
             kpiAdminRes,
-            turmaRes,
+            comparativoResult,
             riscoRes,
             consecRes,
             obsRes,
             turmasListRes,
-            presencasRes
+            presencasRes,
+            freqRes
         ] = await Promise.all([
-            callRpc('get_escola_kpis', { _escola_id: escolaId }),
-            callRpc('get_kpis_administrativos', { _escola_id: escolaId }),
-            callRpc('get_comparativo_turmas', { _escola_id: escolaId }),
-            callRpc('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: escolaId }),
-            callRpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId }),
-            callRpc('get_ultimas_observacoes', { limite: 10, _escola_id: escolaId }),
-            supabase.from('turmas').select('id, nome, turno').order('nome'),
-            supabase.from('presencas').select('data_chamada, presente, turma_id, escola_id')
-                .gte('data_chamada', subDays(new Date(), 15).toISOString())
+            kpiPromise,
+            kpiAdminPromise,
+            comparativoPromise,
+            riscoPromise,
+            consecPromise,
+            obsPromise,
+            turmasPromise,
+            presencasPromise,
+            freqPromise
         ]);
+
+        // Log errors for debugging
+        if (kpiRes.error) log.warn('get_escola_kpis failed', { error: String(kpiRes.error) });
+        if (comparativoResult.error) log.warn('get_comparativo_turmas failed', { error: String(comparativoResult.error) });
+        if (turmasListRes.error) log.warn('turmas query failed', { error: String(turmasListRes.error) });
 
         return {
             kpis: (kpiRes.data as unknown as KpiData) ?? null,
             kpisAdmin: (kpiAdminRes.data as unknown as KpiAdminData) ?? null,
-            turmaComparison: (turmaRes.data as unknown as TurmaComparisonData[]) ?? [],
+            turmaComparison: (comparativoResult.data as unknown as TurmaComparisonData[]) ?? [],
             alunosRisco: (riscoRes.data as unknown as AlunoRiscoData[]) ?? [],
             alunosConsecutivos: (consecRes.data as unknown as AlunoFaltasConsecutivasData[]) ?? [],
             ultimasObservacoes: (obsRes.data as unknown as UltimaObservacaoData[]) ?? [],
             turmasDisponiveis: (turmasListRes.data as TurmaMetadata[]) ?? [],
-            presencasRecentes: (presencasRes.data as PresencaRecente[]) ?? []
+            presencasRecentes: (presencasRes.data as PresencaRecente[]) ?? [],
+            frequenciaDisciplina: (freqRes.data as unknown as FrequenciaDisciplinaData[]) ?? []
         };
     },
 
@@ -77,7 +111,7 @@ export const gestorService = {
     async getUltimasPresencasAluno(alunoId: string): Promise<UltimaPresenca[]> {
         log.debug('Getting ultimas presencas', { alunoId });
 
-        const { data, error } = await callRpc('get_ultimas_presencas_aluno', {
+        const { data, error } = await safeCallRpc('get_ultimas_presencas_aluno', {
             p_aluno_id: alunoId
         });
 
@@ -93,7 +127,7 @@ export const gestorService = {
      * Gets escola KPIs only
      */
     async getKpis(escolaId: string): Promise<KpiData | null> {
-        const { data, error } = await callRpc('get_escola_kpis', { _escola_id: escolaId });
+        const { data, error } = await safeCallRpc('get_escola_kpis', { _escola_id: escolaId });
 
         if (error) {
             log.error('Failed to get KPIs', error);
@@ -107,7 +141,7 @@ export const gestorService = {
      * Gets admin KPIs (pending items count)
      */
     async getKpisAdmin(escolaId: string): Promise<KpiAdminData | null> {
-        const { data, error } = await callRpc('get_kpis_administrativos', { _escola_id: escolaId });
+        const { data, error } = await safeCallRpc('get_kpis_administrativos', { _escola_id: escolaId });
 
         if (error) {
             log.error('Failed to get admin KPIs', error);

@@ -24,6 +24,8 @@ interface Student {
   nome_responsavel?: string;
   telefone_responsavel?: string;
   user_id?: string; // ID do usuário vinculado (auth.users)
+  data_nascimento?: string; // Data de nascimento (YYYY-MM-DD)
+  endereco?: string; // Endereço do aluno
 }
 
 interface AddEditStudentDialogProps {
@@ -50,7 +52,9 @@ export default function AddEditStudentDialog({
   const [matricula, setMatricula] = useState("");
   const [nomeResponsavel, setNomeResponsavel] = useState("");
   const [telefoneResponsavel, setTelefoneResponsavel] = useState("");
-  
+  const [dataNascimento, setDataNascimento] = useState("");
+  const [endereco, setEndereco] = useState("");
+
   // Estados para exibição do vínculo de conta
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [loadingEmail, setLoadingEmail] = useState(false);
@@ -66,7 +70,9 @@ export default function AddEditStudentDialog({
       setMatricula(student.matricula || "");
       setNomeResponsavel(student.nome_responsavel || "");
       setTelefoneResponsavel(student.telefone_responsavel || "");
-      
+      setDataNascimento(student.data_nascimento || "");
+      setEndereco(student.endereco || "");
+
       // Busca o e-mail se o aluno tiver um usuário vinculado
       if (student.user_id) {
         fetchStudentEmail(student.user_id);
@@ -80,6 +86,8 @@ export default function AddEditStudentDialog({
       setMatricula("");
       setNomeResponsavel("");
       setTelefoneResponsavel("");
+      setDataNascimento("");
+      setEndereco("");
       setRegisteredEmail(null);
     }
   }, [student, open, isEditing]);
@@ -130,6 +138,8 @@ export default function AddEditStudentDialog({
         matricula,
         nome_responsavel: nomeResponsavel,
         telefone_responsavel: telefoneResponsavel,
+        data_nascimento: dataNascimento || null,
+        endereco: endereco || null,
       };
 
       if (isEditing && student?.id) {
@@ -196,7 +206,7 @@ export default function AddEditStudentDialog({
               <div className={`p-3 rounded-md border ${registeredEmail ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
                 <div className="flex items-center gap-2 mb-1">
                   {loadingEmail ? (
-                     <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
                   ) : registeredEmail ? (
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
                   ) : (
@@ -206,14 +216,14 @@ export default function AddEditStudentDialog({
                     {loadingEmail ? "Verificando vínculo..." : (registeredEmail ? "Aluno Registrado no App" : "Aluno Não Registrado")}
                   </span>
                 </div>
-                
+
                 {registeredEmail && (
                   <div className="flex items-center gap-2 mt-1 text-sm text-green-700 ml-7">
                     <Mail className="h-3 w-3" />
                     <span>{registeredEmail}</span>
                   </div>
                 )}
-                
+
                 {!registeredEmail && !loadingEmail && (
                   <p className="text-xs text-orange-700 ml-7">
                     Este aluno ainda não criou uma conta no aplicativo usando esta matrícula.
@@ -249,6 +259,17 @@ export default function AddEditStudentDialog({
                   required
                 />
               </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="data_nascimento">Data de Nascimento</Label>
+                <Input
+                  id="data_nascimento"
+                  type="date"
+                  value={dataNascimento}
+                  onChange={(e) => setDataNascimento(e.target.value)}
+                  placeholder="DD/MM/AAAA"
+                />
+              </div>
             </div>
 
             {/* Dados do responsável */}
@@ -274,6 +295,16 @@ export default function AddEditStudentDialog({
                   value={telefoneResponsavel}
                   onChange={(e) => setTelefoneResponsavel(e.target.value)}
                   placeholder="(XX) 9XXXX-XXXX"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="endereco">Endereço</Label>
+                <Input
+                  id="endereco"
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                  placeholder="Rua, número, bairro, cidade"
                 />
               </div>
             </div>

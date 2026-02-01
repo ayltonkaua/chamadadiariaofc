@@ -129,7 +129,8 @@ export const presencaService = {
                 payload.escolaId,
                 payload.turmaId,
                 payload.dataChamada,
-                registros
+                registros,
+                payload.disciplinaId
             );
         }
 

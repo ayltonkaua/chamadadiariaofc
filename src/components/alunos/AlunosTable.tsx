@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Edit, Trash2, MoreVertical, User } from "lucide-react";
+import { Trash2, MoreVertical, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -27,17 +27,17 @@ interface Aluno {
   turma_id: string;
   nome_responsavel?: string;
   telefone_responsavel?: string;
+  data_nascimento?: string;
   user_id?: string;
 }
 
 interface AlunosTableProps {
   alunos: Aluno[];
-  onEdit: (id: string) => void;
   onRemove: (aluno: Aluno) => void;
   canEdit?: boolean;
 }
 
-const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableProps) => {
+const AlunosTable = ({ alunos, onRemove, canEdit = false }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
 
   const filteredAlunos = alunos.filter(a =>
@@ -66,7 +66,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
                 <CardTitle className="text-base">{aluno.nome}</CardTitle>
                 <CardDescription>Matrícula: {aluno.matricula}</CardDescription>
                 <CardDescription className="mt-1">
-                  Responsável: {aluno.nome_responsavel || "--"}
+                  Nascimento: {aluno.data_nascimento ? new Date(aluno.data_nascimento).toLocaleDateString('pt-BR') : "--"}
                 </CardDescription>
               </div>
               <DropdownMenu>
@@ -84,9 +84,6 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
 
                   {canEdit && (
                     <>
-                      <DropdownMenuItem onClick={() => onEdit(aluno.id)}>
-                        <Edit className="mr-2 h-4 w-4" /> Editar
-                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => onRemove(aluno)} className="text-red-600">
                         <Trash2 className="mr-2 h-4 w-4" /> Excluir
@@ -107,7 +104,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Matrícula</TableHead>
-              <TableHead>Responsável</TableHead>
+              <TableHead>Data de Nascimento</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -116,7 +113,7 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
               <TableRow key={aluno.id}>
                 <TableCell className="font-medium">{aluno.nome}</TableCell>
                 <TableCell>{aluno.matricula}</TableCell>
-                <TableCell>{aluno.nome_responsavel || "--"}</TableCell>
+                <TableCell>{aluno.data_nascimento ? new Date(aluno.data_nascimento).toLocaleDateString('pt-BR') : "--"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     {/* Perfil */}
@@ -133,16 +130,6 @@ const AlunosTable = ({ alunos, onEdit, onRemove, canEdit = false }: AlunosTableP
 
                     {canEdit && (
                       <>
-                        {/* Editar */}
-                        <Button
-                          onClick={() => onEdit(aluno.id)}
-                          variant="ghost"
-                          size="icon"
-                          title="Editar Aluno"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-
                         {/* Excluir */}
                         <Button
                           onClick={() => onRemove(aluno)}

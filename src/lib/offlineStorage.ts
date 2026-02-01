@@ -57,6 +57,7 @@ export interface ChamadaAtom extends SyncableAtom {
     type: 'chamada';
     turma_id: string;
     data_chamada: string;
+    disciplina_id?: string;
     registros: RegistroPresenca[];
 }
 
@@ -94,6 +95,7 @@ export interface ChamadaSession {
     id: string;
     turma_id: string;
     data_chamada: string;
+    disciplina_id?: string;
     presencas: Record<string, 'presente' | 'falta' | 'atestado' | null>;
     created_at: number;
     updated_at: number;
@@ -295,13 +297,13 @@ async function countInStore(storeName: string): Promise<number> {
 // CHAMADA OPERATIONS
 // =============================================================================
 
-export function createChamadaAtom(escola_id: string, turma_id: string, data_chamada: string, registros: RegistroPresenca[]): ChamadaAtom {
+export function createChamadaAtom(escola_id: string, turma_id: string, data_chamada: string, registros: RegistroPresenca[], disciplina_id?: string): ChamadaAtom {
     const now = Date.now();
     return {
         id: generateUUID(),
         idempotencyKey: generateIdempotencyKey(escola_id, turma_id, data_chamada),
         type: 'chamada',
-        escola_id, turma_id, data_chamada, registros,
+        escola_id, turma_id, data_chamada, registros, disciplina_id,
         status: 'pending', attempts: 0, created_at: now, updated_at: now
     };
 }

@@ -26,23 +26,54 @@ export const turmaService = {
     },
 
     /**
-     * Finds all classes with student count
+     * Finds all classes with student count (filtered by active year or legacy)
      */
     async findWithCount(escolaId?: string): Promise<TurmaComContagem[]> {
         log.debug('Finding turmas with count');
 
-        const filters = escolaId
-            ? { eq: { escola_id: escolaId } as Partial<Turma> }
-            : undefined;
+        const { supabase } = await import('@/integrations/supabase/client');
 
-        const turmas = await turmasAdapter.findMany(filters, {
-            orderBy: { column: 'nome', ascending: true }
-        });
+        // 1. Buscar ID do ano letivo ativo
+        let anoAtivoId: string | null = null;
+        if (escolaId) {
+            const { data: anoAtivo } = await supabase
+                .from('anos_letivos')
+                .select('id')
+                .eq('escola_id', escolaId)
+                .eq('status', 'aberto')
+                .maybeSingle();
+            anoAtivoId = anoAtivo?.id || null;
+        }
+
+        // 2. Buscar turmas do ano ativo OU sem ano (legado)
+        let query = supabase
+            .from('turmas')
+            .select('*')
+            .order('nome', { ascending: true });
+
+        if (escolaId) {
+            query = query.eq('escola_id', escolaId);
+        }
+
+        if (anoAtivoId) {
+            // Ano ativo existe: pegar turmas desse ano OU sem ano
+            query = query.or(`ano_letivo_id.eq.${anoAtivoId},ano_letivo_id.is.null`);
+        } else if (escolaId) {
+            // Sem ano ativo: pegar apenas turmas sem ano (legado)
+            query = query.is('ano_letivo_id', null);
+        }
+
+        const { data: turmas, error } = await query;
+
+        if (error) {
+            log.error('Error fetching turmas', { message: error.message });
+            throw error;
+        }
+
+        if (!turmas || turmas.length === 0) return [];
 
         // Get student counts in batch
         const turmaIds = turmas.map(t => t.id);
-
-        if (turmaIds.length === 0) return [];
 
         // Count students per turma
         const countsPromises = turmaIds.map(async (turmaId) => {

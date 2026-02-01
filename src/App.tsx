@@ -34,6 +34,10 @@ import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
 import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import DisciplinasPage from "@/pages/DisciplinasPage";
 import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
+import AnoLetivoPage from "@/pages/AnoLetivoPage";
+import MigrarTurmasPage from "@/pages/MigrarTurmasPage";
+import ArquivosAnoPage from "@/pages/ArquivosAnoPage";
+import ArquivosListPage from "@/pages/ArquivosListPage";
 
 
 import { triggerSync } from "@/lib/SyncManager";
@@ -169,6 +173,10 @@ const App = () => {
                         <Route path="/relatorios" element={<RelatoriosPage />} />
                         <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
                         <Route path="/notificacoes" element={<NotificacoesPage />} />
+                        <Route path="/ano-letivo" element={<AnoLetivoPage />} />
+                        <Route path="/migrar-turmas" element={<MigrarTurmasPage />} />
+                        <Route path="/arquivos" element={<ArquivosListPage />} />
+                        <Route path="/arquivos/:anoLetivoId" element={<ArquivosAnoPage />} />
                       </Route>
                     </Route>
 

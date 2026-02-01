@@ -45,7 +45,7 @@ const GerenciarAlunosPage: React.FC = () => {
     turmaInfo,
     loading,
     refreshAlunos
-  } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id", "nome_responsavel", "telefone_responsavel"]);
+  } = useAlunosTurma(turmaId, ["id", "nome", "matricula", "turma_id", "nome_responsavel", "telefone_responsavel", "data_nascimento"]);
 
   const navigate = useNavigate();
 
@@ -143,7 +143,6 @@ const GerenciarAlunosPage: React.FC = () => {
           ) : alunos.length > 0 ? (
             <AlunosTable
               alunos={[...alunos].sort((a, b) => a.nome.localeCompare(b.nome))}
-              onEdit={handleEditar}
               onRemove={handleRemover}
               canEdit={isManager}
             />

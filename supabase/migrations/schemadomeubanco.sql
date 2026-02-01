@@ -13,10 +13,30 @@ CREATE TABLE public.alunos (
   telefone_responsavel text,
   endereco text,
   dados_atualizados_em timestamp with time zone,
+  data_nascimento date,
+  situacao text DEFAULT 'ativo'::text CHECK (situacao = ANY (ARRAY['ativo'::text, 'aprovado'::text, 'reprovado'::text, 'transferido'::text, 'abandono'::text, 'falecido'::text, 'cancelado'::text])),
   CONSTRAINT alunos_pkey PRIMARY KEY (id),
   CONSTRAINT alunos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
-  CONSTRAINT alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  CONSTRAINT alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
+);
+CREATE TABLE public.anos_letivos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  ano integer NOT NULL,
+  nome text NOT NULL,
+  data_inicio date NOT NULL,
+  data_fim date NOT NULL,
+  status text NOT NULL DEFAULT 'aberto'::text CHECK (status = ANY (ARRAY['planejamento'::text, 'aberto'::text, 'fechado'::text, 'arquivado'::text])),
+  criado_por uuid,
+  fechado_por uuid,
+  fechado_em timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT anos_letivos_pkey PRIMARY KEY (id),
+  CONSTRAINT anos_letivos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT anos_letivos_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id),
+  CONSTRAINT anos_letivos_fechado_por_fkey FOREIGN KEY (fechado_por) REFERENCES auth.users(id)
 );
 CREATE TABLE public.atestados (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -28,8 +48,8 @@ CREATE TABLE public.atestados (
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   escola_id uuid,
   CONSTRAINT atestados_pkey PRIMARY KEY (id),
-  CONSTRAINT atestados_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT atestados_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+  CONSTRAINT atestados_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT atestados_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );
 CREATE TABLE public.audit_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -51,9 +71,9 @@ CREATE TABLE public.chamadas_sync_log (
   registros_count integer NOT NULL DEFAULT 0,
   client_timestamp bigint,
   CONSTRAINT chamadas_sync_log_pkey PRIMARY KEY (id),
-  CONSTRAINT chamadas_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
   CONSTRAINT chamadas_sync_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT chamadas_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id)
+  CONSTRAINT chamadas_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id),
+  CONSTRAINT chamadas_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.change_log (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -100,6 +120,7 @@ CREATE TABLE public.escola_configuracao (
   cor_secundaria text DEFAULT '#4F46E5'::text,
   url_logo text,
   status text DEFAULT 'aprovada'::text CHECK (status = ANY (ARRAY['pendente'::text, 'aprovada'::text, 'rejeitada'::text])),
+  tipo_chamada text DEFAULT 'diaria'::text CHECK (tipo_chamada = ANY (ARRAY['diaria'::text, 'disciplina'::text])),
   CONSTRAINT escola_configuracao_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.escola_rate_limit (
@@ -121,8 +142,8 @@ CREATE TABLE public.grade_horaria (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT grade_horaria_pkey PRIMARY KEY (id),
   CONSTRAINT grade_horaria_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT grade_horaria_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
-  CONSTRAINT grade_horaria_disciplina_id_fkey FOREIGN KEY (disciplina_id) REFERENCES public.disciplinas(id)
+  CONSTRAINT grade_horaria_disciplina_id_fkey FOREIGN KEY (disciplina_id) REFERENCES public.disciplinas(id),
+  CONSTRAINT grade_horaria_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.justificativas_faltas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -133,9 +154,9 @@ CREATE TABLE public.justificativas_faltas (
   aluno_id uuid,
   escola_id uuid NOT NULL,
   CONSTRAINT justificativas_faltas_pkey PRIMARY KEY (id),
-  CONSTRAINT fk_aluno FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
   CONSTRAINT justificativas_faltas_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT justificativas_faltas_presenca_id_fkey FOREIGN KEY (presenca_id) REFERENCES public.presencas(id)
+  CONSTRAINT justificativas_faltas_presenca_id_fkey FOREIGN KEY (presenca_id) REFERENCES public.presencas(id),
+  CONSTRAINT fk_aluno FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );
 CREATE TABLE public.notas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -148,8 +169,8 @@ CREATE TABLE public.notas (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT notas_pkey PRIMARY KEY (id),
   CONSTRAINT notas_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT notas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT notas_disciplina_id_fkey FOREIGN KEY (disciplina_id) REFERENCES public.disciplinas(id)
+  CONSTRAINT notas_disciplina_id_fkey FOREIGN KEY (disciplina_id) REFERENCES public.disciplinas(id),
+  CONSTRAINT notas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );
 CREATE TABLE public.observacoes_alunos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -163,10 +184,10 @@ CREATE TABLE public.observacoes_alunos (
   turma_id uuid,
   escola_id uuid NOT NULL,
   CONSTRAINT observacoes_alunos_pkey PRIMARY KEY (id),
-  CONSTRAINT observacoes_alunos_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
   CONSTRAINT observacoes_alunos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT observacoes_alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
-  CONSTRAINT observacoes_alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  CONSTRAINT observacoes_alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT observacoes_alunos_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT observacoes_alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.observacoes_sync_log (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -178,10 +199,10 @@ CREATE TABLE public.observacoes_sync_log (
   synced_by uuid,
   client_timestamp bigint,
   CONSTRAINT observacoes_sync_log_pkey PRIMARY KEY (id),
-  CONSTRAINT observacoes_sync_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
   CONSTRAINT observacoes_sync_log_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT observacoes_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
-  CONSTRAINT observacoes_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id)
+  CONSTRAINT observacoes_sync_log_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT observacoes_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id),
+  CONSTRAINT observacoes_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.pesquisa_destinatarios (
   pesquisa_id uuid NOT NULL,
@@ -199,9 +220,11 @@ CREATE TABLE public.presencas (
   created_at timestamp with time zone DEFAULT now(),
   falta_justificada boolean NOT NULL DEFAULT false,
   escola_id uuid NOT NULL,
+  disciplina_id uuid,
   CONSTRAINT presencas_pkey PRIMARY KEY (id),
-  CONSTRAINT presencas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
   CONSTRAINT presencas_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT presencas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT presencas_disciplina_id_fkey FOREIGN KEY (disciplina_id) REFERENCES public.disciplinas(id),
   CONSTRAINT presencas_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.programas_registros (
@@ -231,8 +254,8 @@ CREATE TABLE public.registros_atrasos (
   criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   escola_id uuid NOT NULL,
   CONSTRAINT registros_atrasos_pkey PRIMARY KEY (id),
-  CONSTRAINT fk_aluno FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT registros_atrasos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+  CONSTRAINT registros_atrasos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT fk_aluno FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );
 CREATE TABLE public.registros_contato_busca_ativa (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -279,10 +302,10 @@ CREATE TABLE public.transferencias_alunos (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT transferencias_alunos_pkey PRIMARY KEY (id),
   CONSTRAINT transferencias_alunos_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
-  CONSTRAINT transferencias_alunos_turma_origem_fkey FOREIGN KEY (turma_origem_id) REFERENCES public.turmas(id),
-  CONSTRAINT transferencias_alunos_turma_destino_fkey FOREIGN KEY (turma_destino_id) REFERENCES public.turmas(id),
   CONSTRAINT transferencias_alunos_realizado_por_fkey FOREIGN KEY (realizado_por) REFERENCES auth.users(id),
-  CONSTRAINT transferencias_alunos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+  CONSTRAINT transferencias_alunos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT transferencias_alunos_turma_origem_fkey FOREIGN KEY (turma_origem_id) REFERENCES public.turmas(id),
+  CONSTRAINT transferencias_alunos_turma_destino_fkey FOREIGN KEY (turma_destino_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.turma_professores (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -292,8 +315,8 @@ CREATE TABLE public.turma_professores (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT turma_professores_pkey PRIMARY KEY (id),
   CONSTRAINT turma_professores_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
-  CONSTRAINT turma_professores_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id),
-  CONSTRAINT turma_professores_professor_id_fkey FOREIGN KEY (professor_id) REFERENCES auth.users(id)
+  CONSTRAINT turma_professores_professor_id_fkey FOREIGN KEY (professor_id) REFERENCES auth.users(id),
+  CONSTRAINT turma_professores_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
 CREATE TABLE public.turmas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -303,8 +326,10 @@ CREATE TABLE public.turmas (
   numero_sala text NOT NULL DEFAULT ''::text,
   escola_id uuid NOT NULL,
   turno USER-DEFINED,
+  ano_letivo_id uuid,
   CONSTRAINT turmas_pkey PRIMARY KEY (id),
-  CONSTRAINT fk_turmas_escola FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+  CONSTRAINT fk_turmas_escola FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT turmas_ano_letivo_id_fkey FOREIGN KEY (ano_letivo_id) REFERENCES public.anos_letivos(id)
 );
 CREATE TABLE public.user_roles (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

@@ -20,7 +20,9 @@ import {
   LineChart,
   Shield,
   BookOpen,
-  HandCoins
+  HandCoins,
+  CalendarDays,
+  Archive // Novo
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -35,6 +37,27 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [hasArquivos, setHasArquivos] = useState(false);
+
+  // Verificar se existem anos arquivados
+  useEffect(() => {
+    const checkArquivos = async () => {
+      if (!user?.escola_id) return;
+      try {
+        const { count } = await supabase
+          .from('anos_letivos')
+          .select('id', { count: 'exact', head: true })
+          .eq('escola_id', user.escola_id)
+          .eq('status', 'arquivado');
+
+        setHasArquivos((count ?? 0) > 0);
+      } catch (error) {
+        console.error('Erro ao verificar arquivos:', error);
+      }
+    };
+    checkArquivos();
+  }, [user?.escola_id]);
+
   const handleSignOut = async () => {
     try {
       await logout();
@@ -64,6 +87,9 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     { title: 'Disciplinas', icon: BookOpen, href: '/disciplinas', description: 'Grade' },
     { title: 'Relatórios', icon: LineChart, href: '/gestor/dashboard', roles: ['admin', 'diretor'] },
     { title: 'Programas Sociais', icon: HandCoins, href: '/gestor/programas', roles: ['admin', 'diretor'] },
+    { title: 'Ano Letivo', icon: CalendarDays, href: '/ano-letivo', roles: ['admin', 'diretor', 'secretario'] },
+    // Arquivos só aparece se existirem anos arquivados
+    ...(hasArquivos ? [{ title: 'Arquivos', icon: Archive, href: '/arquivos', roles: ['admin', 'diretor', 'secretario'] }] : []),
     { title: 'Atestados', icon: ClipboardList, href: '/atestados' },
     { title: 'Notificações', icon: Bell, href: '/notificacoes', roles: ['admin', 'diretor'] },
     { title: 'Perfil da Escola', icon: Settings, href: '/perfil-escola', roles: ['admin'] },

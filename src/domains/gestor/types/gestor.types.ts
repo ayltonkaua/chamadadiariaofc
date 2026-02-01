@@ -59,6 +59,15 @@ export interface PresencaRecente {
     escola_id: string;
 }
 
+export interface FrequenciaDisciplinaData {
+    disciplina_id: string;
+    disciplina_nome: string;
+    total_presencas: number;
+    total_faltas: number;
+    total_aulas: number;
+    taxa_frequencia: number;
+}
+
 export interface DashboardGestorData {
     kpis: KpiData | null;
     kpisAdmin: KpiAdminData | null;
@@ -68,4 +77,5 @@ export interface DashboardGestorData {
     ultimasObservacoes: UltimaObservacaoData[];
     turmasDisponiveis: TurmaMetadata[];
     presencasRecentes: PresencaRecente[];
+    frequenciaDisciplina: FrequenciaDisciplinaData[];
 }

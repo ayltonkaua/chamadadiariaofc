@@ -17,4 +17,5 @@ export interface EscolaTema {
     corPrimaria: string;
     corSecundaria: string;
     urlLogo: string | null;
+    tipo_chamada?: 'diaria' | 'disciplina'; // Added field
 }

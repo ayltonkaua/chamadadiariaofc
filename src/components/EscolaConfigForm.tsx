@@ -76,47 +76,68 @@ const EscolaConfigForm: React.FC = () => {
             </div>
 
             <div className="space-y-4 border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-700">Identidade Visual</h3>
-                <div className="space-y-2">
-                    {/* CORREÇÃO DEFINITIVA: O 'name' e 'id' devem ser 'url_logo' */}
-                    <Label htmlFor="url_logo">URL do Logo</Label>
-                    <Input
-                        id="url_logo"
-                        name="url_logo"
-                        type="url"
-                        placeholder="https://exemplo.com/logo.png"
-                        value={formData.url_logo || ""}
-                        onChange={handleInputChange}
-                    />
-                    <p className="text-xs text-gray-500">Cole a URL completa da imagem do logo da sua escola.</p>
-                </div>
+              <h3 className="text-lg font-medium text-gray-700">Identidade Visual</h3>
+              <div className="space-y-2">
+                {/* CORREÇÃO DEFINITIVA: O 'name' e 'id' devem ser 'url_logo' */}
+                <Label htmlFor="url_logo">URL do Logo</Label>
+                <Input
+                  id="url_logo"
+                  name="url_logo"
+                  type="url"
+                  placeholder="https://exemplo.com/logo.png"
+                  value={formData.url_logo || ""}
+                  onChange={handleInputChange}
+                />
+                <p className="text-xs text-gray-500">Cole a URL completa da imagem do logo da sua escola.</p>
+              </div>
 
-                {/* CORREÇÃO DEFINITIVA: Acessar a propriedade 'url_logo' do estado */}
-                {formData.url_logo && (
-                    <div>
-                        <Label>Pré-visualização</Label>
-                        <div className="mt-2 w-32 h-32 flex items-center justify-center border rounded-md overflow-hidden bg-slate-50">
-                            <img
-                                src={formData.url_logo}
-                                alt="Preview do logo"
-                                className="object-contain max-w-full max-h-full"
-                                onError={(e) => e.currentTarget.style.display = 'none'}
-                                onLoad={(e) => e.currentTarget.style.display = 'block'}
-                            />
-                        </div>
-                    </div>
-                )}
+              {/* CORREÇÃO DEFINITIVA: Acessar a propriedade 'url_logo' do estado */}
+              {formData.url_logo && (
+                <div>
+                  <Label>Pré-visualização</Label>
+                  <div className="mt-2 w-32 h-32 flex items-center justify-center border rounded-md overflow-hidden bg-slate-50">
+                    <img
+                      src={formData.url_logo}
+                      alt="Preview do logo"
+                      className="object-contain max-w-full max-h-full"
+                      onError={(e) => e.currentTarget.style.display = 'none'}
+                      onLoad={(e) => e.currentTarget.style.display = 'block'}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <Label htmlFor="cor_primaria">Cor Primária</Label>
-                    <Input id="cor_primaria" name="cor_primaria" type="color" value={formData.cor_primaria || "#FFFFFF"} onChange={handleInputChange} className="h-12 p-1"/>
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="cor_secundaria">Cor Secundária</Label>
-                    <Input id="cor_secundaria" name="cor_secundaria" type="color" value={formData.cor_secundaria || "#000000"} onChange={handleInputChange} className="h-12 p-1"/>
-                </div>
+            <div className="space-y-4 border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-700">Configurações Pedagógicas</h3>
+              <div className="space-y-2">
+                <Label htmlFor="tipo_chamada">Tipo de Chamada</Label>
+                <select
+                  id="tipo_chamada"
+                  name="tipo_chamada"
+                  value={formData.tipo_chamada || "diaria"}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, tipo_chamada: e.target.value as 'diaria' | 'disciplina' }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="diaria">Dia Inteiro (Padrão)</option>
+                  <option value="disciplina">Por Disciplina</option>
+                </select>
+                <p className="text-xs text-gray-500">
+                  <strong>Dia Inteiro:</strong> Uma única chamada para o dia todo.<br />
+                  <strong>Por Disciplina:</strong> O professor seleciona a disciplina ao fazer a chamada.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t pt-6">
+              <div className="space-y-2">
+                <Label htmlFor="cor_primaria">Cor Primária</Label>
+                <Input id="cor_primaria" name="cor_primaria" type="color" value={formData.cor_primaria || "#FFFFFF"} onChange={handleInputChange} className="h-12 p-1" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cor_secundaria">Cor Secundária</Label>
+                <Input id="cor_secundaria" name="cor_secundaria" type="color" value={formData.cor_secundaria || "#000000"} onChange={handleInputChange} className="h-12 p-1" />
+              </div>
             </div>
           </CardContent>
           <CardFooter>

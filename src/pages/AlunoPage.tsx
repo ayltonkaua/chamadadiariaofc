@@ -2,6 +2,7 @@
  * Aluno Page - Perfil Completo
  * 
  * Página de perfil do aluno com todas as funcionalidades:
+ * - Informações pessoais (nome, turma, nascimento, idade, contato)
  * - Frequência e estatísticas
  * - Atestados
  * - Observações pedagógicas (CRUD)
@@ -11,16 +12,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, CheckCircle2, XCircle, FileText, Phone, BookOpen } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowLeft, CheckCircle2, XCircle, FileText, Phone, BookOpen, Edit, ArrowRightLeft, User, MapPin, Calendar, GraduationCap } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInYears } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { alunoService, atestadosService, perfilAlunoService, type Aluno } from '@/domains';
+import { atestadosService, perfilAlunoService, type Aluno } from '@/domains';
 import { ObservacoesTab, BuscaAtivaTab } from '@/components/perfil';
+import { useAuth } from '@/contexts/AuthContext';
+import { useEscolaConfig } from '@/contexts/EscolaConfigContext';
+import AddEditStudentDialog from '@/components/alunos/AddEditStudentDialog';
+import { TransferStudentDialog } from '@/components/turmas/TransferStudentDialog';
 
 // --- Interfaces ---
 interface AlunoDetails extends Aluno {
@@ -42,6 +47,10 @@ interface AtestadoItem {
 export default function AlunoPage() {
   const { turmaId, alunoId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { config } = useEscolaConfig();
+  const corPrimaria = config?.cor_primaria || "#6D28D9";
+
   const [aluno, setAluno] = useState<AlunoDetails | null>(null);
   const [historicoCompleto, setHistoricoCompleto] = useState<Presenca[]>([]);
   const [atestados, setAtestados] = useState<AtestadoItem[]>([]);
@@ -49,19 +58,34 @@ export default function AlunoPage() {
   const [error, setError] = useState<string | null>(null);
   const [mesSelecionado, setMesSelecionado] = useState<string>('todos');
 
+  // Estados para modais
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+
   useEffect(() => {
     const fetchAlunoData = async () => {
       if (!alunoId || !turmaId) return;
       setLoading(true);
       setError(null);
       try {
-        const [alunoData, historicoData, atestadosData] = await Promise.all([
-          alunoService.findById(alunoId),
+        // Buscar aluno com dados da turma
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: alunoData, error: alunoError } = await supabase
+          .from('alunos')
+          .select(`
+            *,
+            turmas:turma_id (id, nome)
+          `)
+          .eq('id', alunoId)
+          .single();
+
+        if (alunoError) throw alunoError;
+        if (!alunoData) throw new Error('Aluno não encontrado');
+
+        const [historicoData, atestadosData] = await Promise.all([
           perfilAlunoService.getHistoricoPresenca(alunoId),
           atestadosService.findPaginated({ searchTerm: undefined }, 1, 100)
         ]);
-
-        if (!alunoData) throw new Error('Aluno não encontrado');
 
         setAluno(alunoData as AlunoDetails);
         setHistoricoCompleto(historicoData);
@@ -123,19 +147,154 @@ export default function AlunoPage() {
     return <div className="text-center py-10 text-red-500">{error || "Aluno não encontrado"}</div>;
   }
 
+  // Verificar permissão para editar/transferir
+  const userRole = (user?.role || '').toLowerCase();
+  const canManage = ['admin', 'diretor', 'coordenador', 'secretario', 'super_admin'].includes(userRole);
+
+  // Função para calcular idade
+  const calcularIdade = (dataNascimento: string | null | undefined): { anos: number; texto: string } | null => {
+    if (!dataNascimento) return null;
+    try {
+      const nascimento = new Date(dataNascimento);
+      const anos = differenceInYears(new Date(), nascimento);
+      return { anos, texto: `${anos} anos` };
+    } catch {
+      return null;
+    }
+  };
+
+  const idade = calcularIdade(aluno.data_nascimento);
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header */}
+        {/* Header com botão voltar */}
         <header className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/gerenciar-alunos/${turmaId}`)}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{aluno.nome}</h1>
-            <p className="text-muted-foreground">Perfil Completo do Aluno</p>
+            <h1 className="text-2xl font-bold text-gray-800">Perfil do Aluno</h1>
+            <p className="text-muted-foreground">Informações completas e histórico</p>
           </div>
         </header>
+
+        {/* Card de Informações do Aluno */}
+        <Card className="border-l-4" style={{ borderLeftColor: corPrimaria }}>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div
+                  className="h-16 w-16 rounded-full flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: `${corPrimaria}20` }}
+                >
+                  <User className="h-8 w-8" style={{ color: corPrimaria }} />
+                </div>
+                <div>
+                  <CardTitle className="text-xl sm:text-2xl">{aluno.nome}</CardTitle>
+                  <CardDescription className="flex items-center gap-2 mt-1">
+                    <GraduationCap className="h-4 w-4" />
+                    <span>{aluno.turmas?.nome || 'Turma não definida'}</span>
+                    {aluno.matricula && (
+                      <Badge
+                        variant="outline"
+                        className="ml-2"
+                        style={{ borderColor: corPrimaria, color: corPrimaria }}
+                      >
+                        Matrícula: {aluno.matricula}
+                      </Badge>
+                    )}
+                  </CardDescription>
+                </div>
+              </div>
+
+              {/* Botões Editar e Transferir */}
+              {canManage && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setShowEditDialog(true)}
+                  >
+                    <Edit className="h-4 w-4" />
+                    Editar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setShowTransferDialog(true)}
+                  >
+                    <ArrowRightLeft className="h-4 w-4" />
+                    Transferir
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
+              {/* Data de Nascimento + Idade */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <Calendar className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Data de Nascimento</p>
+                  <p className="font-medium">
+                    {aluno.data_nascimento
+                      ? format(new Date(aluno.data_nascimento), "dd/MM/yyyy")
+                      : 'Não informado'}
+                  </p>
+                  {idade && (
+                    <p className="text-sm font-semibold" style={{ color: corPrimaria }}>({idade.texto})</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Nome do Responsável */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <User className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Nome do Responsável</p>
+                  <p className="font-medium">
+                    {aluno.nome_responsavel || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Telefone do Responsável */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <Phone className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Telefone do Responsável</p>
+                  <p className="font-medium" style={{ color: aluno.telefone_responsavel ? corPrimaria : undefined }}>
+                    {aluno.telefone_responsavel || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg lg:col-span-2">
+                <MapPin className="h-5 w-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-sm text-gray-500">Endereço</p>
+                  <p className="font-medium">
+                    {aluno.endereco || 'Não informado'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Situação do Aluno */}
+            {aluno.situacao && aluno.situacao !== 'ativo' && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+                  Situação: {aluno.situacao.charAt(0).toUpperCase() + aluno.situacao.slice(1)}
+                </Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Stats Card */}
         <Card>
@@ -278,6 +437,54 @@ export default function AlunoPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Modal Editar Aluno */}
+      {showEditDialog && aluno && (
+        <AddEditStudentDialog
+          open={showEditDialog}
+          onClose={() => setShowEditDialog(false)}
+          onStudentAdded={async () => {
+            setShowEditDialog(false);
+            // Recarregar dados do aluno
+            const { supabase } = await import('@/integrations/supabase/client');
+            const { data } = await supabase
+              .from('alunos')
+              .select(`*, turmas:turma_id (id, nome)`)
+              .eq('id', alunoId)
+              .single();
+            if (data) setAluno(data as AlunoDetails);
+          }}
+          turmaId={turmaId || ''}
+          student={{
+            id: aluno.id,
+            nome: aluno.nome,
+            matricula: aluno.matricula,
+            turma_id: aluno.turma_id,
+            nome_responsavel: aluno.nome_responsavel || undefined,
+            telefone_responsavel: aluno.telefone_responsavel || undefined,
+            data_nascimento: aluno.data_nascimento || undefined,
+            endereco: aluno.endereco || undefined,
+          }}
+          isEditing={true}
+        />
+      )}
+
+      {/* Modal Transferir Aluno */}
+      {showTransferDialog && aluno && (
+        <TransferStudentDialog
+          aluno={{
+            id: aluno.id,
+            nome: aluno.nome,
+            turma_id: aluno.turma_id,
+          }}
+          onClose={() => setShowTransferDialog(false)}
+          onSuccess={() => {
+            setShowTransferDialog(false);
+            // Redirecionar para lista de alunos após transferência
+            navigate(`/gerenciar-alunos/${turmaId}`);
+          }}
+        />
+      )}
     </div>
   );
 }

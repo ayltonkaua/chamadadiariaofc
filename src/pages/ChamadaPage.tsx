@@ -60,6 +60,14 @@ import { triggerSync } from '@/lib/SyncManager';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import {
   atestadosService,
   presencaService,
   observacoesService,
@@ -91,6 +99,9 @@ const ChamadaPage: React.FC = () => {
   const [localEscolaId, setLocalEscolaId] = useState<string | null>(null);
   const hasChangesRef = useRef(false);
   const [showAtestadoAlert, setShowAtestadoAlert] = useState(false);
+  const [anoFechado, setAnoFechado] = useState<{ bloqueado: boolean; motivo: string | null }>({ bloqueado: false, motivo: null });
+  const [disciplinas, setDisciplinas] = useState<{ id: string; nome: string }[]>([]);
+  const [disciplinaSelecionada, setDisciplinaSelecionada] = useState<string>("");
 
   // Refs para valores atuais (evita stale closure no cleanup)
   const presencasRef = useRef<Record<string, PresencaStatus>>({});
@@ -170,11 +181,18 @@ const ChamadaPage: React.FC = () => {
       let listaAlunos: Aluno[] = [];
       let escolaIdEncontrado: string | null = user?.escola_id || null;
 
-      // Buscar nome da turma
+      // Buscar nome da turma E verificar se ano está aberto
       if (navigator.onLine) {
         try {
           const turma = await turmaService.getById(turmaId);
           if (turma) setTurmaNome(turma.nome);
+
+          // Verificar se ano letivo está aberto
+          const { data: podeEditar } = await (await import('@/integrations/supabase/client')).supabase
+            .rpc('pode_editar_chamada', { p_turma_id: turmaId });
+          if (podeEditar && !podeEditar.permitido) {
+            setAnoFechado({ bloqueado: true, motivo: podeEditar.motivo });
+          }
         } catch { }
       }
 
@@ -276,6 +294,26 @@ const ChamadaPage: React.FC = () => {
   }, [turmaId, user, date]);
 
   // Carregar apenas dados da data selecionada (rascunho) - rápido
+  // Carregar disciplinas
+  useEffect(() => {
+    async function fetchDisciplinas() {
+      if (!user?.escola_id) return;
+      try {
+        const { data } = await supabase.from('disciplinas').select('id, nome').eq('escola_id', user.escola_id).order('nome');
+        if (data && data.length > 0) {
+          setDisciplinas(data);
+          // Se tiver apenas uma disciplina, seleciona automaticamente
+          if (data.length === 1) {
+            setDisciplinaSelecionada(data[0].id);
+          }
+        }
+      } catch (e) {
+        console.error("Erro ao buscar disciplinas", e);
+      }
+    }
+    fetchDisciplinas();
+  }, [user?.escola_id]);
+
   const carregarDadosDaData = useCallback(async () => {
     if (!turmaId || alunosCacheRef.current.length === 0) return;
     setIsLoadingDate(true);
@@ -392,6 +430,17 @@ const ChamadaPage: React.FC = () => {
   // Salvar
   const handleSalvar = async () => {
     if (isSubmittingRef.current) return;
+
+    // Verificar se ano está fechado
+    if (anoFechado.bloqueado) {
+      toast({
+        title: "Ano Letivo Encerrado",
+        description: anoFechado.motivo || "Não é possível editar chamadas de anos encerrados.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     isSubmittingRef.current = true;
     setIsSaving(true);
 
@@ -413,7 +462,8 @@ const ChamadaPage: React.FC = () => {
         turmaId: turmaId!,
         escolaId: idEscolaFinal,
         dataChamada: dataFormatada,
-        registros
+        registros,
+        disciplinaId: disciplinaSelecionada || undefined
       });
 
       // Limpa rascunho após salvar
@@ -512,6 +562,17 @@ const ChamadaPage: React.FC = () => {
       <div className="pt-20 pb-28">
         {/* Layout com Calendário Fixo */}
         <div className="max-w-4xl mx-auto px-4 py-3">
+
+          {/* Alerta de Ano Letivo Fechado */}
+          {anoFechado.bloqueado && (
+            <Alert variant="destructive" className="mb-4 bg-red-50 border-red-300">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="font-medium">
+                {anoFechado.motivo || "Este ano letivo foi encerrado. Não é possível editar chamadas."}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Botão para colapsar/expandir calendário */}
           <button
             onClick={() => setCalendarCollapsed(!calendarCollapsed)}
@@ -547,6 +608,21 @@ const ChamadaPage: React.FC = () => {
           {/* Calendário Fixo Sempre Visível */}
           {!calendarCollapsed && (
             <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
+              {(config.tipo_chamada === 'disciplina' || !config.tipo_chamada) && disciplinas.length > 0 && ( // Fallback to discipline if undefined for now or default
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina</label>
+                  <Select value={disciplinaSelecionada} onValueChange={setDisciplinaSelecionada}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione a disciplina" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {disciplinas.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex-1 flex justify-center w-full">
                   <Calendar
@@ -716,11 +792,16 @@ const ChamadaPage: React.FC = () => {
           <div className="max-w-4xl mx-auto">
             <Button
               onClick={handleSalvar}
-              disabled={isSaving || alunos.length === 0}
+              disabled={isSaving || alunos.length === 0 || anoFechado.bloqueado}
               className="w-full h-14 text-lg font-bold rounded-xl shadow-lg"
-              style={{ backgroundColor: corPrimaria }}
+              style={{ backgroundColor: anoFechado.bloqueado ? '#9CA3AF' : corPrimaria }}
             >
-              {isSaving ? (
+              {anoFechado.bloqueado ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 mr-2" />
+                  Ano Letivo Encerrado
+                </>
+              ) : isSaving ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Salvando...

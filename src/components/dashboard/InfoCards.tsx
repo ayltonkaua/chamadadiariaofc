@@ -68,35 +68,77 @@ export function InfoCards() {
 
       if (navigator.onLine && user?.escola_id) {
         try {
-          // Busca dados básicos
-          const [{ count: turmasCount }, { count: alunosCount }] = await Promise.all([
-            supabase.from("turmas").select("id", { count: "exact", head: true }).eq("escola_id", user.escola_id),
-            supabase.from("alunos").select("id", { count: "exact", head: true }).eq("escola_id", user.escola_id),
-          ]);
+          // 1. Buscar ID do ano letivo ativo
+          const { data: anoAtivo } = await supabase
+            .from("anos_letivos")
+            .select("id")
+            .eq("escola_id", user.escola_id)
+            .eq("status", "aberto")
+            .maybeSingle();
 
-          // Busca turmas DISTINTAS com chamada hoje
-          const { data: chamadasData } = await supabase
-            .from("presencas")
-            .select("turma_id")
-            .eq("data_chamada", today);
+          const anoAtivoId = anoAtivo?.id || null;
 
-          // Conta turmas distintas
-          const turmasComChamada = new Set(chamadasData?.map(p => p.turma_id) || []);
+          // 2. Buscar turmas do ano ativo OU sem ano (legado)
+          let turmasQuery = supabase
+            .from("turmas")
+            .select("id")
+            .eq("escola_id", user.escola_id);
 
-          // Get frequency últimos 30 dias
-          const { data: presencas } = await supabase
-            .from("presencas")
-            .select("presente")
-            .gte("data_chamada", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+          if (anoAtivoId) {
+            // Ano ativo existe: pegar turmas desse ano OU sem ano
+            turmasQuery = turmasQuery.or(`ano_letivo_id.eq.${anoAtivoId},ano_letivo_id.is.null`);
+          } else {
+            // Sem ano ativo: pegar apenas turmas sem ano (legado)
+            turmasQuery = turmasQuery.is("ano_letivo_id", null);
+          }
 
-          const total = presencas?.length || 0;
-          const presentes = presencas?.filter((p: any) => p.presente).length || 0;
-          const frequencia = total > 0 ? Math.round((presentes / total) * 100) : 100;
+          const { data: turmasAtivas } = await turmasQuery;
+          const turmaIds = turmasAtivas?.map(t => t.id) || [];
+          const turmasCount = turmaIds.length;
+
+          // 2. Contar alunos apenas das turmas ativas
+          let alunosCount = 0;
+          if (turmaIds.length > 0) {
+            const { count } = await supabase
+              .from("alunos")
+              .select("id", { count: "exact", head: true })
+              .eq("escola_id", user.escola_id)
+              .in("turma_id", turmaIds);
+            alunosCount = count || 0;
+          }
+
+          // 3. Busca turmas DISTINTAS com chamada hoje (apenas turmas ativas)
+          let turmasComChamadaCount = 0;
+          if (turmaIds.length > 0) {
+            const { data: chamadasData } = await supabase
+              .from("presencas")
+              .select("turma_id")
+              .eq("data_chamada", today)
+              .in("turma_id", turmaIds);
+
+            const turmasComChamada = new Set(chamadasData?.map(p => p.turma_id) || []);
+            turmasComChamadaCount = turmasComChamada.size;
+          }
+
+          // 4. Get frequency últimos 30 dias (apenas turmas ativas)
+          let frequencia = 100;
+          if (turmaIds.length > 0) {
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const { data: presencas } = await supabase
+              .from("presencas")
+              .select("presente")
+              .gte("data_chamada", thirtyDaysAgo)
+              .in("turma_id", turmaIds);
+
+            const total = presencas?.length || 0;
+            const presentes = presencas?.filter((p: any) => p.presente).length || 0;
+            frequencia = total > 0 ? Math.round((presentes / total) * 100) : 100;
+          }
 
           setStats({
-            totalAlunos: alunosCount || 0,
-            totalTurmas: turmasCount || 0,
-            chamadasHoje: turmasComChamada.size,
+            totalAlunos: alunosCount,
+            totalTurmas: turmasCount,
+            chamadasHoje: turmasComChamadaCount,
             frequenciaGeral: frequencia,
           });
         } catch (error) {

@@ -4,7 +4,18 @@ import { useAuth } from "./AuthContext";
 import { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "@/hooks/use-toast";
 
-type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "criado_em" | "atualizado_em">;
+// type EscolaConfig = Omit<Tables<'escola_configuracao'>, "id" | "criado_em" | "atualizado_em">;
+// Temporary fix until types are regenerated
+type EscolaConfig = {
+  nome: string;
+  endereco: string | null;
+  email: string;
+  telefone: string | null;
+  url_logo: string | null;
+  cor_primaria: string;
+  cor_secundaria: string;
+  tipo_chamada?: 'diaria' | 'disciplina';
+};
 
 // CORREÇÃO DEFINITIVA: O nome da propriedade aqui deve ser 'url_logo'.
 const defaultConfig: EscolaConfig = {
@@ -15,6 +26,7 @@ const defaultConfig: EscolaConfig = {
   url_logo: null,
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
+  tipo_chamada: "diaria", // Default value
 };
 
 interface EscolaConfigContextType {
@@ -43,7 +55,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
       // CORREÇÃO DEFINITIVA: Selecionando 'url_logo' do banco.
       const { data, error } = await supabase
         .from("escola_configuracao")
-        .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria")
+        .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria, tipo_chamada")
         .eq("id", user.escola_id)
         .single();
 

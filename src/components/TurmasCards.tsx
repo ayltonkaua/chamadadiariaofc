@@ -8,7 +8,6 @@ import {
   GraduationCap,
   ClipboardList,
   WifiOff,
-  FileSpreadsheet,
   Edit,
   Trash2,
   RefreshCw
@@ -23,7 +22,6 @@ import { getSchoolCache } from "@/lib/offlineStorage";
 // Modais
 import { EditTurmaDialog } from "./turmas/EditTurmaDialog";
 import { DeleteTurmaDialog } from "./turmas/DeleteTurmaDialog";
-import { ImportTurmasDialog } from "./turmas/ImportTurmasDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 
@@ -181,7 +179,6 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
   // Controle de Modais
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
   const [turmaParaRemover, setTurmaParaRemover] = useState<Turma | null>(null);
-  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const turmasExibidas = turmasPai || localTurmas;
   const isLoading = loadingPai !== undefined ? loadingPai : localLoading;
@@ -308,14 +305,6 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
             </span>
           )}
         </div>
-
-        {/* CORREÇÃO: Removida condição !turmasPai - botão aparece sempre que isManager */}
-        {isManager && (
-          <Button onClick={() => setShowImportDialog(true)} variant="outline" className="w-full sm:w-auto flex items-center gap-2 border-dashed border-2 h-10">
-            <FileSpreadsheet size={18} className="text-green-600" />
-            <span>Importar Turmas (Excel)</span>
-          </Button>
-        )}
       </div>
 
       {turmasExibidas.length === 0 ? (
@@ -326,18 +315,9 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
             ? "Você ainda não tem turmas cadastradas ou vinculadas neste turno."
             : "Nenhuma turma vinculada ao seu perfil. Entre em contato com a coordenação."}
           action={
-            <>
-              <Button variant="outline" onClick={handleRefreshGlobal}>
-                Recarregar Página
-              </Button>
-
-              {isManager && (
-                <Button onClick={() => setShowImportDialog(true)} className="gap-2">
-                  <FileSpreadsheet size={18} />
-                  Importar Turmas
-                </Button>
-              )}
-            </>
+            <Button variant="outline" onClick={handleRefreshGlobal}>
+              Recarregar Página
+            </Button>
           }
         />
       ) : (
@@ -371,17 +351,6 @@ export function TurmasCards({ turmas: turmasPai, loading: loadingPai, onRefresh,
           onOpenChange={(open) => !open && setTurmaParaRemover(null)}
           turma={turmaParaRemover}
           onSuccess={handleRefreshGlobal}
-        />
-      )}
-
-      {showImportDialog && (
-        <ImportTurmasDialog
-          open={showImportDialog}
-          onOpenChange={setShowImportDialog}
-          onSuccess={() => {
-            handleRefreshGlobal();
-            setShowImportDialog(false);
-          }}
         />
       )}
     </>

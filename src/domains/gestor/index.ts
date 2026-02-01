@@ -9,5 +9,6 @@ export type {
     TurmaMetadata,
     PresencaRecente,
     DashboardGestorData,
-    UltimaPresenca
+    UltimaPresenca,
+    FrequenciaDisciplinaData
 } from './types/gestor.types';

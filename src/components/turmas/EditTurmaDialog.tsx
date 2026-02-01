@@ -21,6 +21,7 @@ interface EditTurmaDialogProps {
   turma: {
     id: string;
     nome: string;
+    turno?: string;
     escola_id: string;
   } | null;
   open: boolean;           // Novo: Controlado pelo pai
@@ -30,12 +31,16 @@ interface EditTurmaDialogProps {
 
 export function EditTurmaDialog({ turma, open, onOpenChange, onSuccess }: EditTurmaDialogProps) {
   const [nome, setNome] = useState("");
+  const [turno, setTurno] = useState("Manhã");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   // Atualiza o nome quando a turma muda
   useEffect(() => {
-    if (turma) setNome(turma.nome);
+    if (turma) {
+      setNome(turma.nome);
+      setTurno(turma.turno || "Manhã");
+    }
   }, [turma]);
 
   if (!turma) return null;
@@ -47,7 +52,7 @@ export function EditTurmaDialog({ turma, open, onOpenChange, onSuccess }: EditTu
     try {
       const { error } = await supabase
         .from("turmas")
-        .update({ nome })
+        .update({ nome, turno: turno as any })
         .eq("id", turma.id);
 
       if (error) throw error;
@@ -84,6 +89,19 @@ export function EditTurmaDialog({ turma, open, onOpenChange, onSuccess }: EditTu
               <div className="space-y-2">
                 <Label>Nome da Turma</Label>
                 <Input value={nome} onChange={(e) => setNome(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={turno}
+                  onChange={(e) => setTurno(e.target.value)}
+                >
+                  <option value="Manhã">Manhã</option>
+                  <option value="Tarde">Tarde</option>
+                  <option value="Noite">Noite</option>
+                  <option value="Integral">Integral</option>
+                </select>
               </div>
               <DialogFooter className="pt-4">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

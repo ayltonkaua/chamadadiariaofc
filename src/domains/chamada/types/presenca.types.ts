@@ -26,6 +26,7 @@ export interface ChamadaPayload {
     turmaId: string;
     escolaId: string;
     dataChamada: string;
+    disciplinaId?: string;
     registros: RegistroPresenca[];
 }
 

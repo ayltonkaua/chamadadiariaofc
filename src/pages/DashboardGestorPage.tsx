@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ControlledPagination } from '@/components/ui/controlled-pagination';
@@ -14,6 +14,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DesempenhoAcademicoChart } from "@/components/dashboard/DesempenhoAcademicoChart";
+import { FrequenciaPorDisciplinaChart } from "@/components/dashboard/FrequenciaPorDisciplinaChart";
+import { ExportButton } from "@/components/dashboard/ExportButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
@@ -123,13 +125,15 @@ export default function DashboardGestorPage() {
     setRiscoCurrentPage,
     consecutivasCurrentPage,
     setConsecutivasCurrentPage,
+    frequenciaDisciplina,
     turmasDisponiveis,
     filtroTurno,
     setFiltroTurno,
     turmasSelecionadas,
     setTurmasSelecionadas,
-    filtroAno,
-    setFiltroAno,
+    filtroAnoLetivoId,
+    setFiltroAnoLetivoId,
+    anosLetivosDisponiveis,
     activeTurmaIds,
     loading,
     statusMsg,
@@ -178,20 +182,30 @@ export default function DashboardGestorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ExportButton
+            nomeEscola={config?.nome || 'Escola'}
+            anoLetivo={anosLetivosDisponiveis.find(a => a.id === filtroAnoLetivoId)?.nome || ''}
+            kpis={kpis}
+            kpisAdmin={kpisAdmin}
+            turmasData={filteredTurmaData}
+            alunosRisco={filteredAlunosRisco}
+            alunosConsecutivos={filteredAlunosConsecutivos}
+            disabled={loading}
+          />
           <Button variant="outline" size="sm" onClick={refresh} title="Atualizar dados">
             <RefreshCw className="h-4 w-4" />
           </Button>
 
           <div className="w-32">
-            <Select value={filtroAno} onValueChange={setFiltroAno}>
+            <Select value={filtroAnoLetivoId} onValueChange={setFiltroAnoLetivoId}>
               <SelectTrigger className="bg-white"><Calendar className="w-4 h-4 mr-2 text-gray-500" /> <SelectValue placeholder="Ano" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
+                {anosLetivosDisponiveis.map((ano) => (
+                  <SelectItem key={ano.id} value={ano.id}>{ano.nome} ({ano.ano})</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-
           <div className="w-40">
             <Select value={filtroTurno} onValueChange={setFiltroTurno}>
               <SelectTrigger className="bg-white"><Filter className="w-4 h-4 mr-2 text-gray-500" /> <SelectValue placeholder="Turno" /></SelectTrigger>
@@ -249,54 +263,60 @@ export default function DashboardGestorPage() {
       </section>
 
       {/* GRÁFICOS */}
-      <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <Card className="shadow-sm border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg text-gray-800">Frequência por Turma</CardTitle>
-            <CardDescription>Comparativo filtrado.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            {filteredTurmaData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={filteredTurmaData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="turma_nome" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} minTickGap={5} />
-                  <YAxis fontSize={11} tickLine={false} axisLine={false} unit="%" width={35} />
-                  <Tooltip
-                    cursor={{ fill: '#F3F4F6' }}
-                    contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
-                    labelStyle={{ color: "#374151", fontWeight: 600, marginBottom: "5px" }}
-                  />
-                  <Bar dataKey="taxa_presenca" fill={corPrimaria} radius={[6, 6, 0, 0]} name="Presença" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-gray-400">Sem dados para exibir</div>
-            )}
-          </CardContent>
-        </Card>
+      <section className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="col-span-1 shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader>
+              <CardTitle>Frequência por Turma</CardTitle>
+              <CardDescription>Taxa de presença média na última semana.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={filteredTurmaData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="turma_nome" tick={{ fontSize: 12 }} interval={0} angle={-45} textAnchor="end" height={60} />
+                    <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                    <Tooltip formatter={(value: number) => [`${value.toFixed(1)}%`, 'Presença']} cursor={{ fill: 'transparent' }} />
+                    <Bar dataKey="taxa_presenca" fill={corPrimaria} radius={[4, 4, 0, 0]} name="Presença" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="shadow-sm border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg text-gray-800">Ausências na Semana</CardTitle>
-            <CardDescription>Últimos 15 dias.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartAusenciasSemana} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="dia_semana_nome" fontSize={11} tickLine={false} axisLine={false} tickMargin={10} />
-                <YAxis fontSize={11} tickLine={false} axisLine={false} unit="%" width={35} />
-                <Tooltip
-                  cursor={{ fill: '#F3F4F6' }}
-                  contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
-                  labelStyle={{ color: "#374151", fontWeight: 600, marginBottom: "5px" }}
-                />
-                <Bar dataKey="percentual_faltas" fill={corSecundaria} radius={[6, 6, 0, 0]} name="% Faltas" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          {/* Novo Gráfico de Disciplinas */}
+          {(config?.tipo_chamada === 'disciplina' || !config?.tipo_chamada) && (
+            <FrequenciaPorDisciplinaChart data={frequenciaDisciplina} />
+          )}
+
+          {/* Evolução Semanal de Faltas */}
+          <Card className="col-span-1 shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader>
+              <CardTitle>Evolução de Faltas</CardTitle>
+              <CardDescription>Total de faltas diárias nos últimos 7 dias.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartAusenciasSemana}>
+                    <defs>
+                      <linearGradient id="colorFaltas" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="dia" tick={{ fontSize: 12 }} />
+                    <YAxis />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="faltas" stroke="#ef4444" fillOpacity={1} fill="url(#colorFaltas)" name="Faltas" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       {/* Desempenho Acadêmico */}

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Disciplina {
     id: string;
@@ -31,12 +32,8 @@ export function DisciplinaDialog({ open, onOpenChange, disciplinaToEdit, onSucce
     const [nome, setNome] = useState("");
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
-
-    // Usando o contexto corrigido
     const { config } = useEscolaConfig();
-    // Se não tiver ID carregado (raro), não deixa salvar
-    const escolaId = config?.nome ? (supabase.auth.getUser().then(u => u.data.user?.user_metadata.escola_id) || null) : null;
-    // Nota: O ideal é pegar o ID do user no AuthContext, mas usaremos a config para estilização
+    const { user } = useAuth();
 
     // Atualiza campo ao abrir edição
     useEffect(() => {
@@ -52,11 +49,10 @@ export function DisciplinaDialog({ open, onOpenChange, disciplinaToEdit, onSucce
         setLoading(true);
 
         try {
-            // Pequeno truque para garantir o ID da escola correto via sessão atual
-            const { data: { session } } = await supabase.auth.getSession();
-            const userEscolaId = session?.user?.user_metadata?.escola_id;
+            // Usar escola_id do contexto de autenticação
+            const userEscolaId = user?.escola_id;
 
-            if (!userEscolaId) throw new Error("Escola não identificada.");
+            if (!userEscolaId) throw new Error("Escola não identificada. Faça login novamente.");
 
             if (disciplinaToEdit) {
                 // Edição

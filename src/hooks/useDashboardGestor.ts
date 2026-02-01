@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -17,16 +18,26 @@ import {
     type AlunoFaltasConsecutivasData,
     type UltimaObservacaoData,
     type TurmaMetadata,
-    type PresencaRecente
+    type PresencaRecente,
+    type FrequenciaDisciplinaData
 } from '@/domains';
 
 const ITEMS_PER_PAGE = 5;
+
+// Interface para anos letivos disponíveis
+interface AnoLetivoOption {
+    id: string;
+    ano: number;
+    nome: string;
+    status: string;
+}
 
 interface UseDashboardGestorReturn {
     // Data
     kpis: KpiData | null;
     kpisAdmin: KpiAdminData | null;
     ultimasObservacoes: UltimaObservacaoData[];
+    frequenciaDisciplina: FrequenciaDisciplinaData[];
 
     // Filtered data
     filteredTurmaData: TurmaComparisonData[];
@@ -48,8 +59,9 @@ interface UseDashboardGestorReturn {
     setFiltroTurno: (turno: string) => void;
     turmasSelecionadas: string[];
     setTurmasSelecionadas: (turmas: string[]) => void;
-    filtroAno: string;
-    setFiltroAno: (ano: string) => void;
+    filtroAnoLetivoId: string;
+    setFiltroAnoLetivoId: (id: string) => void;
+    anosLetivosDisponiveis: AnoLetivoOption[];
     activeTurmaIds: string[];
 
     // State
@@ -71,6 +83,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
     const [rawAlunosConsecutivos, setRawAlunosConsecutivos] = useState<AlunoFaltasConsecutivasData[]>([]);
     const [rawPresencasRecentes, setRawPresencasRecentes] = useState<PresencaRecente[]>([]);
     const [ultimasObservacoes, setUltimasObservacoes] = useState<UltimaObservacaoData[]>([]);
+    const [rawFrequenciaDisciplina, setRawFrequenciaDisciplina] = useState<FrequenciaDisciplinaData[]>([]);
 
     // Loading states
     const [loading, setLoading] = useState(true);
@@ -80,11 +93,45 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
     const [turmasDisponiveis, setTurmasDisponiveis] = useState<TurmaMetadata[]>([]);
     const [filtroTurno, setFiltroTurno] = useState<string>("todos");
     const [turmasSelecionadas, setTurmasSelecionadas] = useState<string[]>([]);
-    const [filtroAno, setFiltroAno] = useState<string>(new Date().getFullYear().toString());
+
+    // Anos letivos dinâmicos
+    const [anosLetivosDisponiveis, setAnosLetivosDisponiveis] = useState<AnoLetivoOption[]>([]);
+    const [filtroAnoLetivoId, setFiltroAnoLetivoId] = useState<string>("");
 
     // Pagination states
     const [riscoCurrentPage, setRiscoCurrentPage] = useState(1);
     const [consecutivasCurrentPage, setConsecutivasCurrentPage] = useState(1);
+
+    // Buscar anos letivos disponíveis
+    useEffect(() => {
+        const fetchAnosLetivos = async () => {
+            if (!user?.escola_id) return;
+
+            try {
+                const { data, error } = await supabase
+                    .from('anos_letivos')
+                    .select('id, ano, nome, status')
+                    .eq('escola_id', user.escola_id)
+                    .neq('status', 'arquivado')
+                    .order('ano', { ascending: false });
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    setAnosLetivosDisponiveis(data);
+                    // Selecionar o ano ativo ou o mais recente por padrão
+                    const anoAtivo = data.find(a => a.status === 'ativo') || data[0];
+                    if (anoAtivo && !filtroAnoLetivoId) {
+                        setFiltroAnoLetivoId(anoAtivo.id);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao buscar anos letivos:', err);
+            }
+        };
+
+        fetchAnosLetivos();
+    }, [user?.escola_id]);
 
     // Fetch all data
     const fetchAllData = async () => {
@@ -100,7 +147,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
             const activeEscolaId = user.escola_id;
             setStatusMsg("Baixando dados pedagógicos...");
 
-            const data = await gestorService.getDashboardData(activeEscolaId);
+            const data = await gestorService.getDashboardData(activeEscolaId, filtroAnoLetivoId || undefined);
 
             setKpis(data.kpis);
             setKpisAdmin(data.kpisAdmin);
@@ -110,6 +157,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
             setUltimasObservacoes(data.ultimasObservacoes);
             setTurmasDisponiveis(data.turmasDisponiveis);
             setRawPresencasRecentes(data.presencasRecentes);
+            setRawFrequenciaDisciplina(data.frequenciaDisciplina);
 
             setStatusMsg("Dados carregados.");
             setLoading(false);
@@ -122,10 +170,10 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
     };
 
     useEffect(() => {
-        if (user) {
+        if (user && filtroAnoLetivoId) {
             fetchAllData();
         }
-    }, [user, filtroAno]);
+    }, [user, filtroAnoLetivoId]);
 
     // Memoized filtering logic
     const activeTurmas = useMemo(() => {
@@ -207,6 +255,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
         kpis,
         kpisAdmin,
         ultimasObservacoes,
+        frequenciaDisciplina: rawFrequenciaDisciplina,
 
         // Filtered data
         filteredTurmaData,
@@ -228,8 +277,9 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
         setFiltroTurno,
         turmasSelecionadas,
         setTurmasSelecionadas,
-        filtroAno,
-        setFiltroAno,
+        filtroAnoLetivoId,
+        setFiltroAnoLetivoId,
+        anosLetivosDisponiveis,
         activeTurmaIds,
 
         // State
