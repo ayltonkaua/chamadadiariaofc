@@ -1,0 +1,22 @@
+{
+    "name": "chamada-diaria-bot-api",
+    "version": "1.0.0",
+    "description": "WhatsApp Bot API for Chamada Diária - Multi-tenant session isolation",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.49.4",
+        "@whiskeysockets/baileys": "^6.7.16",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "node-cron": "^3.0.3",
+        "qrcode": "^1.5.4"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

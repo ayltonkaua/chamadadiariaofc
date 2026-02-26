@@ -38,6 +38,10 @@ import AnoLetivoPage from "@/pages/AnoLetivoPage";
 import MigrarTurmasPage from "@/pages/MigrarTurmasPage";
 import ArquivosAnoPage from "@/pages/ArquivosAnoPage";
 import ArquivosListPage from "@/pages/ArquivosListPage";
+import ForcePasswordChangePage from "@/pages/ForcePasswordChangePage";
+import MapaAlunosPage from "@/pages/MapaAlunosPage";
+import { EvasaoPage } from "@/app/routes.lazy";
+import BotWhatsAppPage from "@/pages/BotWhatsAppPage";
 
 
 import { triggerSync } from "@/lib/SyncManager";
@@ -136,6 +140,7 @@ const App = () => {
                     <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />
                     <Route path="/forgot-password" element={<Layout showSidebar={false}><ForgotPasswordPage /></Layout>} />
                     <Route path="/update-password" element={<Layout showSidebar={false}><UpdatePasswordPage /></Layout>} />
+                    <Route path="/trocar-senha" element={<ForcePasswordChangePage />} />
                     <Route path="/student-query" element={<StudentQueryPage />} />
 
                     {/* --- Rotas Autenticadas (Todas/Comum) --- */}
@@ -177,6 +182,9 @@ const App = () => {
                         <Route path="/migrar-turmas" element={<MigrarTurmasPage />} />
                         <Route path="/arquivos" element={<ArquivosListPage />} />
                         <Route path="/arquivos/:anoLetivoId" element={<ArquivosAnoPage />} />
+                        <Route path="/mapa" element={<MapaAlunosPage />} />
+                        <Route path="/evasao" element={<EvasaoPage />} />
+                        <Route path="/gestor/whatsapp-bot" element={<BotWhatsAppPage />} />
                       </Route>
                     </Route>
 

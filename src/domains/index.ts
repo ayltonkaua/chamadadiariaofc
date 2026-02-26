@@ -82,7 +82,7 @@ export type {
 } from './gestor';
 
 // Acesso (User Access Management)
-export { acessoService } from './acesso';
+export { acessoService, generateTempPassword } from './acesso';
 export type { MembroEquipe, AlunoAcesso, ConviteAcesso } from './acesso';
 
 // Atrasos (Tardy Records)
@@ -103,3 +103,16 @@ export type {
     AnoLetivoComStats,
     MigracaoResult
 } from './anoLetivo';
+
+// WhatsApp Bot
+export { whatsappBotService } from './whatsappBot';
+export type {
+    WhatsAppBotConfig,
+    WhatsAppLog,
+    BotStatus,
+    QRCodeResponse,
+    SendManualPayload,
+    SendAlertPayload,
+    SendToGroupPayload,
+    SendResult,
+} from './whatsappBot';
