@@ -10,5 +10,6 @@ export type {
     PresencaRecente,
     DashboardGestorData,
     UltimaPresenca,
-    FrequenciaDisciplinaData
+    FrequenciaDisciplinaData,
+    FaltasDiaSemanaData
 } from './types/gestor.types';

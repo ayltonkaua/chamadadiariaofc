@@ -28,6 +28,7 @@ import {
   MessageCircle, // Bot WhatsApp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FEATURE_FLAGS } from '@/config/featureFlags';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 interface SidebarProps {
@@ -89,15 +90,15 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     },
     { title: 'Disciplinas', icon: BookOpen, href: '/disciplinas', description: 'Grade' },
     { title: 'Relatórios', icon: LineChart, href: '/gestor/dashboard', roles: ['admin', 'diretor'] },
-    { title: 'Mapa de Alunos', icon: MapPin, href: '/mapa', roles: ['admin', 'diretor', 'coordenador'] },
-    { title: 'Prevenção de Evasão', icon: ShieldAlert, href: '/evasao', roles: ['admin', 'diretor', 'coordenador', 'staff'] },
+    ...(FEATURE_FLAGS.MAPA_ALUNOS ? [{ title: 'Mapa de Alunos', icon: MapPin, href: '/mapa', roles: ['admin', 'diretor', 'coordenador'] }] : []),
+    ...(FEATURE_FLAGS.EVASAO_AI ? [{ title: 'Prevenção de Evasão', icon: ShieldAlert, href: '/evasao', roles: ['admin', 'diretor', 'coordenador', 'staff'] }] : []),
     { title: 'Programas Sociais', icon: HandCoins, href: '/gestor/programas', roles: ['admin', 'diretor'] },
     { title: 'Ano Letivo', icon: CalendarDays, href: '/ano-letivo', roles: ['admin', 'diretor', 'secretario'] },
     // Arquivos só aparece se existirem anos arquivados
     ...(hasArquivos ? [{ title: 'Arquivos', icon: Archive, href: '/arquivos', roles: ['admin', 'diretor', 'secretario'] }] : []),
     { title: 'Atestados', icon: ClipboardList, href: '/atestados' },
     { title: 'Notificações', icon: Bell, href: '/notificacoes', roles: ['admin', 'diretor'] },
-    { title: 'Bot WhatsApp', icon: MessageCircle, href: '/gestor/whatsapp-bot', roles: ['admin', 'diretor', 'coordenador', 'secretario'] },
+    ...(FEATURE_FLAGS.WHATSAPP_BOT ? [{ title: 'Bot WhatsApp', icon: MessageCircle, href: '/gestor/whatsapp-bot', roles: ['admin', 'diretor', 'coordenador', 'secretario'] }] : []),
     { title: 'Perfil da Escola', icon: Settings, href: '/perfil-escola', roles: ['admin'] },
     { title: 'Acessos', icon: Shield, href: '/gestao-acesso', roles: ['admin'] },
   ];

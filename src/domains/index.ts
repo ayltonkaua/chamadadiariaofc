@@ -78,7 +78,8 @@ export type {
     PresencaRecente,
     DashboardGestorData,
     UltimaPresenca,
-    FrequenciaDisciplinaData
+    FrequenciaDisciplinaData,
+    FaltasDiaSemanaData
 } from './gestor';
 
 // Acesso (User Access Management)

@@ -220,7 +220,7 @@ export const turmaService = {
         numeroSala: string,
         turno: string | null,
         escolaId: string,
-        alunos: Array<{ nome: string; matricula: string }>
+        alunos: Array<{ nome: string; matricula: string; data_nascimento?: string }>
     ): Promise<{ turma_id: string; inseridos: number; atualizados: number }> {
         log.info('Importing turma with students via RPC', { nome, alunosCount: alunos.length });
 

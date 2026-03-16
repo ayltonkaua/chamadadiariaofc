@@ -55,10 +55,41 @@ function sanitizePhone(phone) {
 }
 
 /**
+ * Convert a stored phone number (13 digits, with 9th digit) to Baileys JID format
+ * Brazilian numbers work on Baileys with 12 digits (without the 9th digit).
+ * 
+ * Example: 5581912345678 → 558112345678@s.whatsapp.net
+ * 
+ * @param {string} phone - Sanitized phone number (digits only)
+ * @returns {string|null} JID string for Baileys, or null if invalid
+ */
+function toBaileysJid(phone) {
+    if (!phone) return null;
+
+    let cleaned = phone.replace(/\D/g, '');
+
+    // Add Brazil country code if missing
+    if (cleaned.length === 10 || cleaned.length === 11) {
+        cleaned = '55' + cleaned;
+    }
+
+    // Remove 9th digit for Brazilian numbers: 55 + DD + 9XXXXXXXX → 55 + DD + XXXXXXXX
+    if (cleaned.length === 13 && cleaned.startsWith('55') && cleaned[4] === '9') {
+        cleaned = cleaned.substring(0, 4) + cleaned.substring(5);
+    }
+
+    if (cleaned.length < 12 || cleaned.length > 13) {
+        return null;
+    }
+
+    return `${cleaned}@s.whatsapp.net`;
+}
+
+/**
  * Delay utility for rate limiting between messages
  */
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { formatMessage, sanitizePhone, delay };
+module.exports = { formatMessage, sanitizePhone, toBaileysJid, delay };

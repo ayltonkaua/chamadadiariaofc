@@ -18,6 +18,13 @@ import type {
     WhatsAppGroup,
     SendResult,
     ApiResponse,
+    BulkImportRow,
+    BulkImportResult,
+    GroupCandidate,
+    AddToGroupResult,
+    SendProgress,
+    AiMessageRequest,
+    AiMessageResponse,
 } from './types';
 
 // Bot API base URL — configure this to your Render deployment
@@ -216,7 +223,11 @@ export const whatsappBotService = {
 
     async saveConfig(
         escolaId: string,
-        config: Partial<Pick<WhatsAppBotConfig, 'template_risco' | 'template_consecutiva' | 'template_mensal' | 'ativo'>>
+        config: Partial<Pick<WhatsAppBotConfig, 
+            'template_risco' | 'template_consecutiva' | 'template_mensal' | 
+            'template_falta_diaria' | 'template_escalacao' | 'grupo_busca_ativa_id' | 
+            'ativo' | 'auto_falta_diaria' | 'auto_consecutiva' | 'auto_mensal' | 'horario_falta_diaria'
+        >>
     ): Promise<WhatsAppBotConfig> {
         const existing = await whatsappBotService.getConfig(escolaId);
 
@@ -257,4 +268,186 @@ export const whatsappBotService = {
         if (error) throw error;
         return (data || []) as WhatsAppLog[];
     },
+
+    // =====================
+    // Bulk Import
+    // =====================
+
+    /**
+     * Bulk import phone numbers from Excel/CSV data
+     * Matches students by matricula and updates their phone numbers
+     */
+    async bulkImportPhones(escolaId: string, data: BulkImportRow[]): Promise<BulkImportResult> {
+        const response = await botFetch<BulkImportResult>('/bulk-import-phones', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({ data }),
+        });
+        return response.data!;
+    },
+
+    // =====================
+    // Group Participants
+    // =====================
+
+    /**
+     * Add participants to a WhatsApp group (max 5 per call)
+     */
+    async addToGroup(escolaId: string, groupId: string, telefones: string[]): Promise<AddToGroupResult> {
+        const response = await botFetch<AddToGroupResult>('/add-to-group', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({ group_id: groupId, telefones }),
+        });
+        return response.data!;
+    },
+
+    /**
+     * Get students with phone numbers that can be added to a WhatsApp group
+     */
+    async getGroupCandidates(escolaId: string, groupId: string): Promise<GroupCandidate[]> {
+        const response = await botFetch<GroupCandidate[]>(`/group-candidates/${groupId}`, escolaId);
+        return response.data || [];
+    },
+
+    /**
+     * Poll send-to-group progress
+     */
+    async getSendProgress(escolaId: string): Promise<SendProgress | null> {
+        const response = await botFetch<SendProgress>('/send-progress', escolaId);
+        return response.data || null;
+    },
+
+    // =====================
+    // Absence Messaging
+    // =====================
+
+    /**
+     * Send daily absence alerts to parents of absent students (queue + progress)
+     */
+    async sendDailyAbsences(escolaId: string, data?: string): Promise<{ total: number; message: string }> {
+        const response = await botFetch<{ total: number; message: string }>('/sendDailyAbsences', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({ data }),
+        });
+        return response as unknown as { total: number; message: string };
+    },
+
+    /**
+     * Send escalation for 3+ consecutive absences without response
+     */
+    async sendEscalation(escolaId: string): Promise<{ sent: number; failed: number; skipped: number }> {
+        const response = await botFetch<{ sent: number; failed: number; skipped: number }>('/sendEscalation', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({}),
+        });
+        return response as unknown as { sent: number; failed: number; skipped: number };
+    },
+
+    /**
+     * Send daily absence summary to Busca Ativa WhatsApp group
+     */
+    async sendDailyAbsencesToGroup(escolaId: string, groupId?: string, data?: string): Promise<{ totalFaltosos: number; criticos: number; message: string }> {
+        const response = await botFetch<{ totalFaltosos: number; criticos: number; message: string }>('/sendDailyAbsencesToGroup', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({ group_id: groupId, data }),
+        });
+        return response as unknown as { totalFaltosos: number; criticos: number; message: string };
+    },
+
+    /**
+     * Poll daily absence send progress
+     */
+    async getAbsenceProgress(escolaId: string): Promise<SendProgress | null> {
+        const response = await botFetch<SendProgress>('/absence-progress', escolaId);
+        return response.data || null;
+    },
+
+    // =====================
+    // AI Message Generation
+    // =====================
+
+    /**
+     * Generate AI-formatted messages for WhatsApp
+     * Uses the existing analyze-evasao Edge Function (Groq/Gemini)
+     */
+    async generateAiMessage(params: AiMessageRequest): Promise<AiMessageResponse> {
+        const tomLabels: Record<string, string> = {
+            formal: 'Formal e profissional',
+            amigavel: 'Amigável e acolhedor',
+            urgente: 'Urgente e direto',
+            informativo: 'Informativo e neutro',
+        };
+
+        const tipoLabels: Record<string, string> = {
+            aviso: 'Aviso geral',
+            evento: 'Evento escolar',
+            reuniao: 'Reunião de pais/responsáveis',
+            frequencia: 'Frequência e faltas',
+            outro: 'Outro assunto',
+        };
+
+        const prompt = `Você é um especialista em comunicação escolar brasileira. A escola precisa enviar uma mensagem por WhatsApp para os responsáveis dos alunos.
+
+INFORMAÇÕES:
+- Assunto: ${params.descricao}
+- Tom desejado: ${tomLabels[params.tom] || params.tom}
+- Tipo de mensagem: ${tipoLabels[params.tipo] || params.tipo}
+
+Gere EXATAMENTE 3 versões diferentes da mensagem, seguindo estas regras:
+1. Use formatação do WhatsApp: *negrito*, _itálico_, ~tachado~
+2. Use emojis apropriados para o contexto escolar
+3. Seja conciso — cada mensagem deve ter no máximo 500 caracteres
+4. Inclua saudação e despedida adequadas
+5. Mantenha o tom solicitado em todas as versões
+6. Se o tipo for sobre frequência/faltas, inclua as variáveis {nome}, {faltas}, {responsavel}, {data} onde faça sentido
+
+RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
+---VERSAO1---
+[mensagem 1 aqui]
+---VERSAO2---
+[mensagem 2 aqui]
+---VERSAO3---
+[mensagem 3 aqui]`;
+
+        const { data, error } = await supabase.functions.invoke('analyze-evasao', {
+            body: { prompt },
+        });
+
+        if (error) {
+            throw new Error(`Erro ao gerar mensagem: ${error.message}`);
+        }
+
+        const texto: string = data?.texto || '';
+        const modelo: string = data?.modelo || 'local';
+
+        if (!texto) {
+            throw new Error('A IA não retornou nenhuma resposta. Tente novamente.');
+        }
+
+        // Parse the 3 versions from the response
+        const versoes = parseVersoes(texto);
+
+        return { versoes, modelo };
+    },
 };
+
+/**
+ * Parse the AI response into 3 separate message versions.
+ * Handles the ---VERSAON--- delimiter format.
+ */
+function parseVersoes(texto: string): string[] {
+    // Try to split by the delimiter format
+    const parts = texto.split(/---VERSAO\d+---/i).filter((p) => p.trim());
+
+    if (parts.length >= 3) {
+        return parts.slice(0, 3).map((p) => p.trim());
+    }
+
+    // Fallback: try splitting by double newlines or numbered patterns
+    const numbered = texto.split(/\n\s*(?:Versão|Opção|Mensagem)\s*\d+[:\-–]*/i).filter((p) => p.trim());
+    if (numbered.length >= 3) {
+        return numbered.slice(0, 3).map((p) => p.trim());
+    }
+
+    // Last fallback: return the whole text as a single version
+    return [texto.trim()];
+}

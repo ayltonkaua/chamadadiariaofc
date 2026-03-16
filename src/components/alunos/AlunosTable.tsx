@@ -40,6 +40,32 @@ interface AlunosTableProps {
 const AlunosTable = ({ alunos, onRemove, canEdit = false }: AlunosTableProps) => {
   const [search, setSearch] = useState("");
 
+  // Parse YYYY-MM-DD as local date (avoid UTC timezone shift)
+  const formatDateLocal = (dateStr: string) => {
+    if (!dateStr) return "--";
+    
+    // Check if it's already in DD/MM/YYYY or DD/MM/YYYY
+    if (dateStr.includes('/')) {
+        return dateStr;
+    }
+
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      // YYYY-MM-DD format
+      if (parts[0].length === 4) {
+        const [y, m, d] = parts;
+        return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+      }
+      // DD-MM-YYYY format fallback
+      if (parts[2].length === 4) {
+        const [d, m, y] = parts;
+        return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+      }
+    }
+    
+    return dateStr;
+  };
+
   const filteredAlunos = alunos.filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
     a.matricula.toLowerCase().includes(search.toLowerCase())
@@ -66,7 +92,7 @@ const AlunosTable = ({ alunos, onRemove, canEdit = false }: AlunosTableProps) =>
                 <CardTitle className="text-base">{aluno.nome}</CardTitle>
                 <CardDescription>Matrícula: {aluno.matricula}</CardDescription>
                 <CardDescription className="mt-1">
-                  Nascimento: {aluno.data_nascimento ? new Date(aluno.data_nascimento).toLocaleDateString('pt-BR') : "--"}
+                  Nascimento: {aluno.data_nascimento ? formatDateLocal(aluno.data_nascimento) : "--"}
                 </CardDescription>
               </div>
               <DropdownMenu>
@@ -113,7 +139,7 @@ const AlunosTable = ({ alunos, onRemove, canEdit = false }: AlunosTableProps) =>
               <TableRow key={aluno.id}>
                 <TableCell className="font-medium">{aluno.nome}</TableCell>
                 <TableCell>{aluno.matricula}</TableCell>
-                <TableCell>{aluno.data_nascimento ? new Date(aluno.data_nascimento).toLocaleDateString('pt-BR') : "--"}</TableCell>
+                <TableCell>{aluno.data_nascimento ? formatDateLocal(aluno.data_nascimento) : "--"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     {/* Perfil */}

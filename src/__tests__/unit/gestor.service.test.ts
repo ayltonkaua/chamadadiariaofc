@@ -12,20 +12,26 @@ const mockRpc = vi.fn();
 const mockFrom = vi.fn();
 const mockSelect = vi.fn();
 const mockOrder = vi.fn();
+const mockEq = vi.fn();
 const mockGte = vi.fn();
 
 vi.mock('@/integrations/supabase/client', () => ({
     supabase: {
-        rpc: (...args: any[]) => mockRpc(...args),
+        rpc: (...args: unknown[]) => mockRpc(...args),
         from: (table: string) => {
             mockFrom(table);
             return {
                 select: (cols: string) => {
                     mockSelect(cols);
                     return {
-                        order: (col: string) => {
-                            mockOrder(col);
-                            return Promise.resolve({ data: [], error: null });
+                        eq: (col: string, val: string) => {
+                            mockEq(col, val);
+                            return {
+                                order: (orderCol: string) => {
+                                    mockOrder(orderCol);
+                                    return Promise.resolve({ data: [], error: null });
+                                },
+                            };
                         },
                         gte: (col: string, val: string) => {
                             mockGte(col, val);
@@ -72,10 +78,11 @@ describe('gestorService', () => {
 
             expect(mockRpc).toHaveBeenCalledWith('get_escola_kpis', { _escola_id: 'escola-123' });
             expect(mockRpc).toHaveBeenCalledWith('get_kpis_administrativos', { _escola_id: 'escola-123' });
-            expect(mockRpc).toHaveBeenCalledWith('get_comparativo_turmas', { _escola_id: 'escola-123' });
-            expect(mockRpc).toHaveBeenCalledWith('get_alunos_em_risco_anual', { limite_faltas: 16, _escola_id: 'escola-123' });
+            expect(mockRpc).toHaveBeenCalledWith('get_comparativo_turmas', { p_escola_id: 'escola-123', p_ano_letivo_id: null });
+            expect(mockRpc).toHaveBeenCalledWith('get_alunos_em_risco_anual', { limite_faltas: 5, _escola_id: 'escola-123' });
             expect(mockRpc).toHaveBeenCalledWith('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: 'escola-123' });
             expect(mockRpc).toHaveBeenCalledWith('get_ultimas_observacoes', { limite: 10, _escola_id: 'escola-123' });
+            expect(mockRpc).toHaveBeenCalledWith('get_frequencia_por_disciplina', { p_escola_id: 'escola-123', p_ano_letivo_id: null });
         });
 
         it('should also query turmas and presencas tables', async () => {
@@ -107,6 +114,7 @@ describe('gestorService', () => {
             expect(result.ultimasObservacoes).toEqual([]);
             expect(result.turmasDisponiveis).toEqual([]);
             expect(result.presencasRecentes).toEqual([]);
+            expect(result.frequenciaDisciplina).toEqual([]);
         });
 
         it('should handle null data gracefully', async () => {

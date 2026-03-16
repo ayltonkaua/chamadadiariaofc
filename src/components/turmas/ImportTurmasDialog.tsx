@@ -48,11 +48,6 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
   console.log('[ImportTurmasDialog] normalized role:', userRole);
   console.log('[ImportTurmasDialog] isManager:', isManager);
 
-  if (!isManager) {
-    console.warn('[ImportTurmasDialog] Access denied for role:', user?.role);
-    return null; // Don't render anything for non-managers
-  }
-
   // Estado interno para controle quando não for controlado externamente
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = externalOpen !== undefined;
@@ -122,7 +117,7 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
         else if (nomeLower.includes('integral')) setTurno("Integral");
 
         setEtapa('mapeamento');
-      } catch (err) {
+      } catch (_err) {
         toast({ title: "Erro ao ler arquivo", variant: "destructive" });
       } finally {
         setLoading(false);
@@ -146,12 +141,27 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
 
       if (idxDataNascimento >= 0 && row[idxDataNascimento]) {
         const rawDate = row[idxDataNascimento];
-        // Tentar converter número Excel para data
+        // Tentar converter número Excel para data (serial date)
         if (typeof rawDate === 'number') {
-          const excelDate = new Date((rawDate - 25569) * 86400 * 1000);
-          dataNascimento = excelDate.toISOString().split('T')[0];
+          // Excel serial date: days since 1900-01-01 (with Excel's leap year bug)
+          // Add 1 to the serial date to fix the leap year bug correctly when generating month/day
+          const d = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+          // Use UTC string split to reliably get YYYY-MM-DD from the UTC date
+          const [yyyy, mm, dd] = d.toISOString().split('T')[0].split('-');
+          dataNascimento = `${yyyy}-${mm}-${dd}`;
         } else {
-          dataNascimento = String(rawDate).trim();
+          const dateStr = String(rawDate).trim();
+          // Converter DD/MM/YYYY para YYYY-MM-DD
+          const brMatch = dateStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (brMatch) {
+            const [, dia, mes, ano] = brMatch;
+            dataNascimento = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+          } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Já está em formato ISO
+            dataNascimento = dateStr;
+          } else {
+            dataNascimento = dateStr; // Deixar como está e tentar sorte no SQL
+          }
         }
       }
 
@@ -193,9 +203,10 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
       onSuccess();
       handleOpenChange(false);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Import error:', err);
-      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+      const message = err instanceof Error ? err.message : "Erro inesperado na importação";
+      toast({ title: "Erro na importação", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -426,6 +437,11 @@ export function ImportTurmasDialog({ onSuccess, open: externalOpen, onOpenChange
       </ScrollArea>
     </div>
   );
+
+  if (!isManager) {
+    console.warn('[ImportTurmasDialog] Access denied for role:', user?.role);
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

@@ -15,6 +15,8 @@ type EscolaConfig = {
   cor_primaria: string;
   cor_secundaria: string;
   tipo_chamada?: 'diaria' | 'disciplina';
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 // CORREÇÃO DEFINITIVA: O nome da propriedade aqui deve ser 'url_logo'.
@@ -26,7 +28,9 @@ const defaultConfig: EscolaConfig = {
   url_logo: null,
   cor_primaria: "#6D28D9",
   cor_secundaria: "#2563EB",
-  tipo_chamada: "diaria", // Default value
+  tipo_chamada: "diaria",
+  latitude: null,
+  longitude: null,
 };
 
 interface EscolaConfigContextType {
@@ -55,7 +59,7 @@ export const EscolaConfigProvider: React.FC<{ children: ReactNode }> = ({ childr
       // CORREÇÃO DEFINITIVA: Selecionando 'url_logo' do banco.
       const { data, error } = await supabase
         .from("escola_configuracao")
-        .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria, tipo_chamada")
+        .select("nome, endereco, email, telefone, url_logo, cor_primaria, cor_secundaria, tipo_chamada, latitude, longitude")
         .eq("id", user.escola_id)
         .single();
 

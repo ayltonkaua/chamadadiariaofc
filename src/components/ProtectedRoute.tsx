@@ -25,6 +25,11 @@ const ProtectedRoute = ({ allowedRoles, allowedTypes }: ProtectedRouteProps) => 
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
+    // Force password change for users created with temp passwords
+    if (user.mustChangePassword) {
+        return <Navigate to="/trocar-senha" replace />;
+    }
+
     // Se houver restrição de roles/types
     if ((allowedRoles && allowedRoles.length > 0) || (allowedTypes && allowedTypes.length > 0)) {
         const userRole = user.role || '';

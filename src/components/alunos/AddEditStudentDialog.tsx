@@ -10,11 +10,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
-import { Mail, UserX, CheckCircle2, Loader2 } from "lucide-react";
+import { Mail, UserX, CheckCircle2, Loader2, MapPin } from "lucide-react";
+import { geocodeAddress } from "@/lib/geocoding.service";
 
 interface Student {
   id?: string;
@@ -23,9 +25,19 @@ interface Student {
   turma_id: string;
   nome_responsavel?: string;
   telefone_responsavel?: string;
-  user_id?: string; // ID do usuário vinculado (auth.users)
-  data_nascimento?: string; // Data de nascimento (YYYY-MM-DD)
-  endereco?: string; // Endereço do aluno
+  telefone_responsavel_2?: string;
+  user_id?: string;
+  data_nascimento?: string;
+  endereco?: string;
+  trabalha?: boolean;
+  recebe_pe_de_meia?: boolean;
+  recebe_bolsa_familia?: boolean;
+  mora_com_familia?: boolean;
+  usa_transporte?: boolean;
+  tem_passe_livre?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  telefone_aluno?: string;
 }
 
 interface AddEditStudentDialogProps {
@@ -52,8 +64,25 @@ export default function AddEditStudentDialog({
   const [matricula, setMatricula] = useState("");
   const [nomeResponsavel, setNomeResponsavel] = useState("");
   const [telefoneResponsavel, setTelefoneResponsavel] = useState("");
+  const [telefoneResponsavel2, setTelefoneResponsavel2] = useState("");
   const [dataNascimento, setDataNascimento] = useState("");
   const [endereco, setEndereco] = useState("");
+
+  // Socioeconomic fields
+  const [trabalha, setTrabalha] = useState(false);
+  const [recebePeDeMeia, setRecebePeDeMeia] = useState(false);
+  const [recebeBolsaFamilia, setRecebeBolsaFamilia] = useState(false);
+  const [moraComFamilia, setMoraComFamilia] = useState(true);
+  const [usaTransporte, setUsaTransporte] = useState(false);
+  const [temPasseLivre, setTemPasseLivre] = useState(false);
+
+  // Student contact
+  const [telefoneAluno, setTelefoneAluno] = useState("");
+
+  // Geocoding
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [geocodingStatus, setGeocodingStatus] = useState<'idle' | 'loading' | 'found' | 'not_found'>('idle');
 
   // Estados para exibição do vínculo de conta
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
@@ -70,8 +99,19 @@ export default function AddEditStudentDialog({
       setMatricula(student.matricula || "");
       setNomeResponsavel(student.nome_responsavel || "");
       setTelefoneResponsavel(student.telefone_responsavel || "");
+      setTelefoneResponsavel2(student.telefone_responsavel_2 || "");
       setDataNascimento(student.data_nascimento || "");
       setEndereco(student.endereco || "");
+      setTrabalha(student.trabalha || false);
+      setRecebePeDeMeia(student.recebe_pe_de_meia || false);
+      setRecebeBolsaFamilia(student.recebe_bolsa_familia || false);
+      setMoraComFamilia(student.mora_com_familia !== false); // default true
+      setUsaTransporte(student.usa_transporte || false);
+      setTemPasseLivre(student.tem_passe_livre || false);
+      setLatitude(student.latitude || null);
+      setLongitude(student.longitude || null);
+      setGeocodingStatus(student.latitude ? 'found' : 'idle');
+      setTelefoneAluno(student.telefone_aluno || "");
 
       // Busca o e-mail se o aluno tiver um usuário vinculado
       if (student.user_id) {
@@ -86,8 +126,18 @@ export default function AddEditStudentDialog({
       setMatricula("");
       setNomeResponsavel("");
       setTelefoneResponsavel("");
+      setTelefoneResponsavel2("");
       setDataNascimento("");
       setEndereco("");
+      setTrabalha(false);
+      setRecebePeDeMeia(false);
+      setMoraComFamilia(true);
+      setUsaTransporte(false);
+      setTemPasseLivre(false);
+      setLatitude(null);
+      setLongitude(null);
+      setGeocodingStatus('idle');
+      setTelefoneAluno("");
       setRegisteredEmail(null);
     }
   }, [student, open, isEditing]);
@@ -95,7 +145,6 @@ export default function AddEditStudentDialog({
   const fetchStudentEmail = async (userId: string) => {
     setLoadingEmail(true);
     try {
-      // Chama a função RPC criada no banco de dados
       const { data, error } = await supabase.rpc('get_user_email', { p_user_id: userId });
       if (!error && data) {
         setRegisteredEmail(data);
@@ -106,6 +155,28 @@ export default function AddEditStudentDialog({
       console.error("Erro ao buscar email:", err);
     } finally {
       setLoadingEmail(false);
+    }
+  };
+
+  // -------------------------------------------------------
+  // GEOCODING ao sair do campo endereço
+  // -------------------------------------------------------
+  const handleEnderecoBlur = async () => {
+    if (!endereco || endereco.trim().length < 5) {
+      setGeocodingStatus('idle');
+      return;
+    }
+
+    setGeocodingStatus('loading');
+    const result = await geocodeAddress(endereco);
+    if (result) {
+      setLatitude(result.latitude);
+      setLongitude(result.longitude);
+      setGeocodingStatus('found');
+    } else {
+      setLatitude(null);
+      setLongitude(null);
+      setGeocodingStatus('not_found');
     }
   };
 
@@ -133,13 +204,23 @@ export default function AddEditStudentDialog({
         );
       }
 
-      const payload = {
+      const payload: Record<string, any> = {
         nome,
         matricula,
         nome_responsavel: nomeResponsavel,
         telefone_responsavel: telefoneResponsavel,
+        telefone_responsavel_2: telefoneResponsavel2 || null,
         data_nascimento: dataNascimento || null,
         endereco: endereco || null,
+        trabalha,
+        recebe_pe_de_meia: recebePeDeMeia,
+        recebe_bolsa_familia: recebeBolsaFamilia,
+        mora_com_familia: moraComFamilia,
+        usa_transporte: usaTransporte,
+        tem_passe_livre: temPasseLivre,
+        latitude: latitude,
+        longitude: longitude,
+        telefone_aluno: telefoneAluno || null,
       };
 
       if (isEditing && student?.id) {
@@ -187,7 +268,7 @@ export default function AddEditStudentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Editar aluno" : "Adicionar aluno"}
@@ -299,13 +380,120 @@ export default function AddEditStudentDialog({
               </div>
 
               <div className="grid gap-2">
+                <Label htmlFor="telefone_responsavel_2">Telefone Responsável 2 (opcional)</Label>
+                <Input
+                  id="telefone_responsavel_2"
+                  value={telefoneResponsavel2}
+                  onChange={(e) => setTelefoneResponsavel2(e.target.value)}
+                  placeholder="(XX) 9XXXX-XXXX"
+                />
+              </div>
+            </div>
+
+            {/* Endereço + Geocoding */}
+            <div className="space-y-4 mt-2">
+              <h4 className="text-sm font-medium text-muted-foreground border-b pb-1">
+                Localização
+              </h4>
+
+              <div className="grid gap-2">
                 <Label htmlFor="endereco">Endereço</Label>
                 <Input
                   id="endereco"
                   value={endereco}
                   onChange={(e) => setEndereco(e.target.value)}
+                  onBlur={handleEnderecoBlur}
                   placeholder="Rua, número, bairro, cidade"
                 />
+                {geocodingStatus === 'loading' && (
+                  <p className="text-xs text-blue-600 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Buscando localização...
+                  </p>
+                )}
+                {geocodingStatus === 'found' && (
+                  <p className="text-xs text-green-600 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Localização encontrada
+                  </p>
+                )}
+                {geocodingStatus === 'not_found' && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    ⚠️ Endereço não localizado no mapa. Tente ser mais específico.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Contato do Aluno */}
+            <div className="space-y-4 mt-2">
+              <h4 className="text-sm font-medium text-muted-foreground border-b pb-1">
+                Contato do Aluno
+              </h4>
+
+              <div className="grid gap-2">
+                <Label htmlFor="telefone_aluno">Telefone / WhatsApp</Label>
+                <Input
+                  id="telefone_aluno"
+                  value={telefoneAluno}
+                  onChange={(e) => setTelefoneAluno(e.target.value)}
+                  placeholder="(XX) 9XXXX-XXXX"
+                />
+              </div>
+            </div>
+
+            {/* Dados socioeconômicos */}
+            <div className="space-y-4 mt-2">
+              <h4 className="text-sm font-medium text-muted-foreground border-b pb-1">
+                Dados Socioeconômicos
+              </h4>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="trabalha" className="text-sm font-medium">Trabalha</Label>
+                    <p className="text-xs text-muted-foreground">O aluno exerce atividade remunerada?</p>
+                  </div>
+                  <Switch id="trabalha" checked={trabalha} onCheckedChange={setTrabalha} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="pe_de_meia" className="text-sm font-medium">Pé-de-Meia</Label>
+                    <p className="text-xs text-muted-foreground">Recebe benefício Pé-de-Meia?</p>
+                  </div>
+                  <Switch id="pe_de_meia" checked={recebePeDeMeia} onCheckedChange={setRecebePeDeMeia} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="bolsa_familia" className="text-sm font-medium">Bolsa Família</Label>
+                    <p className="text-xs text-muted-foreground">Recebe benefício Bolsa Família?</p>
+                  </div>
+                  <Switch id="bolsa_familia" checked={recebeBolsaFamilia} onCheckedChange={setRecebeBolsaFamilia} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="familia" className="text-sm font-medium">Mora com a família</Label>
+                    <p className="text-xs text-muted-foreground">O aluno reside com familiares?</p>
+                  </div>
+                  <Switch id="familia" checked={moraComFamilia} onCheckedChange={setMoraComFamilia} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="transporte" className="text-sm font-medium">Transporte Escolar</Label>
+                    <p className="text-xs text-muted-foreground">Utiliza transporte escolar?</p>
+                  </div>
+                  <Switch id="transporte" checked={usaTransporte} onCheckedChange={setUsaTransporte} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <Label htmlFor="passe_livre" className="text-sm font-medium">Passe Livre</Label>
+                    <p className="text-xs text-muted-foreground">Possui passe livre estudantil?</p>
+                  </div>
+                  <Switch id="passe_livre" checked={temPasseLivre} onCheckedChange={setTemPasseLivre} />
+                </div>
               </div>
             </div>
           </div>

@@ -219,5 +219,105 @@ export const acessoService = {
             log.error('Failed to unlink student account', { message: error.message });
             throw new Error(error.message);
         }
-    }
+    },
+
+    /**
+     * Creates a staff account using an isolated signUp + RPC configuration.
+     * Uses a separate Supabase client for signUp to avoid switching the admin session.
+     * Step 1: Isolated signUp creates the user in GoTrue (no session switch)
+     * Step 2: RPC configurar_conta_equipe sets user_roles + confirms email (as admin)
+     */
+    async criarContaEquipe(params: {
+        email: string;
+        nome: string;
+        role: string;
+        password: string;
+    }): Promise<{ success: boolean; userId: string; message: string }> {
+        log.info('Creating staff account', { email: params.email, role: params.role });
+
+        // Step 1: Create a SEPARATE Supabase client that won't affect the admin session
+        const { createClient } = await import('@supabase/supabase-js');
+        const isolatedClient = createClient(
+            import.meta.env.VITE_SUPABASE_URL,
+            import.meta.env.VITE_SUPABASE_ANON_KEY,
+            {
+                auth: {
+                    persistSession: false,   // Don't save to localStorage
+                    autoRefreshToken: false,  // Don't auto-refresh
+                    detectSessionInUrl: false,
+                },
+            }
+        );
+
+        const { data: signUpData, error: signUpError } = await isolatedClient.auth.signUp({
+            email: params.email.trim().toLowerCase(),
+            password: params.password,
+            options: {
+                data: {
+                    username: params.nome.trim(),
+                    role: params.role,
+                    must_change_password: true,
+                },
+            },
+        });
+
+        if (signUpError) {
+            log.error('Failed to create staff account (signUp error)', { message: signUpError.message });
+            if (signUpError.message.includes('already registered')) {
+                throw new Error('Este email já está cadastrado no sistema');
+            }
+            throw new Error(signUpError.message || 'Erro ao criar conta');
+        }
+
+        const newUserId = signUpData.user?.id;
+        if (!newUserId) {
+            throw new Error('Erro inesperado: usuário criado mas sem ID');
+        }
+
+        // Step 2: Configure role + confirm email via SECURITY DEFINER RPC
+        // This runs on the MAIN client (as the admin user)
+        // @ts-expect-error RPC not in generated types
+        const { data: rawData, error: rpcError } = await supabase.rpc('configurar_conta_equipe', {
+            p_user_id: newUserId,
+            p_role: params.role,
+            p_nome: params.nome.trim(),
+        });
+
+        if (rpcError) {
+            log.error('Failed to configure staff account (RPC error)', { message: rpcError.message });
+            throw new Error(rpcError.message || 'Conta criada, mas erro ao configurar permissões');
+        }
+
+        const data = rawData as any;
+
+        if (data && !data.success) {
+            log.error('Failed to configure staff account (logic error)', { message: data.error });
+            throw new Error(data.error || 'Conta criada, mas erro ao configurar permissões');
+        }
+
+        log.info('Staff account created and configured successfully', { userId: newUserId });
+        return {
+            success: true,
+            userId: newUserId,
+            message: data?.message || 'Conta criada com sucesso',
+        };
+    },
 };
+
+/**
+ * Generates a random temporary password.
+ * Format: 3 lowercase letters + 2 digits + 3 uppercase letters (e.g., abc12XYZ)
+ * Easy to read aloud and type, but sufficiently random.
+ */
+export function generateTempPassword(): string {
+    const lower = 'abcdefghijkmnopqrstuvwxyz'; // no 'l'
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no 'I', 'O'
+    const digits = '23456789';                   // no '0', '1'
+
+    let password = '';
+    for (let i = 0; i < 3; i++) password += lower[Math.floor(Math.random() * lower.length)];
+    for (let i = 0; i < 2; i++) password += digits[Math.floor(Math.random() * digits.length)];
+    for (let i = 0; i < 3; i++) password += upper[Math.floor(Math.random() * upper.length)];
+
+    return password;
+}

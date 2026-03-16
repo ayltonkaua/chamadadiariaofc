@@ -193,7 +193,9 @@ const ChamadaPage: React.FC = () => {
           if (podeEditar && !podeEditar.permitido) {
             setAnoFechado({ bloqueado: true, motivo: podeEditar.motivo });
           }
-        } catch { }
+        } catch (err) {
+          console.debug("Falha ao carregar metadados da turma", err);
+        }
       }
 
       if (!navigator.onLine) {
@@ -250,7 +252,9 @@ const ChamadaPage: React.FC = () => {
             }
           }
         }
-      } catch { }
+      } catch (err) {
+        console.debug("Falha ao carregar cache de atestados", err);
+      }
 
       // Ordenar e cachear alunos
       listaAlunos.sort((a, b) => a.nome.localeCompare(b.nome));

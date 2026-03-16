@@ -7,7 +7,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/core';
-import { subDays } from 'date-fns';
 import type {
     KpiData,
     KpiAdminData,
@@ -17,9 +16,10 @@ import type {
     UltimaObservacaoData,
     TurmaMetadata,
     PresencaRecente,
-    DashboardGestorData,
     UltimaPresenca,
-    FrequenciaDisciplinaData
+    FrequenciaDisciplinaData,
+    FaltasDiaSemanaData,
+    DashboardGestorData
 } from '../types/gestor.types';
 
 const log = logger.child('GestorService');
@@ -45,14 +45,21 @@ export const gestorService = {
         log.info('Loading dashboard data', { escolaId, filtroAnoLetivoId });
 
         // Safe RPC calls with error handling
-        const kpiPromise = safeCallRpc('get_escola_kpis', { _escola_id: escolaId });
+        const kpiPromise = safeCallRpc('get_escola_kpis', { 
+            _escola_id: escolaId,
+            _ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
+        });
         const kpiAdminPromise = safeCallRpc('get_kpis_administrativos', { _escola_id: escolaId });
         const comparativoPromise = safeCallRpc('get_comparativo_turmas', {
             p_escola_id: escolaId,
             p_ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
         });
         // Alunos em risco: Limite de 5 faltas (ajuste conforme regra da escola)
-        const riscoPromise = safeCallRpc('get_alunos_em_risco_anual', { limite_faltas: 5, _escola_id: escolaId });
+        const riscoPromise = safeCallRpc('get_alunos_em_risco_anual', { 
+            limite_faltas: 5, 
+            _escola_id: escolaId,
+            _ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
+        });
         const consecPromise = safeCallRpc('get_alunos_faltas_consecutivas', { dias_seguidos: 3, _escola_id: escolaId });
         const obsPromise = safeCallRpc('get_ultimas_observacoes', { limite: 10, _escola_id: escolaId });
         const freqPromise = safeCallRpc('get_frequencia_por_disciplina', {
@@ -60,10 +67,14 @@ export const gestorService = {
             p_ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
         });
 
-        // Direct Supabase queries - turmas table doesn't have 'ativo' column
+        // Direct Supabase queries
         const turmasPromise = supabase.from('turmas').select('id, nome, turno').eq('escola_id', escolaId).order('nome');
-        const presencasPromise = supabase.from('presencas').select('data_chamada, presente, turma_id, escola_id')
-            .gte('data_chamada', subDays(new Date(), 15).toISOString());
+        // Server-side day-of-week aggregation (avoids JS timezone bugs)
+        const faltasDiaSemanaPromise = safeCallRpc('get_faltas_por_dia_semana', {
+            _escola_id: escolaId,
+            _dias: 15,
+            _ano_letivo_id: filtroAnoLetivoId ? filtroAnoLetivoId : null
+        });
 
         const [
             kpiRes,
@@ -73,7 +84,7 @@ export const gestorService = {
             consecRes,
             obsRes,
             turmasListRes,
-            presencasRes,
+            faltasDiaSemanaRes,
             freqRes
         ] = await Promise.all([
             kpiPromise,
@@ -83,7 +94,7 @@ export const gestorService = {
             consecPromise,
             obsPromise,
             turmasPromise,
-            presencasPromise,
+            faltasDiaSemanaPromise,
             freqPromise
         ]);
 
@@ -100,7 +111,7 @@ export const gestorService = {
             alunosConsecutivos: (consecRes.data as unknown as AlunoFaltasConsecutivasData[]) ?? [],
             ultimasObservacoes: (obsRes.data as unknown as UltimaObservacaoData[]) ?? [],
             turmasDisponiveis: (turmasListRes.data as TurmaMetadata[]) ?? [],
-            presencasRecentes: (presencasRes.data as PresencaRecente[]) ?? [],
+            faltasPorDiaSemana: (faltasDiaSemanaRes.data as unknown as FaltasDiaSemanaData[]) ?? [],
             frequenciaDisciplina: (freqRes.data as unknown as FrequenciaDisciplinaData[]) ?? []
         };
     },
@@ -121,6 +132,30 @@ export const gestorService = {
         }
 
         return ((data as unknown as UltimaPresenca[]) ?? []).slice(0, 3);
+    },
+
+    /**
+     * Gets last attendances for multiple students in batch (eliminates N+1)
+     */
+    async getUltimasPresencasBatch(alunoIds: string[]): Promise<Map<string, UltimaPresenca[]>> {
+        if (!alunoIds.length) return new Map();
+        
+        const { data, error } = await safeCallRpc('get_ultimas_presencas_batch', {
+            p_aluno_ids: alunoIds
+        });
+
+        if (error || !data) {
+            log.warn('Batch presencas failed, falling back', { error: String(error) });
+            return new Map();
+        }
+
+        const map = new Map<string, UltimaPresenca[]>();
+        for (const row of (data as any[])) {
+            const arr = map.get(row.aluno_id) || [];
+            arr.push({ data_chamada: row.data_chamada, presente: row.presente });
+            map.set(row.aluno_id, arr);
+        }
+        return map;
     },
 
     /**

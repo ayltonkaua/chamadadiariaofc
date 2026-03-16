@@ -47,6 +47,7 @@ export interface AlunoData {
     escola_id: string;
     nome_responsavel?: string | null;
     telefone_responsavel?: string | null;
+    telefone_responsavel_2?: string | null;
     data_nascimento?: string | null;
     endereco?: string | null;
 }
@@ -484,7 +485,7 @@ export async function getAlunosByTurma(turmaId: string, escolaId?: string): Prom
     try {
         const { data, error } = await supabase
             .from('alunos')
-            .select('id, nome, matricula, turma_id, escola_id, nome_responsavel, telefone_responsavel, data_nascimento, endereco')
+            .select('id, nome, matricula, turma_id, escola_id, nome_responsavel, telefone_responsavel, telefone_responsavel_2, data_nascimento, endereco')
             .eq('turma_id', turmaId)
             .order('nome');
 

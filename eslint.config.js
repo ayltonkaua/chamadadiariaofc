@@ -5,7 +5,25 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  {
+    ignores: [
+      "dist",
+      "node_modules",
+      "android/**",
+      "ios/**",
+      "bot-api/**",
+      "portal-aluno-api/**",
+      "portal-aluno-frontend/**",
+      "super-admin-api/**",
+      "super-admin-frontend/**",
+      "supabase/.temp/**",
+      "**/build/**",
+      "src/integrations/supabase/types.ts",
+      "public/._*",
+      "**/._*",
+      "vite.config.ts.timestamp-*.mjs",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -24,6 +42,7 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
   // ARCHITECTURE RULE: Block direct Supabase imports in Pages

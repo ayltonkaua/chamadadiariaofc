@@ -10,6 +10,8 @@ export interface KpiData {
 export interface KpiAdminData {
     atestados_pendentes: number;
     justificativas_a_rever: number;
+    faltas_hoje: number;
+    turmas_sem_chamada: number;
 }
 
 export interface TurmaComparisonData {
@@ -39,6 +41,7 @@ export interface UltimaObservacaoData {
     titulo: string;
     descricao: string;
     created_at?: string;
+    data_criacao?: string;
 }
 
 export interface UltimaPresenca {
@@ -68,6 +71,14 @@ export interface FrequenciaDisciplinaData {
     taxa_frequencia: number;
 }
 
+export interface FaltasDiaSemanaData {
+    dia_semana_nome: string;
+    dia_semana_num: number;
+    total_registros: number;
+    total_faltas: number;
+    percentual_faltas: number;
+}
+
 export interface DashboardGestorData {
     kpis: KpiData | null;
     kpisAdmin: KpiAdminData | null;
@@ -76,6 +87,6 @@ export interface DashboardGestorData {
     alunosConsecutivos: AlunoFaltasConsecutivasData[];
     ultimasObservacoes: UltimaObservacaoData[];
     turmasDisponiveis: TurmaMetadata[];
-    presencasRecentes: PresencaRecente[];
+    faltasPorDiaSemana: FaltasDiaSemanaData[];
     frequenciaDisciplina: FrequenciaDisciplinaData[];
 }

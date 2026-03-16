@@ -15,10 +15,36 @@ CREATE TABLE public.alunos (
   dados_atualizados_em timestamp with time zone,
   data_nascimento date,
   situacao text DEFAULT 'ativo'::text CHECK (situacao = ANY (ARRAY['ativo'::text, 'aprovado'::text, 'reprovado'::text, 'transferido'::text, 'abandono'::text, 'falecido'::text, 'cancelado'::text])),
+  trabalha boolean DEFAULT false,
+  recebe_pe_de_meia boolean DEFAULT false,
+  mora_com_familia boolean DEFAULT true,
+  usa_transporte boolean DEFAULT false,
+  tem_passe_livre boolean DEFAULT false,
+  latitude double precision,
+  longitude double precision,
+  telefone_aluno text,
+  recebe_bolsa_familia boolean DEFAULT false,
+  telefone_responsavel_2 text,
   CONSTRAINT alunos_pkey PRIMARY KEY (id),
   CONSTRAINT alunos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
   CONSTRAINT alunos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT alunos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
+);
+CREATE TABLE public.analises_evasao (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid NOT NULL,
+  escola_id uuid NOT NULL,
+  score_risco integer NOT NULL DEFAULT 0 CHECK (score_risco >= 0 AND score_risco <= 100),
+  nivel text NOT NULL DEFAULT 'verde'::text CHECK (nivel = ANY (ARRAY['verde'::text, 'amarelo'::text, 'vermelho'::text])),
+  fatores_risco jsonb DEFAULT '[]'::jsonb,
+  recomendacao_ia text,
+  modelo_utilizado text CHECK (modelo_utilizado = ANY (ARRAY['groq'::text, 'gemini'::text, 'local'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  analisado_por uuid,
+  CONSTRAINT analises_evasao_pkey PRIMARY KEY (id),
+  CONSTRAINT analises_evasao_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT analises_evasao_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT analises_evasao_analisado_por_fkey FOREIGN KEY (analisado_por) REFERENCES auth.users(id)
 );
 CREATE TABLE public.anos_letivos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -121,6 +147,8 @@ CREATE TABLE public.escola_configuracao (
   url_logo text,
   status text DEFAULT 'aprovada'::text CHECK (status = ANY (ARRAY['pendente'::text, 'aprovada'::text, 'rejeitada'::text])),
   tipo_chamada text DEFAULT 'diaria'::text CHECK (tipo_chamada = ANY (ARRAY['diaria'::text, 'disciplina'::text])),
+  latitude double precision,
+  longitude double precision,
   CONSTRAINT escola_configuracao_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.escola_rate_limit (
@@ -341,4 +369,42 @@ CREATE TABLE public.user_roles (
   CONSTRAINT user_roles_pkey PRIMARY KEY (id),
   CONSTRAINT user_roles_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
   CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.uso_ia_diario (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  escola_id uuid NOT NULL,
+  data date NOT NULL DEFAULT CURRENT_DATE,
+  contagem integer NOT NULL DEFAULT 1,
+  CONSTRAINT uso_ia_diario_pkey PRIMARY KEY (id),
+  CONSTRAINT uso_ia_diario_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.whatsapp_bot_config (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL UNIQUE,
+  template_risco text DEFAULT 'Olá {responsavel}, informamos que o(a) aluno(a) {nome} está em situação de risco com {faltas} faltas acumuladas. Por favor, entre em contato com a escola. Data: {data}'::text,
+  template_consecutiva text DEFAULT 'Olá {responsavel}, o(a) aluno(a) {nome} possui {faltas} faltas consecutivas. Solicitamos atenção para evitar prejuízo no aprendizado. Data: {data}'::text,
+  template_mensal text DEFAULT 'Olá {responsavel}, segue o resumo mensal de frequência do(a) aluno(a) {nome}: Total de faltas no mês: {faltas}. Data do relatório: {data}'::text,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  template_falta_diaria text DEFAULT 'Prezado(a) {responsavel}, informamos que o(a) aluno(a) *{nome}* não compareceu à aula hoje ({data}). Caso haja algum motivo, por favor entre em contato com a escola.'::text,
+  template_escalacao text DEFAULT 'Prezado(a) {responsavel}, o(a) aluno(a) *{nome}* acumula *{faltas} faltas consecutivas* sem justificativa. É fundamental que nos informe o motivo para que possamos acionar a Busca Ativa e garantir a permanência escolar. Entre em contato com urgência.'::text,
+  grupo_busca_ativa_id text,
+  CONSTRAINT whatsapp_bot_config_pkey PRIMARY KEY (id),
+  CONSTRAINT whatsapp_bot_config_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
+CREATE TABLE public.whatsapp_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  aluno_id uuid,
+  telefone text NOT NULL,
+  mensagem text NOT NULL,
+  tipo text NOT NULL DEFAULT 'manual'::text CHECK (tipo = ANY (ARRAY['manual'::text, 'risco'::text, 'consecutiva'::text, 'mensal'::text, 'falta_diaria'::text, 'escalacao'::text, 'busca_ativa_grupo'::text])),
+  status text NOT NULL DEFAULT 'enviado'::text CHECK (status = ANY (ARRAY['enviado'::text, 'falha'::text, 'pendente'::text])),
+  erro text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT whatsapp_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT whatsapp_logs_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT whatsapp_logs_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
 );

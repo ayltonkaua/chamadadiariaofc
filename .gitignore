@@ -72,3 +72,5 @@ portal-aluno-frontend/
 portal-aluno-api/
 super-admin-frontend/
 super-admin-api/
+supabase/.temp/
+**/._*

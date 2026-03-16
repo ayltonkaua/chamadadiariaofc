@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Pie, Cell, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ControlledPagination } from '@/components/ui/controlled-pagination';
@@ -9,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import {
   CheckCircle2, XCircle, AlertTriangle, FileText, BookCopy,
   MessageSquareQuote, TrendingUp, Users, Filter, Check,
-  ChevronsUpDown, Calendar, Loader2, RefreshCw
+  ChevronsUpDown, Calendar, Loader2, RefreshCw, UserX, School
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,6 +33,7 @@ import {
   type PresencaRecente,
   type UltimaPresenca
 } from '@/domains';
+import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -64,7 +65,9 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
         const data = await gestorService.getUltimasPresencasAluno(aluno.aluno_id);
         if (!isMounted) return;
         setUltimasPresencas(data);
-      } catch (err) { }
+      } catch (err) {
+        console.debug('Falha ao carregar últimas presenças', err);
+      }
     }
     if (aluno.aluno_id) fetchPresencas();
     return () => { isMounted = false; };
@@ -103,14 +106,11 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 }
 
 // --- PÁGINA PRINCIPAL ---
-import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
-
 export default function DashboardGestorPage() {
   const { config } = useEscolaConfig();
-  const corPrimaria = config?.cor_primaria || "#3B82F6"; // Azul padrão se falhar
+  const corPrimaria = config?.cor_primaria || "#3B82F6";
   const corSecundaria = config?.cor_secundaria || "#F59E0B";
 
-  // --- USANDO CUSTOM HOOK ---
   const {
     kpis,
     kpisAdmin,
@@ -140,7 +140,6 @@ export default function DashboardGestorPage() {
     refresh
   } = useDashboardGestor();
 
-  // Toggle turma selection helper
   const toggleTurma = (turmaId: string) => {
     const newSelection = turmasSelecionadas.includes(turmaId)
       ? turmasSelecionadas.filter(id => id !== turmaId)
@@ -158,7 +157,6 @@ export default function DashboardGestorPage() {
     return num.toString();
   };
 
-  // --- RENDERIZAÇÃO ---
   if (loading) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-gray-50/50">
@@ -254,12 +252,14 @@ export default function DashboardGestorPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPI Cards — 6 cards */}
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryCard title="Presença Geral" value={kpis ? formatPercent(kpis.taxa_presenca_geral) : '0%'} icon={TrendingUp} colorClass="bg-gradient-to-br from-blue-500 to-blue-600" loading={loading} />
         <SummaryCard title="Total de Alunos" value={kpis ? formatNumber(kpis.total_alunos) : '0'} icon={Users} colorClass="bg-gradient-to-br from-emerald-500 to-emerald-600" loading={loading} />
-        <SummaryCard title="Atestados Pendentes" value={kpisAdmin ? formatNumber(kpisAdmin.atestados_pendentes) : '0'} icon={FileText} colorClass="bg-gradient-to-br from-rose-500 to-rose-600" loading={loading} />
-        <SummaryCard title="Justificativas" value={kpisAdmin ? formatNumber(kpisAdmin.justificativas_a_rever) : '0'} icon={BookCopy} colorClass="bg-gradient-to-br from-amber-500 to-amber-600" loading={loading} />
+        <SummaryCard title="Faltas Hoje" value={kpisAdmin ? formatNumber(kpisAdmin.faltas_hoje) : '0'} icon={UserX} colorClass="bg-gradient-to-br from-rose-500 to-rose-600" loading={loading} />
+        <SummaryCard title="Turmas s/ Chamada" value={kpisAdmin ? formatNumber(kpisAdmin.turmas_sem_chamada) : '0'} icon={School} colorClass="bg-gradient-to-br from-amber-500 to-amber-600" loading={loading} />
+        <SummaryCard title="Atestados Pendentes" value={kpisAdmin ? formatNumber(kpisAdmin.atestados_pendentes) : '0'} icon={FileText} colorClass="bg-gradient-to-br from-purple-500 to-purple-600" loading={loading} />
+        <SummaryCard title="Faltas Justificadas" value={kpisAdmin ? formatNumber(kpisAdmin.justificativas_a_rever) : '0'} icon={BookCopy} colorClass="bg-gradient-to-br from-sky-500 to-sky-600" loading={loading} />
       </section>
 
       {/* GRÁFICOS */}
@@ -279,22 +279,23 @@ export default function DashboardGestorPage() {
                     <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
                     <Tooltip formatter={(value: number) => [`${value.toFixed(1)}%`, 'Presença']} cursor={{ fill: 'transparent' }} />
                     <Bar dataKey="taxa_presenca" fill={corPrimaria} radius={[4, 4, 0, 0]} name="Presença" />
+                    <ReferenceLine y={75} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: 'Meta 75%', position: 'insideTopRight', fill: '#f59e0b', fontSize: 11 }} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Novo Gráfico de Disciplinas */}
+          {/* Gráfico de Disciplinas */}
           {(config?.tipo_chamada === 'disciplina' || !config?.tipo_chamada) && (
             <FrequenciaPorDisciplinaChart data={frequenciaDisciplina} />
           )}
 
-          {/* Evolução Semanal de Faltas */}
+          {/* Faltas por Dia da Semana (título corrigido) */}
           <Card className="col-span-1 shadow-sm hover:shadow-md transition-shadow">
             <CardHeader>
-              <CardTitle>Evolução de Faltas</CardTitle>
-              <CardDescription>Total de faltas diárias nos últimos 7 dias.</CardDescription>
+              <CardTitle>Faltas por Dia da Semana</CardTitle>
+              <CardDescription>Percentual de faltas agrupado por dia da semana (últimos 15 dias).</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px] w-full">
@@ -306,11 +307,11 @@ export default function DashboardGestorPage() {
                         <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="dia" tick={{ fontSize: 12 }} />
-                    <YAxis />
+                    <XAxis dataKey="dia_semana_nome" tick={{ fontSize: 12 }} />
+                    <YAxis tickFormatter={(value) => `${value}%`} />
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="faltas" stroke="#ef4444" fillOpacity={1} fill="url(#colorFaltas)" name="Faltas" />
+                    <Tooltip formatter={(value: number) => [`${value}%`, 'Faltas']} />
+                    <Area type="monotone" dataKey="percentual_faltas" stroke="#ef4444" fillOpacity={1} fill="url(#colorFaltas)" name="Faltas %" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -387,7 +388,14 @@ export default function DashboardGestorPage() {
                 <ul className="space-y-4">
                   {ultimasObservacoes.length > 0 ? ultimasObservacoes.map((obs, index) => (
                     <li key={index} className="flex flex-col bg-gray-50 p-4 rounded-lg border border-gray-100">
-                      <span className="font-semibold text-gray-800 text-sm mb-2">{obs.titulo}</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-800 text-sm">{obs.titulo}</span>
+                        {(obs.data_criacao || obs.created_at) && (
+                          <span className="text-xs text-gray-400">
+                            {format(parseISO(obs.data_criacao || obs.created_at || ''), 'dd/MM', { locale: ptBR })}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-600 italic mb-3">"{obs.descricao}"</p>
                       <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded border w-fit">{obs.aluno_nome}</span>
                     </li>

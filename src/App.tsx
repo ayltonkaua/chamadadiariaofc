@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Outlet } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { EscolaConfigProvider } from "@/contexts/EscolaConfigContext";
 import EscolaThemeProvider from "@/components/EscolaThemeProvider";
 import Layout from "@/components/layout/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
+import { QueryProvider } from "@/providers/QueryProvider";
+import { queryClient } from "@/providers/query-client";
 
 // Importações de Páginas
 import LoginPage from "@/pages/LoginPage";
@@ -27,39 +28,29 @@ import NotificacoesPage from "@/pages/NotificacoesPage";
 import ConsultarFaltasPage from "@/pages/ConsultarFaltasPage";
 import AlunoPage from "@/pages/AlunoPage";
 import PerfilEscolaPage from "@/pages/PerfilEscolaPage";
-import RelatoriosPage from "@/pages/RelatoriosPage";
-import DashboardGestorPage from "@/pages/DashboardGestorPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import UpdatePasswordPage from "@/pages/UpdatePasswordPage";
-import GerenciarAcessoPage from "@/pages/GerenciarAcessoPage";
 import DisciplinasPage from "@/pages/DisciplinasPage";
-import GerenciarProgramasPage from "@/pages/gestor/GerenciarProgramasPage";
 import AnoLetivoPage from "@/pages/AnoLetivoPage";
 import MigrarTurmasPage from "@/pages/MigrarTurmasPage";
 import ArquivosAnoPage from "@/pages/ArquivosAnoPage";
 import ArquivosListPage from "@/pages/ArquivosListPage";
 import ForcePasswordChangePage from "@/pages/ForcePasswordChangePage";
 import MapaAlunosPage from "@/pages/MapaAlunosPage";
-import { EvasaoPage } from "@/app/routes.lazy";
+import {
+  EvasaoPage,
+  RelatoriosPage as LazyRelatoriosPage,
+  DashboardGestorPage as LazyDashboardGestorPage,
+  GerenciarAcessoPage as LazyGerenciarAcessoPage,
+  GerenciarProgramasPage as LazyGerenciarProgramasPage,
+} from "@/app/routes.lazy";
 import BotWhatsAppPage from "@/pages/BotWhatsAppPage";
+import { FEATURE_FLAGS } from "@/config/featureFlags";
 
 
 import { triggerSync } from "@/lib/SyncManager";
 import { toast } from "@/components/ui/use-toast";
 import GlobalSyncStatus from "@/components/offline/GlobalSyncStatus";
-
-// Optimized QueryClient for caching
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000,    // Data stays fresh for 5 minutes
-      gcTime: 30 * 60 * 1000,      // Keep unused data in cache for 30 minutes
-      retry: 1,                    // Retry once on failure
-      refetchOnWindowFocus: true,  // Refetch when window gets focus
-      refetchOnMount: false,       // Don't refetch on mount if data is fresh
-    },
-  },
-});
 
 const OfflineBanner = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -120,7 +111,7 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider>
         <OfflineBanner />
         <AuthProvider>
           <EscolaConfigProvider>
@@ -174,24 +165,24 @@ const App = () => {
                     {/* --- Rotas Gestor (Admin/Diretor/Coordenador/Secretario) --- */}
                     <Route element={<ProtectedRoute allowedRoles={['admin', 'diretor', 'coordenador', 'secretario', 'super_admin']} />}>
                       <Route element={<Layout><Outlet /></Layout>}>
-                        <Route path="/gestor/dashboard" element={<DashboardGestorPage />} />
-                        <Route path="/relatorios" element={<RelatoriosPage />} />
-                        <Route path="/gestao-acesso" element={<GerenciarAcessoPage />} />
+                        <Route path="/gestor/dashboard" element={<LazyDashboardGestorPage />} />
+                        <Route path="/relatorios" element={<LazyRelatoriosPage />} />
+                        <Route path="/gestao-acesso" element={<LazyGerenciarAcessoPage />} />
                         <Route path="/notificacoes" element={<NotificacoesPage />} />
                         <Route path="/ano-letivo" element={<AnoLetivoPage />} />
                         <Route path="/migrar-turmas" element={<MigrarTurmasPage />} />
                         <Route path="/arquivos" element={<ArquivosListPage />} />
                         <Route path="/arquivos/:anoLetivoId" element={<ArquivosAnoPage />} />
-                        <Route path="/mapa" element={<MapaAlunosPage />} />
-                        <Route path="/evasao" element={<EvasaoPage />} />
-                        <Route path="/gestor/whatsapp-bot" element={<BotWhatsAppPage />} />
+                        {FEATURE_FLAGS.MAPA_ALUNOS && <Route path="/mapa" element={<MapaAlunosPage />} />}
+                        {FEATURE_FLAGS.EVASAO_AI && <Route path="/evasao" element={<EvasaoPage />} />}
+                        {FEATURE_FLAGS.WHATSAPP_BOT && <Route path="/gestor/whatsapp-bot" element={<BotWhatsAppPage />} />}
                       </Route>
                     </Route>
 
                     {/* Gestão de Programas Sociais (Novo) */}
                     <Route element={<ProtectedRoute allowedTypes={['admin', 'diretor']} />}>
                       <Route element={<Layout><Outlet /></Layout>}>
-                        <Route path="/gestor/programas" element={<GerenciarProgramasPage />} />
+                        <Route path="/gestor/programas" element={<LazyGerenciarProgramasPage />} />
                       </Route>
                     </Route>
 
@@ -204,7 +195,7 @@ const App = () => {
             </EscolaThemeProvider>
           </EscolaConfigProvider>
         </AuthProvider>
-      </QueryClientProvider>
+      </QueryProvider>
     </ErrorBoundary>
   );
 };

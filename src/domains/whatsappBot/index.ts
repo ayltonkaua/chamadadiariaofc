@@ -11,4 +11,13 @@ export type {
     WhatsAppGroup,
     SendResult,
     ApiResponse,
+    BulkImportRow,
+    BulkImportResult,
+    GroupCandidate,
+    AddToGroupResult,
+    SendProgress,
+    AiMessageTom,
+    AiMessageTipo,
+    AiMessageRequest,
+    AiMessageResponse,
 } from './types';

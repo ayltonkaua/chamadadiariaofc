@@ -9,24 +9,8 @@
  */
 
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-const queryClient = new QueryClient({
-    defaultOptions: {
-        queries: {
-            // Data stays fresh for 5 minutes
-            staleTime: 5 * 60 * 1000,
-            // Keep unused data in cache for 30 minutes
-            gcTime: 30 * 60 * 1000,
-            // Retry once on failure
-            retry: 1,
-            // Refetch when window gets focus
-            refetchOnWindowFocus: true,
-            // Don't refetch on mount if data is fresh
-            refetchOnMount: false,
-        },
-    },
-});
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './query-client';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     return (
@@ -35,5 +19,3 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         </QueryClientProvider>
     );
 }
-
-export { queryClient };

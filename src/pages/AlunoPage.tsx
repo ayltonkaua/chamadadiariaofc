@@ -13,7 +13,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, CheckCircle2, XCircle, FileText, Phone, BookOpen, Edit, ArrowRightLeft, User, MapPin, Calendar, GraduationCap } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, FileText, Phone, BookOpen, Edit, ArrowRightLeft, User, MapPin, Calendar, GraduationCap, Briefcase, HandCoins, Home, Bus, Ticket, Mail, Smartphone } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -102,8 +102,30 @@ export default function AlunoPage() {
   }, [alunoId, turmaId]);
 
   const parseDateAsLocal = (dateString: string) => {
-    const [year, month, day] = dateString.split('-').map(Number);
-    return new Date(year, month - 1, day);
+    if (!dateString) return new Date();
+    
+    // Se a data já estiver no formato brasileiro DD/MM/YYYY
+    if (dateString.includes('/')) {
+        const [day, month, year] = dateString.split('/').map(Number);
+        return new Date(year, month - 1, day, 12, 0, 0);
+    }
+    
+    // Formato padrão ISO YYYY-MM-DD
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+        if (parts[0].length === 4) {
+            // YYYY-MM-DD
+            const [year, month, day] = parts.map(Number);
+            return new Date(year, month - 1, day, 12, 0, 0);
+        } else if (parts[2].length === 4) {
+            // DD-MM-YYYY
+            const [day, month, year] = parts.map(Number);
+            return new Date(year, month - 1, day, 12, 0, 0);
+        }
+    }
+    
+    // Fallback padrão se não conseguir deduzir
+    return new Date(dateString); 
   };
 
   const mesesDisponiveis = useMemo(() => {
@@ -155,7 +177,7 @@ export default function AlunoPage() {
   const calcularIdade = (dataNascimento: string | null | undefined): { anos: number; texto: string } | null => {
     if (!dataNascimento) return null;
     try {
-      const nascimento = new Date(dataNascimento);
+      const nascimento = parseDateAsLocal(dataNascimento);
       const anos = differenceInYears(new Date(), nascimento);
       return { anos, texto: `${anos} anos` };
     } catch {
@@ -242,7 +264,7 @@ export default function AlunoPage() {
                   <p className="text-sm text-gray-500">Data de Nascimento</p>
                   <p className="font-medium">
                     {aluno.data_nascimento
-                      ? format(new Date(aluno.data_nascimento), "dd/MM/yyyy")
+                      ? format(parseDateAsLocal(aluno.data_nascimento), "dd/MM/yyyy")
                       : 'Não informado'}
                   </p>
                   {idade && (
@@ -270,6 +292,12 @@ export default function AlunoPage() {
                   <p className="font-medium" style={{ color: aluno.telefone_responsavel ? corPrimaria : undefined }}>
                     {aluno.telefone_responsavel || 'Não informado'}
                   </p>
+                  {(aluno as any).telefone_responsavel_2 && (
+                    <p className="font-medium mt-1" style={{ color: corPrimaria }}>
+                      {(aluno as any).telefone_responsavel_2}
+                      <span className="text-xs text-gray-400 ml-1">(2º)</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -342,10 +370,14 @@ export default function AlunoPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="frequencia" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="frequencia" className="text-xs sm:text-sm">
               <CheckCircle2 className="h-4 w-4 mr-1 hidden sm:inline" />
               Frequência
+            </TabsTrigger>
+            <TabsTrigger value="dados-sociais" className="text-xs sm:text-sm">
+              <Briefcase className="h-4 w-4 mr-1 hidden sm:inline" />
+              Dados Sociais
             </TabsTrigger>
             <TabsTrigger value="atestados" className="text-xs sm:text-sm">
               <FileText className="h-4 w-4 mr-1 hidden sm:inline" />
@@ -397,6 +429,94 @@ export default function AlunoPage() {
             </Card>
           </TabsContent>
 
+          {/* Tab: Dados Sociais */}
+          <TabsContent value="dados-sociais">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Contato do Aluno */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-violet-600" /> Contato do Aluno
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between py-1.5 border-b">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> Telefone</span>
+                    <span className="text-sm font-medium" style={{ color: (aluno as any).telefone_aluno ? corPrimaria : undefined }}>
+                      {(aluno as any).telefone_aluno || 'Não informado'}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Perfil Social */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="h-4 w-4 text-violet-600" /> Perfil Social
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between py-1.5 border-b">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5" /> Trabalha</span>
+                    <Badge variant={(aluno as any).trabalha ? "default" : "outline"} className={(aluno as any).trabalha ? "bg-amber-100 text-amber-700" : ""}>
+                      {(aluno as any).trabalha ? "Sim" : "Não"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 border-b">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5"><HandCoins className="h-3.5 w-3.5" /> Pé-de-Meia</span>
+                    <Badge variant={(aluno as any).recebe_pe_de_meia ? "default" : "outline"} className={(aluno as any).recebe_pe_de_meia ? "bg-green-100 text-green-700" : ""}>
+                      {(aluno as any).recebe_pe_de_meia ? "Recebe" : "Não recebe"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 border-b">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5"><HandCoins className="h-3.5 w-3.5" /> Bolsa Família</span>
+                    <Badge variant={(aluno as any).recebe_bolsa_familia ? "default" : "outline"} className={(aluno as any).recebe_bolsa_familia ? "bg-green-100 text-green-700" : ""}>
+                      {(aluno as any).recebe_bolsa_familia ? "Recebe" : "Não recebe"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5">
+                    <span className="text-sm text-gray-600 flex items-center gap-1.5"><Home className="h-3.5 w-3.5" /> Mora com a família</span>
+                    <Badge variant={(aluno as any).mora_com_familia !== false ? "default" : "outline"} className={(aluno as any).mora_com_familia !== false ? "bg-blue-100 text-blue-700" : "bg-red-50 text-red-600"}>
+                      {(aluno as any).mora_com_familia !== false ? "Sim" : "Não"}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Transporte */}
+              <Card className="md:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bus className="h-4 w-4 text-violet-600" /> Transporte e Localização
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-sm text-gray-600 flex items-center gap-1.5"><Bus className="h-3.5 w-3.5" /> Transporte Escolar</span>
+                      <Badge variant={(aluno as any).usa_transporte ? "default" : "outline"} className={(aluno as any).usa_transporte ? "bg-blue-100 text-blue-700" : ""}>
+                        {(aluno as any).usa_transporte ? "Utiliza" : "Não utiliza"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-sm text-gray-600 flex items-center gap-1.5"><Ticket className="h-3.5 w-3.5" /> Passe Livre</span>
+                      <Badge variant={(aluno as any).tem_passe_livre ? "default" : "outline"} className={(aluno as any).tem_passe_livre ? "bg-green-100 text-green-700" : ""}>
+                        {(aluno as any).tem_passe_livre ? "Possui" : "Não possui"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5">
+                      <span className="text-sm text-gray-600 flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Localização</span>
+                      <Badge variant="outline" className={(aluno as any).latitude ? "bg-purple-50 text-purple-700" : ""}>
+                        {(aluno as any).latitude ? "Cadastrada" : "Não cadastrada"}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           {/* Tab: Atestados */}
           <TabsContent value="atestados">
             <Card>
@@ -439,52 +559,66 @@ export default function AlunoPage() {
       </div>
 
       {/* Modal Editar Aluno */}
-      {showEditDialog && aluno && (
-        <AddEditStudentDialog
-          open={showEditDialog}
-          onClose={() => setShowEditDialog(false)}
-          onStudentAdded={async () => {
-            setShowEditDialog(false);
-            // Recarregar dados do aluno
-            const { supabase } = await import('@/integrations/supabase/client');
-            const { data } = await supabase
-              .from('alunos')
-              .select(`*, turmas:turma_id (id, nome)`)
-              .eq('id', alunoId)
-              .single();
-            if (data) setAluno(data as AlunoDetails);
-          }}
-          turmaId={turmaId || ''}
-          student={{
-            id: aluno.id,
-            nome: aluno.nome,
-            matricula: aluno.matricula,
-            turma_id: aluno.turma_id,
-            nome_responsavel: aluno.nome_responsavel || undefined,
-            telefone_responsavel: aluno.telefone_responsavel || undefined,
-            data_nascimento: aluno.data_nascimento || undefined,
-            endereco: aluno.endereco || undefined,
-          }}
-          isEditing={true}
-        />
-      )}
+      {
+        showEditDialog && aluno && (
+          <AddEditStudentDialog
+            open={showEditDialog}
+            onClose={() => setShowEditDialog(false)}
+            onStudentAdded={async () => {
+              setShowEditDialog(false);
+              // Recarregar dados do aluno
+              const { supabase } = await import('@/integrations/supabase/client');
+              const { data } = await supabase
+                .from('alunos')
+                .select(`*, turmas:turma_id (id, nome)`)
+                .eq('id', alunoId)
+                .single();
+              if (data) setAluno(data as AlunoDetails);
+            }}
+            turmaId={turmaId || ''}
+            student={{
+              id: aluno.id,
+              nome: aluno.nome,
+              matricula: aluno.matricula,
+              turma_id: aluno.turma_id,
+              nome_responsavel: aluno.nome_responsavel || undefined,
+              telefone_responsavel: aluno.telefone_responsavel || undefined,
+              telefone_responsavel_2: (aluno as any).telefone_responsavel_2 || undefined,
+              data_nascimento: aluno.data_nascimento || undefined,
+              endereco: aluno.endereco || undefined,
+              trabalha: (aluno as any).trabalha,
+              recebe_pe_de_meia: (aluno as any).recebe_pe_de_meia,
+              mora_com_familia: (aluno as any).mora_com_familia,
+              usa_transporte: (aluno as any).usa_transporte,
+              tem_passe_livre: (aluno as any).tem_passe_livre,
+              recebe_bolsa_familia: (aluno as any).recebe_bolsa_familia,
+              latitude: (aluno as any).latitude,
+              longitude: (aluno as any).longitude,
+              telefone_aluno: (aluno as any).telefone_aluno,
+            }}
+            isEditing={true}
+          />
+        )
+      }
 
       {/* Modal Transferir Aluno */}
-      {showTransferDialog && aluno && (
-        <TransferStudentDialog
-          aluno={{
-            id: aluno.id,
-            nome: aluno.nome,
-            turma_id: aluno.turma_id,
-          }}
-          onClose={() => setShowTransferDialog(false)}
-          onSuccess={() => {
-            setShowTransferDialog(false);
-            // Redirecionar para lista de alunos após transferência
-            navigate(`/gerenciar-alunos/${turmaId}`);
-          }}
-        />
-      )}
-    </div>
+      {
+        showTransferDialog && aluno && (
+          <TransferStudentDialog
+            aluno={{
+              id: aluno.id,
+              nome: aluno.nome,
+              turma_id: aluno.turma_id,
+            }}
+            onClose={() => setShowTransferDialog(false)}
+            onSuccess={() => {
+              setShowTransferDialog(false);
+              // Redirecionar para lista de alunos após transferência
+              navigate(`/gerenciar-alunos/${turmaId}`);
+            }}
+          />
+        )
+      }
+    </div >
   );
 }

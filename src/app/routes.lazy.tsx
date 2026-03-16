@@ -38,30 +38,22 @@ export function withSuspense<P extends object>(
 // Relatórios (heavy charts)
 export const LazyRelatoriosPage = React.lazy(() => import('@/pages/RelatoriosPage'));
 
-// Pesquisas (complex forms)
-export const LazyPesquisasListPage = React.lazy(() => import('@/pages/PesquisasListPage'));
-export const LazyPesquisaCreatePage = React.lazy(() => import('@/pages/PesquisaCreatePage'));
-export const LazyPesquisaResultadosPage = React.lazy(() => import('@/pages/PesquisaResultadosPage'));
+
+
+// Análise de Evasão
+export const LazyEvasaoPage = React.lazy(() => import('@/pages/EvasaoPage'));
 
 // Gestor pages
 export const LazyDashboardGestorPage = React.lazy(() => import('@/pages/DashboardGestorPage'));
 export const LazyGerenciarAcessoPage = React.lazy(() => import('@/pages/GerenciarAcessoPage'));
-export const LazyGerenciarEventosPage = React.lazy(() => import('@/pages/gestor/GerenciarEventosPage'));
 export const LazyGerenciarProgramasPage = React.lazy(() => import('@/pages/gestor/GerenciarProgramasPage'));
-
-// Scanner (camera access)
-export const LazyScannerPage = React.lazy(() => import('@/pages/evento/ScannerPage'));
 
 // ============================================
 // WRAPPED COMPONENTS (Ready to use in routes)
 // ============================================
 
 export const RelatoriosPage = withSuspense(LazyRelatoriosPage);
-export const PesquisasListPage = withSuspense(LazyPesquisasListPage);
-export const PesquisaCreatePage = withSuspense(LazyPesquisaCreatePage);
-export const PesquisaResultadosPage = withSuspense(LazyPesquisaResultadosPage);
 export const DashboardGestorPage = withSuspense(LazyDashboardGestorPage);
 export const GerenciarAcessoPage = withSuspense(LazyGerenciarAcessoPage);
-export const GerenciarEventosPage = withSuspense(LazyGerenciarEventosPage);
 export const GerenciarProgramasPage = withSuspense(LazyGerenciarProgramasPage);
-export const ScannerPage = withSuspense(LazyScannerPage);
+export const EvasaoPage = withSuspense(LazyEvasaoPage);

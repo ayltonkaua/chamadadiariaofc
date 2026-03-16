@@ -12,11 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
     Loader2, UserX, Search, UserPlus, Pencil, Circle,
-    Trash2, KeyRound, Mail, GraduationCap, Users
+    Trash2, KeyRound, Mail, GraduationCap, Users,
+    Copy, CheckCircle2, RefreshCw, Eye, EyeOff
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
     acessoService,
+    generateTempPassword,
     type MembroEquipe,
     type AlunoAcesso
 } from "@/domains";
@@ -43,10 +45,18 @@ export default function GerenciarAcessoPage() {
     const [modalDeleteOpen, setModalDeleteOpen] = useState(false);
     const [modalResetOpen, setModalResetOpen] = useState(false);
 
-    // Estados de Formulário
+    // Estados de Formulário — Criação de Conta
     const [emailConvite, setEmailConvite] = useState("");
+    const [nomeConvite, setNomeConvite] = useState("");
     const [roleConvite, setRoleConvite] = useState("professor");
+    const [senhaTemp, setSenhaTemp] = useState(() => generateTempPassword());
+    const [showSenha, setShowSenha] = useState(false);
     const [loadingConvite, setLoadingConvite] = useState(false);
+
+    // Modal de sucesso com credenciais
+    const [modalCredenciaisOpen, setModalCredenciaisOpen] = useState(false);
+    const [credenciaisCriadas, setCredenciaisCriadas] = useState<{ email: string; senha: string; nome: string } | null>(null);
+    const [copiado, setCopiado] = useState(false);
 
     const [editingUser, setEditingUser] = useState<MembroEquipe | null>(null);
     const [newRole, setNewRole] = useState("");
@@ -111,44 +121,50 @@ export default function GerenciarAcessoPage() {
     }, [user?.escola_id]);
 
     // --- 3. AÇÕES ---
-    const handleEnviarConvite = async () => {
-        if (!emailConvite || !user?.escola_id) return;
+    const handleCriarConta = async () => {
+        if (!emailConvite || !nomeConvite || !user?.escola_id) return;
         setLoadingConvite(true);
         try {
-            const { isResend, signupLink, magicLinkSent } = await acessoService.enviarConvite({
+            await acessoService.criarContaEquipe({
                 email: emailConvite.trim(),
-                escola_id: user.escola_id,
-                role: roleConvite
-            }, user.id);
+                nome: nomeConvite.trim(),
+                role: roleConvite,
+                password: senhaTemp,
+            });
 
-            if (magicLinkSent) {
-                toast({
-                    title: isResend ? "Convite Reenviado" : "Convite Enviado",
-                    description: `Link de acesso enviado para ${emailConvite}`
-                });
-            } else {
-                // Magic Link failed - show copyable link
-                toast({
-                    title: "Convite Criado",
-                    description: "Email automático falhou. Copie o link abaixo e envie manualmente.",
-                    duration: 10000
-                });
-                // Copy to clipboard
-                await navigator.clipboard.writeText(signupLink);
-                toast({
-                    title: "📋 Link copiado!",
-                    description: "Envie este link para o convidado criar a conta.",
-                    duration: 5000
-                });
-            }
+            // Store credentials for the success dialog
+            setCredenciaisCriadas({
+                email: emailConvite.trim(),
+                senha: senhaTemp,
+                nome: nomeConvite.trim(),
+            });
 
+            // Close creation modal, open credentials modal
             setModalConviteOpen(false);
+            setModalCredenciaisOpen(true);
+
+            // Reset form
             setEmailConvite("");
+            setNomeConvite("");
+            setSenhaTemp(generateTempPassword());
+
+            // Refresh data
+            fetchDados();
+
         } catch (error: any) {
-            toast({ title: "Erro ao convidar", description: error.message, variant: "destructive" });
+            toast({ title: "Erro ao criar conta", description: error.message, variant: "destructive" });
         } finally {
             setLoadingConvite(false);
         }
+    };
+
+    const handleCopiarCredenciais = async () => {
+        if (!credenciaisCriadas) return;
+        const texto = `Acesso ao Chamada Diária:\nEmail: ${credenciaisCriadas.email}\nSenha temporária: ${credenciaisCriadas.senha}\n\n⚠️ Troque a senha no primeiro acesso.`;
+        await navigator.clipboard.writeText(texto);
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 3000);
+        toast({ title: "📋 Credenciais copiadas!", description: "Envie as credenciais para o novo membro." });
     };
 
     const handleUpdateRole = async () => {
@@ -451,17 +467,26 @@ export default function GerenciarAcessoPage() {
                 </TabsContent>
             </Tabs>
 
-            {/* MODAL: CONVITE */}
+            {/* MODAL: CRIAR CONTA */}
             <Dialog open={modalConviteOpen} onOpenChange={setModalConviteOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Convidar Membro</DialogTitle>
-                        <DialogDescription>O usuário receberá acesso com a função selecionada.</DialogDescription>
+                        <DialogTitle className="flex items-center gap-2">
+                            <UserPlus className="h-5 w-5 text-purple-600" />
+                            Criar Conta de Equipe
+                        </DialogTitle>
+                        <DialogDescription>
+                            A conta será criada com uma senha temporária. O membro deverá trocá-la no primeiro acesso.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
+                            <label className="text-sm font-medium">Nome Completo</label>
+                            <Input placeholder="Ex: Maria Silva" value={nomeConvite} onChange={e => setNomeConvite(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
                             <label className="text-sm font-medium">E-mail</label>
-                            <Input placeholder="email@exemplo.com" value={emailConvite} onChange={e => setEmailConvite(e.target.value)} />
+                            <Input type="email" placeholder="email@exemplo.com" value={emailConvite} onChange={e => setEmailConvite(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Função</label>
@@ -476,11 +501,89 @@ export default function GerenciarAcessoPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Senha Temporária</label>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Input
+                                        type={showSenha ? "text" : "password"}
+                                        value={senhaTemp}
+                                        onChange={e => setSenhaTemp(e.target.value)}
+                                        className="pr-10 font-mono"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSenha(!showSenha)}
+                                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                    >
+                                        {showSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </button>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    title="Gerar nova senha"
+                                    onClick={() => setSenhaTemp(generateTempPassword())}
+                                >
+                                    <RefreshCw className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <p className="text-xs text-gray-500">O membro será obrigado a trocar essa senha no primeiro login.</p>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setModalConviteOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleEnviarConvite} disabled={loadingConvite}>
-                            {loadingConvite && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Enviar
+                        <Button
+                            onClick={handleCriarConta}
+                            disabled={loadingConvite || !emailConvite || !nomeConvite || senhaTemp.length < 6}
+                            className="bg-purple-600 hover:bg-purple-700"
+                        >
+                            {loadingConvite && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Criar Conta
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL: CREDENCIAIS CRIADAS */}
+            <Dialog open={modalCredenciaisOpen} onOpenChange={setModalCredenciaisOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-green-700">
+                            <CheckCircle2 className="h-5 w-5" />
+                            Conta Criada com Sucesso!
+                        </DialogTitle>
+                        <DialogDescription>
+                            Compartilhe as credenciais abaixo com <strong>{credenciaisCriadas?.nome}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {credenciaisCriadas && (
+                        <div className="space-y-4 py-4">
+                            <div className="bg-gray-50 border rounded-xl p-4 space-y-3 font-mono text-sm">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500">Email:</span>
+                                    <span className="font-medium text-gray-900">{credenciaisCriadas.email}</span>
+                                </div>
+                                <div className="border-t" />
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500">Senha:</span>
+                                    <span className="font-bold text-violet-700 text-base">{credenciaisCriadas.senha}</span>
+                                </div>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                                ⚠️ A senha deverá ser trocada no primeiro acesso. Não será possível visualizá-la novamente.
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="outline" onClick={() => setModalCredenciaisOpen(false)}>Fechar</Button>
+                        <Button onClick={handleCopiarCredenciais} className="bg-violet-600 hover:bg-violet-700">
+                            {copiado ? (
+                                <><CheckCircle2 className="mr-2 h-4 w-4" /> Copiado!</>
+                            ) : (
+                                <><Copy className="mr-2 h-4 w-4" /> Copiar Credenciais</>
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

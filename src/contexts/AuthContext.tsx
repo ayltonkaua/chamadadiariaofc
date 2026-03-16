@@ -13,10 +13,12 @@ interface User {
   role?: string;
   type: UserType;
   aluno_id?: string;
+  mustChangePassword?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   loadingUser: boolean;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
@@ -86,6 +88,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           escola_id: roleData.escola_id,
           role: userRole,
           type: userType, // Aqui garantimos que professor não é staff genérico
+          mustChangePassword: sessionUser.user_metadata?.must_change_password === true,
         };
         setUser(memberUser);
         return memberUser;
@@ -152,7 +155,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loadingUser, login, logout, register, isAuthenticated: !!user, refreshUserData }}>
+    <AuthContext.Provider value={{ user, setUser, loadingUser, login, logout, register, isAuthenticated: !!user, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );

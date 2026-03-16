@@ -54,7 +54,7 @@ export default function Register() {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // 3. Chamar a RPC para registrar escola (status = pendente)
-      // @ts-ignore
+      // @ts-expect-error RPC generated types are stale for registrar_escola_admin
       const { data: rpcData, error: rpcError } = await supabase.rpc("registrar_escola_admin", {
         nome_escola: name.trim()
       });

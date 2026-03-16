@@ -7,8 +7,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import {
     gestorService,
     type KpiData,
@@ -18,8 +16,8 @@ import {
     type AlunoFaltasConsecutivasData,
     type UltimaObservacaoData,
     type TurmaMetadata,
-    type PresencaRecente,
-    type FrequenciaDisciplinaData
+    type FrequenciaDisciplinaData,
+    type FaltasDiaSemanaData
 } from '@/domains';
 
 const ITEMS_PER_PAGE = 5;
@@ -43,7 +41,7 @@ interface UseDashboardGestorReturn {
     filteredTurmaData: TurmaComparisonData[];
     filteredAlunosRisco: AlunoRiscoData[];
     filteredAlunosConsecutivos: AlunoFaltasConsecutivasData[];
-    chartAusenciasSemana: { dia_semana_nome: string; percentual_faltas: number }[];
+    chartAusenciasSemana: FaltasDiaSemanaData[];
 
     // Pagination
     paginatedRisco: AlunoRiscoData[];
@@ -81,7 +79,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
     const [rawTurmaData, setRawTurmaData] = useState<TurmaComparisonData[]>([]);
     const [rawAlunosRisco, setRawAlunosRisco] = useState<AlunoRiscoData[]>([]);
     const [rawAlunosConsecutivos, setRawAlunosConsecutivos] = useState<AlunoFaltasConsecutivasData[]>([]);
-    const [rawPresencasRecentes, setRawPresencasRecentes] = useState<PresencaRecente[]>([]);
+    const [faltasPorDiaSemana, setFaltasPorDiaSemana] = useState<FaltasDiaSemanaData[]>([]);
     const [ultimasObservacoes, setUltimasObservacoes] = useState<UltimaObservacaoData[]>([]);
     const [rawFrequenciaDisciplina, setRawFrequenciaDisciplina] = useState<FrequenciaDisciplinaData[]>([]);
 
@@ -119,7 +117,6 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
 
                 if (data && data.length > 0) {
                     setAnosLetivosDisponiveis(data);
-                    // Selecionar o ano ativo ou o mais recente por padrão
                     const anoAtivo = data.find(a => a.status === 'ativo') || data[0];
                     if (anoAtivo && !filtroAnoLetivoId) {
                         setFiltroAnoLetivoId(anoAtivo.id);
@@ -156,7 +153,7 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
             setRawAlunosConsecutivos(data.alunosConsecutivos);
             setUltimasObservacoes(data.ultimasObservacoes);
             setTurmasDisponiveis(data.turmasDisponiveis);
-            setRawPresencasRecentes(data.presencasRecentes);
+            setFaltasPorDiaSemana(data.faltasPorDiaSemana);
             setRawFrequenciaDisciplina(data.frequenciaDisciplina);
 
             setStatusMsg("Dados carregados.");
@@ -196,37 +193,8 @@ export function useDashboardGestor(): UseDashboardGestorReturn {
         return rawTurmaData.filter(item => activeTurmaNomes.includes(item.turma_nome));
     }, [rawTurmaData, activeTurmaNomes]);
 
-    const chartAusenciasSemana = useMemo(() => {
-        const presencasFiltradas = rawPresencasRecentes.filter(p => {
-            if (!activeTurmaIds || activeTurmaIds.length === 0) return true;
-            return activeTurmaIds.includes(p.turma_id);
-        });
-
-        const diasMap = new Map<string, { total: number; faltas: number }>();
-        const ordemDias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-        ordemDias.forEach(d => diasMap.set(d, { total: 0, faltas: 0 }));
-
-        presencasFiltradas.forEach(p => {
-            try {
-                const data = typeof p.data_chamada === 'string' ? parseISO(p.data_chamada) : new Date(p.data_chamada);
-                const diaNome = format(data, 'EEE', { locale: ptBR }).replace('.', '');
-                const diaCapitalized = diaNome.charAt(0).toUpperCase() + diaNome.slice(1);
-                const chave = diaCapitalized.substring(0, 3);
-                if (!diasMap.has(chave)) diasMap.set(chave, { total: 0, faltas: 0 });
-                const entry = diasMap.get(chave)!;
-                entry.total++;
-                if (!p.presente) entry.faltas++;
-            } catch (err) { }
-        });
-
-        return ordemDias.map(chave => {
-            const dados = diasMap.get(chave) ?? { total: 0, faltas: 0 };
-            return {
-                dia_semana_nome: chave,
-                percentual_faltas: dados.total > 0 ? parseFloat(((dados.faltas / dados.total) * 100).toFixed(1)) : 0
-            };
-        });
-    }, [rawPresencasRecentes, activeTurmaIds]);
+    // Server-side computed — no client-side date processing needed
+    const chartAusenciasSemana = faltasPorDiaSemana;
 
     const filteredAlunosRisco = useMemo(() => {
         if (!rawAlunosRisco) return [];

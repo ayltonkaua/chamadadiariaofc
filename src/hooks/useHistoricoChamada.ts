@@ -137,13 +137,23 @@ export const useHistoricoChamada = (turmaId: string | undefined) => {
 
       if (deleteError) throw deleteError;
 
+      // Buscar escola_id da turma
+      const { data: turmaData } = await supabase
+        .from("turmas")
+        .select("escola_id")
+        .eq("id", turmaId)
+        .single();
+
+      if (!turmaData?.escola_id) throw new Error("escola_id não encontrado para a turma");
+
       // Inserir as novas presenças
       const presencasParaInserir = novasPresencas.map(presenca => ({
         aluno_id: presenca.aluno_id,
         turma_id: turmaId,
         presente: presenca.presente,
         falta_justificada: presenca.falta_justificada || false,
-        data_chamada: data
+        data_chamada: data,
+        escola_id: turmaData.escola_id
       }));
 
       const { error: insertError } = await supabase
