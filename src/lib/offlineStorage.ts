@@ -10,6 +10,7 @@
  */
 
 import * as CryptoJS from 'crypto-js';
+import { getLocalDateString } from '@/lib/dateUtils';
 
 // =============================================================================
 // DATABASE CONFIGURATION
@@ -448,7 +449,7 @@ export async function getAtestadosCache(escola_id: string): Promise<AtestadosCac
 export async function getCachedAtestadosVigentes(escola_id: string): Promise<AtestadosCacheData['atestados']> {
     const cache = await getAtestadosCache(escola_id);
     if (!cache) return [];
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = getLocalDateString();
     return cache.atestados.filter(a => a.status === 'aprovado' && a.data_inicio <= hoje && a.data_fim >= hoje);
 }
 

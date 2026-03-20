@@ -11,6 +11,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/core';
+import { getLocalDateString } from '@/lib/dateUtils';
 import type {
     PerfilAluno,
     IndicadoresAluno,
@@ -428,7 +429,7 @@ export const perfilAlunoService = {
                 aluno_id: alunoId,
                 titulo,
                 descricao,
-                data_observacao: new Date().toISOString().split('T')[0],
+                data_observacao: getLocalDateString(),
                 escola_id: escolaId,
                 turma_id: turmaId
             });

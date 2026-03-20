@@ -232,12 +232,54 @@ CREATE TABLE public.observacoes_sync_log (
   CONSTRAINT observacoes_sync_log_synced_by_fkey FOREIGN KEY (synced_by) REFERENCES auth.users(id),
   CONSTRAINT observacoes_sync_log_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id)
 );
+CREATE TABLE public.oportunidades_estagio (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid,
+  titulo text NOT NULL,
+  empresa text,
+  descricao text NOT NULL,
+  link_inscricao text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT oportunidades_estagio_pkey PRIMARY KEY (id),
+  CONSTRAINT oportunidades_estagio_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
 CREATE TABLE public.pesquisa_destinatarios (
   pesquisa_id uuid NOT NULL,
   aluno_id uuid NOT NULL,
   status_resposta character varying NOT NULL DEFAULT 'pendente'::character varying,
   CONSTRAINT pesquisa_destinatarios_pkey PRIMARY KEY (pesquisa_id, aluno_id),
   CONSTRAINT pesquisa_destinatarios_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id)
+);
+CREATE TABLE public.portal_comunicados (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  titulo text NOT NULL,
+  conteudo text NOT NULL,
+  tipo text NOT NULL DEFAULT 'Aviso'::text CHECK (tipo = ANY (ARRAY['Importante'::text, 'Evento'::text, 'Aviso'::text])),
+  ativo boolean DEFAULT true,
+  data_publicacao timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  criado_por uuid,
+  CONSTRAINT portal_comunicados_pkey PRIMARY KEY (id),
+  CONSTRAINT portal_comunicados_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT portal_comunicados_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id)
+);
+CREATE TABLE public.portal_estagios (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  empresa text,
+  cargo text NOT NULL,
+  descricao text NOT NULL,
+  bolsa numeric,
+  requisitos text,
+  link_inscricao text,
+  ativo boolean DEFAULT true,
+  data_publicacao timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  criado_por uuid,
+  CONSTRAINT portal_estagios_pkey PRIMARY KEY (id),
+  CONSTRAINT portal_estagios_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT portal_estagios_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id)
 );
 CREATE TABLE public.presencas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -298,6 +340,19 @@ CREATE TABLE public.registros_contato_busca_ativa (
   escola_id uuid NOT NULL,
   CONSTRAINT registros_contato_busca_ativa_pkey PRIMARY KEY (id),
   CONSTRAINT registros_contato_busca_ativa_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
+CREATE TABLE public.solicitacoes_aluno (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  aluno_id uuid,
+  escola_id uuid,
+  assunto text NOT NULL,
+  mensagem text NOT NULL,
+  telefone_contato text,
+  status text DEFAULT 'aberto'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT solicitacoes_aluno_pkey PRIMARY KEY (id),
+  CONSTRAINT solicitacoes_aluno_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT solicitacoes_aluno_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
 );
 CREATE TABLE public.sync_metrics (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -393,6 +448,22 @@ CREATE TABLE public.whatsapp_bot_config (
   grupo_busca_ativa_id text,
   CONSTRAINT whatsapp_bot_config_pkey PRIMARY KEY (id),
   CONSTRAINT whatsapp_bot_config_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
+CREATE TABLE public.whatsapp_justificativas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  aluno_id uuid NOT NULL,
+  data_falta date NOT NULL,
+  telefone_origem character varying NOT NULL,
+  mensagem_pai text NOT NULL,
+  status USER-DEFINED NOT NULL DEFAULT 'PENDENTE'::justificativa_status,
+  data_recebimento timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  reviewer_id uuid,
+  data_revisao timestamp with time zone,
+  CONSTRAINT whatsapp_justificativas_pkey PRIMARY KEY (id),
+  CONSTRAINT whatsapp_justificativas_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT whatsapp_justificativas_aluno_id_fkey FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT whatsapp_justificativas_reviewer_id_fkey FOREIGN KEY (reviewer_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.whatsapp_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

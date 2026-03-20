@@ -10,6 +10,7 @@ import BotDashboard from '@/components/whatsapp/BotDashboard';
 import BotAutomations from '@/components/whatsapp/BotAutomations';
 import BotCampaigns from '@/components/whatsapp/BotCampaigns';
 import KanbanJustificativas from '@/components/whatsapp/KanbanJustificativas';
+import BotPortalTickets from '@/components/whatsapp/BotPortalTickets';
 
 export default function BotWhatsAppPage() {
     const { user } = useAuth();
@@ -242,10 +243,14 @@ export default function BotWhatsAppPage() {
 
             {/* Navegação via Tabs Centralizadas */}
             <Tabs defaultValue="dashboard" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 h-14 bg-white border shadow-sm p-1 rounded-xl mb-6">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto md:h-14 bg-white border shadow-sm p-1 rounded-xl mb-6">
                     <TabsTrigger value="dashboard" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all">
                         <Bot className="w-4 h-4 mr-2" />
                         Painel de Controle
+                    </TabsTrigger>
+                    <TabsTrigger value="portal-tickets" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all relative">
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        Solicitações do Portal
                     </TabsTrigger>
                     <TabsTrigger value="justificativas" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all">
                         <FileCheck2 className="w-4 h-4 mr-2" />
@@ -280,6 +285,11 @@ export default function BotWhatsAppPage() {
                         sendingManual={sendingManual}
                         onSendManual={handleSendManual}
                      />
+                </TabsContent>
+
+                {/* VIEW: PORTAL TICKETS */}
+                <TabsContent value="portal-tickets" className="border-none p-0 outline-none">
+                     <BotPortalTickets />
                 </TabsContent>
 
                 {/* VIEW 2: TRIAGEM DE FALTAS (KANBAN) */}

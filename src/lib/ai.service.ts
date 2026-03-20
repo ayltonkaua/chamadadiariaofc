@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { getLocalDateString } from '@/lib/dateUtils';
 
 // ============================================
 // TYPES
@@ -200,7 +201,7 @@ export async function verificarLimiteDiario(userId: string, userType: string): P
         return { permitido: false, restante: 0, limite: 0 };
     }
 
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = getLocalDateString();
 
     const { data } = await (supabase as any)
         .from('uso_ia_diario')
@@ -216,7 +217,7 @@ export async function verificarLimiteDiario(userId: string, userType: string): P
 }
 
 async function incrementarUsoIA(userId: string, escolaId: string): Promise<void> {
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = getLocalDateString();
 
     const { data: existing } = await (supabase as any)
         .from('uso_ia_diario')

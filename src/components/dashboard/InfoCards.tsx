@@ -123,7 +123,7 @@ export function InfoCards() {
           // 4. Get frequency últimos 30 dias (apenas turmas ativas)
           let frequencia = 100;
           if (turmaIds.length > 0) {
-            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const thirtyDaysAgo = format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
             const { data: presencas } = await supabase
               .from("presencas")
               .select("presente")

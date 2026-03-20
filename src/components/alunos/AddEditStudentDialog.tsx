@@ -89,6 +89,7 @@ export default function AddEditStudentDialog({
   const [loadingEmail, setLoadingEmail] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [lastFetchedCep, setLastFetchedCep] = useState<string>("");
 
   // -------------------------------------------------------
   // Carregar dados ao abrir
@@ -139,6 +140,7 @@ export default function AddEditStudentDialog({
       setGeocodingStatus('idle');
       setTelefoneAluno("");
       setRegisteredEmail(null);
+      setLastFetchedCep("");
     }
   }, [student, open, isEditing]);
 
@@ -157,6 +159,30 @@ export default function AddEditStudentDialog({
       setLoadingEmail(false);
     }
   };
+
+  useEffect(() => {
+    const checkCepEAutoPreencher = async () => {
+      const match = endereco.match(/\b(\d{5}-?\d{3})\b/);
+      if (match) {
+        const cep = match[1].replace('-', '');
+        if (cep !== lastFetchedCep) {
+          setLastFetchedCep(cep);
+          try {
+            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const data = await res.json();
+            if (!data.erro) {
+              const novoEndereco = `${data.logradouro}, Número, ${data.bairro}, ${data.localidade} - ${data.uf}, CEP ${match[1]}`;
+              setEndereco(novoEndereco);
+              toast({ title: "CEP Encontrado", description: "Endereço preenchido automaticamente com dados do ViaCEP." });
+            }
+          } catch (err) {
+            console.error("Erro ao buscar ViaCEP:", err);
+          }
+        }
+      }
+    };
+    checkCepEAutoPreencher();
+  }, [endereco, lastFetchedCep, toast]);
 
   // -------------------------------------------------------
   // GEOCODING ao sair do campo endereço
@@ -403,7 +429,7 @@ export default function AddEditStudentDialog({
                   value={endereco}
                   onChange={(e) => setEndereco(e.target.value)}
                   onBlur={handleEnderecoBlur}
-                  placeholder="Rua, número, bairro, cidade"
+                  placeholder="Ex: Rua das Flores, 10, Água Fria, CEP 00000-000"
                 />
                 {geocodingStatus === 'loading' && (
                   <p className="text-xs text-blue-600 flex items-center gap-1">

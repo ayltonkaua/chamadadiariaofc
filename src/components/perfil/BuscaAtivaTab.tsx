@@ -19,6 +19,7 @@ import { Plus, Trash2, Phone, MessageSquare, Mail, Video, Users, Loader2 } from 
 import { perfilAlunoService, type ContatoBuscaAtiva } from '@/domains';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getLocalDateString } from '@/lib/dateUtils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -43,7 +44,7 @@ export function BuscaAtivaTab({ alunoId }: BuscaAtivaTabProps) {
 
     // Form state
     const [isOpen, setIsOpen] = useState(false);
-    const [dataContato, setDataContato] = useState(new Date().toISOString().split('T')[0]);
+    const [dataContato, setDataContato] = useState(getLocalDateString());
     const [formaContato, setFormaContato] = useState('telefone');
     const [justificativaFaltas, setJustificativaFaltas] = useState('');
     const [monitorResponsavel, setMonitorResponsavel] = useState('');
@@ -65,7 +66,7 @@ export function BuscaAtivaTab({ alunoId }: BuscaAtivaTabProps) {
     }, [alunoId]);
 
     const openNewDialog = () => {
-        setDataContato(new Date().toISOString().split('T')[0]);
+        setDataContato(getLocalDateString());
         setFormaContato('telefone');
         setJustificativaFaltas('');
         setMonitorResponsavel('');

@@ -16,6 +16,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DesempenhoAcademicoChart } from "@/components/dashboard/DesempenhoAcademicoChart";
 import { FrequenciaPorDisciplinaChart } from "@/components/dashboard/FrequenciaPorDisciplinaChart";
 import { ExportButton } from "@/components/dashboard/ExportButton";
+import { GerenciarAvisosModal } from "@/components/portal/GerenciarAvisosModal";
+import { GerenciarEstagiosModal } from "@/components/portal/GerenciarEstagiosModal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
@@ -180,6 +182,9 @@ export default function DashboardGestorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <GerenciarAvisosModal />
+          <GerenciarEstagiosModal />
+          
           <ExportButton
             nomeEscola={config?.nome || 'Escola'}
             anoLetivo={anosLetivosDisponiveis.find(a => a.id === filtroAnoLetivoId)?.nome || ''}

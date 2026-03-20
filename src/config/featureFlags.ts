@@ -9,8 +9,8 @@ export const FEATURE_FLAGS = {
   EVASAO_AI: false,
 
   /** Mapa de Alunos - rota /mapa */
-  MAPA_ALUNOS: false,
+  MAPA_ALUNOS: true,
 
   /** Bot WhatsApp - rota /gestor/whatsapp-bot */
-  WHATSAPP_BOT: false,
+  WHATSAPP_BOT: true,
 } as const;
