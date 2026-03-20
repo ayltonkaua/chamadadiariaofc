@@ -122,7 +122,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.user) return null;
+    if (error) {
+      if (error.status === 429 || error.message?.toLowerCase().includes('rate limit') || error.message?.toLowerCase().includes('too many')) {
+        throw new Error('Muitas tentativas de login. Aguarde alguns instantes antes de tentar novamente.');
+      }
+      return null;
+    }
+    if (!data.user) return null;
     return await loadUserSession(data.user);
   };
 

@@ -51,6 +51,31 @@ import { FEATURE_FLAGS } from "@/config/featureFlags";
 import { triggerSync } from "@/lib/SyncManager";
 import { toast } from "@/components/ui/use-toast";
 import GlobalSyncStatus from "@/components/offline/GlobalSyncStatus";
+import { ExternalLink, Rocket } from "lucide-react";
+
+const RedirectPortalAluno = () => {
+  console.log("Montando RedirectPortalAluno na rota portal-aluno!");
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <div className="bg-white max-w-md w-full rounded-2xl p-8 shadow-xl text-center border border-purple-100">
+        <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+          <Rocket className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">O Portal de cara nova!</h1>
+        <p className="text-gray-600 mb-8">
+          Nosso Portal do Aluno agora tem um endereço próprio e exclusivo. Mais rápido, seguro e fácil de acessar.
+        </p>
+        <a
+          href="https://portal.chamadadiaria.com.br"
+          className="inline-flex w-full items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all hover:-translate-y-1 hover:shadow-lg"
+        >
+          Acessar Novo Portal
+          <ExternalLink className="w-5 h-5" />
+        </a>
+      </div>
+    </div>
+  );
+};
 
 const OfflineBanner = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -126,6 +151,8 @@ const App = () => {
                 <Router>
                   <Routes>
                     {/* --- Rotas Públicas --- */}
+                    <Route path="/portal-aluno" element={<RedirectPortalAluno />} />
+                    <Route path="/portal-aluno/*" element={<RedirectPortalAluno />} />
                     <Route path="/" element={<Layout showSidebar={false}><Index /></Layout>} />
                     <Route path="/login" element={<Layout showSidebar={false}><LoginPage /></Layout>} />
                     <Route path="/register" element={<Layout showSidebar={false}><RegisterPage /></Layout>} />

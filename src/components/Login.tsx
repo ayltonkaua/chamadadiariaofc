@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,15 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   // A LÓGICA DESTA FUNÇÃO FOI TOTALMENTE ATUALIZADA
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,8 +47,10 @@ const Login: React.FC = () => {
       } else {
         setError("E-mail ou senha incorretos. Tente novamente.");
       }
-    } catch (err) {
-      setError("Ocorreu um erro ao fazer login. Tente novamente.");
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : "Ocorreu um erro ao fazer login. Tente novamente.";
+      if (msg.includes("Muitas tentativas")) setCooldown(60);
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -107,10 +118,10 @@ const Login: React.FC = () => {
             <Button
               type="submit"
               className="w-full sm:flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-              disabled={isLoading}
+              disabled={isLoading || cooldown > 0}
             >
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isLoading ? "Entrando..." : "Entrar"}
+              {cooldown > 0 ? `Aguarde ${cooldown}s` : (isLoading ? "Entrando..." : "Entrar")}
             </Button>
           </CardFooter>
         </form>
