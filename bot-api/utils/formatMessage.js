@@ -46,6 +46,13 @@ function sanitizePhone(phone) {
         cleaned = '55' + cleaned;
     }
 
+    // Fix missing 9th digit for typical BR numbers (if length is 12, inject 9 after DDD)
+    // 55 (2) + DD (2) + XXXXXXXX (8) = 12 digits
+    if (cleaned.length === 12 && cleaned.startsWith('55')) {
+        // e.g. 558588887777 -> 55 85 9 88887777
+        cleaned = cleaned.substring(0, 4) + '9' + cleaned.substring(4);
+    }
+
     // Validate length (BR: 55 + DDD 2 digits + number 8-9 digits = 12-13)
     if (cleaned.length < 12 || cleaned.length > 15) {
         return null;
@@ -71,6 +78,11 @@ function toBaileysJid(phone) {
     // Add Brazil country code if missing
     if (cleaned.length === 10 || cleaned.length === 11) {
         cleaned = '55' + cleaned;
+    }
+
+    // Fix missing 9th digit to standardize first
+    if (cleaned.length === 12 && cleaned.startsWith('55')) {
+        cleaned = cleaned.substring(0, 4) + '9' + cleaned.substring(4);
     }
 
     // Remove 9th digit for Brazilian numbers: 55 + DD + 9XXXXXXXX → 55 + DD + XXXXXXXX

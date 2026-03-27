@@ -136,7 +136,7 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
         // Instead of ignoring silently, we start the Cadaster flow.
         console.log(`⚠️ [INBOUND] [${escolaId.substring(0,8)}] Desconhecido (${last8Digits}). Iniciando fluxo de cadastro.`);
         setSession(cleanPhone, { stage: 'WAIT_OPT_IN', escolaId, originalMessage: textContent }, replyFn);
-        await replyFn("Olá! 🤖 Não identifiquei este número em nosso sistema. \nVocê é responsável por algum aluno e deseja justificar uma falta? Responda *SIM* ou *NÃO*.");
+        await replyFn("🤖 *Olá! Sou o assistente automático da escola.* \n\nNão identifiquei este número em nosso sistema.\nVocê é responsável por algum aluno e deseja justificar uma falta? Responda apernas com *SIM* ou *NÃO*.");
         return;
     }
 
@@ -211,7 +211,7 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
     console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Absency Justification received for ${targetStudent.nome}`);
 
     // 4. Send Confirmation Reply
-    await replyFn(`Recebemos sua mensagem! Ela foi encaminhada como *Justificativa de Falta* para a coordenação e está em análise. Emitiremos um retorno em breve.`);
+    await replyFn(`🤖 *Aviso do Assistente Virtual:*\n\nRecebemos sua mensagem! Ela foi encaminhada como *Justificativa de Falta* para a coordenação e está em análise. Emitiremos um retorno em breve.\n\n_(Nota: Esta linha do WhatsApp envia apenas notificações escolares automáticas, nenhuma resposta humana ocorrerá aqui fora deste fluxo)._`);
 }
 
 /**
@@ -318,7 +318,7 @@ async function handleActiveConversation(escolaId, cleanPhone, last8Digits, textC
             }
 
             console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Absency Justification via Novo Cadastro received for ${nomeAluno}`);
-            await replyFn("Recebemos sua mensagem! Ela foi encaminhada como *Justificativa de Falta* para a coordenação e está em análise. Emitiremos um retorno em breve.");
+            await replyFn(`🤖 *Aviso do Assistente Virtual:*\n\nRecebemos sua mensagem! Ela foi encaminhada como *Justificativa de Falta* para a coordenação e está em análise. Emitiremos um retorno em breve.\n\n_(Nota: Esta linha do WhatsApp envia apenas notificações escolares automáticas, nenhuma resposta humana ocorrerá aqui fora deste fluxo)._`);
             return;
         }
 

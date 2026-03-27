@@ -17,6 +17,49 @@ const { sanitizePhone, formatMessage, delay } = require('../utils/formatMessage'
 
 // In-memory progress tracking for group sends
 const sendProgress = {};
+const campaignQueue = {};
+
+async function processQueue(escolaId) {
+    if (campaignQueue[escolaId]?.processing) return;
+    
+    if (!campaignQueue[escolaId] || campaignQueue[escolaId].items.length === 0) {
+        if (sendProgress[escolaId]) {
+            setTimeout(() => { delete sendProgress[escolaId]; }, 30000);
+        }
+        return;
+    }
+
+    campaignQueue[escolaId].processing = true;
+
+    while (campaignQueue[escolaId].items.length > 0) {
+        const item = campaignQueue[escolaId].items.shift();
+        
+        sendProgress[escolaId].currentPhone = item.phone;
+        sendProgress[escolaId].currentName = item.nome;
+
+        try {
+            await sendMessage(escolaId, item.phone, item.mensagem);
+            await supabase.from('whatsapp_logs').insert({
+                escola_id: escolaId, aluno_id: item.aluno_id, telefone: item.phone,
+                mensagem: item.mensagem, tipo: 'campanha', status: 'enviado',
+            });
+            sendProgress[escolaId].sent++;
+        } catch (err) {
+            await supabase.from('whatsapp_logs').insert({
+                escola_id: escolaId, aluno_id: item.aluno_id, telefone: item.phone,
+                mensagem: item.mensagem, tipo: 'campanha', status: 'falha', erro: err.message,
+            });
+            sendProgress[escolaId].failed++;
+        }
+
+        // Hard delay anti-ban
+        await delay(20000);
+    }
+
+    sendProgress[escolaId].active = false;
+    campaignQueue[escolaId].processing = false;
+    processQueue(escolaId); // Check para ver se mais itens entraram enquanto limpava
+}
 
 /**
  * GET /status
@@ -182,64 +225,53 @@ router.post('/sendToGroup', async (req, res) => {
             if (aluno.telefone_responsavel_2) totalMessages++;
         }
 
-        const SEND_DELAY = 20000;
-        // Start background async process
-        (async () => {
-            let sent = 0;
-            let failed = 0;
+        if (!campaignQueue[escolaId]) {
+            campaignQueue[escolaId] = { items: [], processing: false };
+        }
 
-            for (const aluno of alunos) {
-                // Send to both phone numbers if available
-                const phones = [aluno.telefone_responsavel, aluno.telefone_responsavel_2].filter(Boolean);
+        const tasksToAdd = [];
+        for (const aluno of alunos) {
+            const phones = [aluno.telefone_responsavel, aluno.telefone_responsavel_2].filter(Boolean);
+            for (const rawPhone of phones) {
+                const phone = sanitizePhone(rawPhone);
+                if (!phone) continue;
 
-                for (const rawPhone of phones) {
-                    const phone = sanitizePhone(rawPhone);
-                    if (!phone) continue;
+                const msg = formatMessage(mensagem, {
+                    nome: aluno.nome,
+                    responsavel: aluno.nome_responsavel || 'Responsável',
+                    turma: turma.nome,
+                    data: new Date().toLocaleDateString('pt-BR'),
+                });
 
-                    // Update progress
-                    sendProgress[escolaId].currentPhone = phone;
-                    sendProgress[escolaId].currentName = aluno.nome;
-
-                    const msg = formatMessage(mensagem, {
-                        nome: aluno.nome,
-                        responsavel: aluno.nome_responsavel || 'Responsável',
-                        turma: turma.nome,
-                        data: new Date().toLocaleDateString('pt-BR'),
-                    });
-
-                    try {
-                        await sendMessage(escolaId, phone, msg);
-                        await supabase.from('whatsapp_logs').insert({
-                            escola_id: escolaId, aluno_id: aluno.id, telefone: phone,
-                            mensagem: msg, tipo: 'manual', status: 'enviado',
-                        });
-                        sent++;
-                    } catch (err) {
-                        await supabase.from('whatsapp_logs').insert({
-                            escola_id: escolaId, aluno_id: aluno.id, telefone: phone,
-                            mensagem: msg, tipo: 'manual', status: 'falha', erro: err.message,
-                        });
-                        failed++;
-                    }
-
-                    // Update progress counters
-                    sendProgress[escolaId].sent = sent;
-                    sendProgress[escolaId].failed = failed;
-
-                    await delay(SEND_DELAY);
-                }
+                tasksToAdd.push({
+                    aluno_id: aluno.id,
+                    phone: phone,
+                    nome: aluno.nome,
+                    mensagem: msg
+                });
             }
+        }
 
-            // Mark as complete
-            sendProgress[escolaId].active = false;
-            sendProgress[escolaId].currentPhone = '';
-            sendProgress[escolaId].currentName = '';
+        if (sendProgress[escolaId] && sendProgress[escolaId].active) {
+            sendProgress[escolaId].total += tasksToAdd.length;
+        } else {
+            sendProgress[escolaId] = {
+                active: true,
+                turma: turma.nome,
+                total: tasksToAdd.length,
+                sent: 0,
+                failed: 0,
+                currentPhone: '',
+                currentName: '',
+                startedAt: Date.now(),
+                delayMs: 20000
+            };
+        }
 
-            // Clean up progress after 30s
-            setTimeout(() => { delete sendProgress[escolaId]; }, 30000);
-        })();
+        campaignQueue[escolaId].items.push(...tasksToAdd);
+        processQueue(escolaId);
 
-        res.json({ success: true, sent: 0, failed: 0, total: totalMessages, message: 'Disparo assíncrono iniciado' });
+        res.json({ success: true, sent: 0, failed: 0, total: tasksToAdd.length, message: 'Campanha enfileirada com sucesso' });
     } catch (error) {
         if (sendProgress[escolaId]) {
             sendProgress[escolaId].active = false;

@@ -150,11 +150,16 @@ async function _doInitWhatsApp(escolaId) {
             const isLoggedOut = statusCode === DisconnectReason.loggedOut;
             const isConflict = statusCode === 440 || statusCode === 408;
 
-            console.log(`🔌 [${escolaId.substring(0, 8)}] Disconnected (code: ${statusCode})`);
+            // NOVO: Detect bad mac / decryption error
+            const errorMessage = lastDisconnect?.error?.message?.toLowerCase() || '';
+            const isFatalCryptoError = errorMessage.includes('bad mac') || errorMessage.includes('decrypt') || errorMessage.includes('protocol error');
 
-            if (isLoggedOut) {
-                // Session logged out — clean up local + cloud
-                console.log(`🚪 [${escolaId.substring(0, 8)}] Logged out — clearing session`);
+            console.log(`🔌 [${escolaId.substring(0, 8)}] Disconnected (code: ${statusCode}) - Msg: ${errorMessage}`);
+
+            if (isLoggedOut || isFatalCryptoError) {
+                // Session logged out OR crypto error — clean up local + cloud
+                const reasonStr = isFatalCryptoError ? 'Fatal Crypto Error (Bad MAC)' : 'Logged out';
+                console.log(`🚪 [${escolaId.substring(0, 8)}] ${reasonStr} — clearing session`);
                 try { sock.ev.removeAllListeners(); } catch (e) { }
                 delete instances[escolaId];
                 if (fs.existsSync(sessionPath)) {
