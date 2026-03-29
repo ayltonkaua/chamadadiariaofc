@@ -11,6 +11,7 @@ export interface WhatsAppBotConfig {
     template_falta_diaria: string;
     template_escalacao: string;
     grupo_busca_ativa_id: string | null;
+    grupos_favoritos: Array<{ id: string; name: string }>;
     auto_falta_diaria: boolean;
     auto_consecutiva: boolean;
     auto_mensal: boolean;
@@ -192,4 +193,30 @@ export interface JustificativaPendente {
             nome: string;
         };
     };
+}
+
+// =====================
+// WhatsApp Atendimentos (URA) Types
+// =====================
+
+export type AtendimentoSetor = 'carteirinha' | 'boletim' | 'declaracao' | 'pe_de_meia';
+export type AtendimentoStatus = 'ABERTO' | 'EM_ATENDIMENTO' | 'FINALIZADO';
+
+export interface AtendimentoReply {
+    remetente: 'secretaria' | 'pai';
+    mensagem: string;
+    timestamp: string;
+}
+
+export interface WhatsAppAtendimento {
+    id: string;
+    escola_id: string;
+    telefone_origem: string;
+    nome_contato: string | null;
+    setor: AtendimentoSetor;
+    mensagem_inicial: string | null;
+    status: AtendimentoStatus;
+    respostas: AtendimentoReply[];
+    created_at: string;
+    updated_at: string;
 }

@@ -4,13 +4,14 @@ import { whatsappBotService } from '@/domains/whatsappBot';
 import type { BotStatus, WhatsAppBotConfig, WhatsAppLog, Turma, SendProgress } from '@/domains/whatsappBot';
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bot, Zap, Rocket, MessageCircle, FileCheck2 } from 'lucide-react';
+import { Bot, Zap, Rocket, MessageCircle, FileCheck2, Headphones } from 'lucide-react';
 
 import BotDashboard from '@/components/whatsapp/BotDashboard';
 import BotAutomations from '@/components/whatsapp/BotAutomations';
 import BotCampaigns from '@/components/whatsapp/BotCampaigns';
 import KanbanJustificativas from '@/components/whatsapp/KanbanJustificativas';
 import BotPortalTickets from '@/components/whatsapp/BotPortalTickets';
+import BotSecretariaSuport from '@/components/whatsapp/BotSecretariaSuport';
 
 export default function BotWhatsAppPage() {
     const { user } = useAuth();
@@ -243,7 +244,7 @@ export default function BotWhatsAppPage() {
 
             {/* Navegação via Tabs Centralizadas */}
             <Tabs defaultValue="dashboard" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto md:h-14 bg-white border shadow-sm p-1 rounded-xl mb-6">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto md:h-14 bg-white border shadow-sm p-1 rounded-xl mb-6">
                     <TabsTrigger value="dashboard" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all">
                         <Bot className="w-4 h-4 mr-2" />
                         Painel de Controle
@@ -255,6 +256,10 @@ export default function BotWhatsAppPage() {
                     <TabsTrigger value="justificativas" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all">
                         <FileCheck2 className="w-4 h-4 mr-2" />
                         Triagem de Faltas
+                    </TabsTrigger>
+                    <TabsTrigger value="suporte" className="rounded-lg font-medium text-sm data-[state=active]:bg-violet-50 data-[state=active]:text-violet-700 data-[state=active]:shadow-none transition-all">
+                        <Headphones className="w-4 h-4 mr-2" />
+                        Suporte / Secretaria
                     </TabsTrigger>
                     <TabsTrigger value="automations" className="rounded-lg font-medium text-sm data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-none transition-all">
                         <Zap className="w-4 h-4 mr-2" />
@@ -297,6 +302,11 @@ export default function BotWhatsAppPage() {
                      <KanbanJustificativas />
                 </TabsContent>
 
+                {/* VIEW: SUPORTE / SECRETARIA (URA) */}
+                <TabsContent value="suporte" className="border-none p-0 outline-none">
+                     <BotSecretariaSuport />
+                </TabsContent>
+
                 {/* VIEW 3: AUTOMAÇÕES */}
                 <TabsContent value="automations" className="border-none p-0 outline-none">
                      <BotAutomations 
@@ -314,6 +324,10 @@ export default function BotWhatsAppPage() {
                          loadingTurmas={loadingTurmas}
                          onRefreshTurmas={loadTurmas}
                          isConnected={isConnected}
+                         escolaId={escolaId}
+                         config={config}
+                         savingConfig={savingConfig}
+                         onSaveConfig={handleSaveConfig}
                          onSendToGroup={handleSendToGroup}
                          sendingGroup={sendingGroup}
                          sendProgress={sendProgress}

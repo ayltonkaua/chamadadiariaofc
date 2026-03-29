@@ -5,16 +5,23 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, UsersRound, Send, Play, FastForward, CheckCircle2, History, MessageSquare, AlertTriangle, Sparkles, RefreshCw } from 'lucide-react';
-import type { Turma, SendProgress, WhatsAppLog } from '@/domains/whatsappBot';
+import { Loader2, UsersRound, Send, Play, FastForward, CheckCircle2, History, MessageSquare, AlertTriangle, Sparkles, RefreshCw, Users, Star } from 'lucide-react';
+import type { Turma, SendProgress, WhatsAppLog, WhatsAppBotConfig } from '@/domains/whatsappBot';
+import { whatsappBotService } from '@/domains/whatsappBot';
 import BulkImportTab from './BulkImportTab';
 import AiMessageGenerator from './AiMessageGenerator';
+import BotGroupManager from './BotGroupManager';
+import { toast } from 'sonner';
 
 interface BotCampaignsProps {
   turmas: Turma[];
   loadingTurmas: boolean;
   onRefreshTurmas: () => void;
   isConnected: boolean;
+  escolaId: string;
+  config: WhatsAppBotConfig | null;
+  savingConfig: boolean;
+  onSaveConfig: (cfg: Partial<WhatsAppBotConfig>) => Promise<void>;
   
   // States to send
   onSendToGroup: (turmaId: string, message: string) => Promise<void>;
@@ -32,6 +39,10 @@ export default function BotCampaigns({
   loadingTurmas,
   onRefreshTurmas,
   isConnected,
+  escolaId,
+  config,
+  savingConfig,
+  onSaveConfig,
   onSendToGroup,
   sendingGroup,
   sendProgress,
@@ -39,9 +50,31 @@ export default function BotCampaigns({
   loadingLogs,
   onRefreshLogs
 }: BotCampaignsProps) {
-  const [activeTab, setActiveTab] = useState<'turmas' | 'import' | 'history'>('turmas');
+  const [activeTab, setActiveTab] = useState<'turmas' | 'groups' | 'import' | 'history'>('turmas');
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [campaignMessage, setCampaignMessage] = useState('');
+
+  // Group Dispatch State
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [groupMessage, setGroupMessage] = useState('');
+  const [sendingToGroup, setSendingToGroup] = useState(false);
+
+  const favoriteGroups = config?.grupos_favoritos || [];
+  const selectedGroup = favoriteGroups.find(g => g.id === selectedGroupId);
+
+  const handleSendToWAGroup = async () => {
+    if (!selectedGroupId || !groupMessage.trim()) return;
+    setSendingToGroup(true);
+    try {
+      await whatsappBotService.sendToWhatsAppGroup(escolaId, selectedGroupId, groupMessage);
+      toast.success('Mensagem enviada ao grupo com sucesso!');
+      setGroupMessage('');
+    } catch (err: any) {
+      toast.error('Erro ao enviar para o grupo: ' + err.message);
+    } finally {
+      setSendingToGroup(false);
+    }
+  };
 
   const selectedTurma = turmas.find(t => t.id === selectedTurmaId);
 
@@ -61,6 +94,16 @@ export default function BotCampaigns({
             onClick={() => setActiveTab('turmas')}
         >
           <UsersRound className="mr-2 h-4 w-4" /> Disparo p/ Turmas
+        </Button>
+        <Button 
+            variant={activeTab === 'groups' ? 'default' : 'ghost'} 
+            className={`w-full justify-start ${activeTab === 'groups' ? 'bg-amber-500 hover:bg-amber-600 text-white' : ''}`}
+            onClick={() => setActiveTab('groups')}
+        >
+          <Star className="mr-2 h-4 w-4" /> Disparo p/ Grupos
+          {favoriteGroups.length > 0 && (
+            <Badge className="ml-auto bg-amber-100 text-amber-700 hover:bg-amber-100 text-[10px]">{favoriteGroups.length}</Badge>
+          )}
         </Button>
         <Button 
             variant={activeTab === 'import' ? 'default' : 'ghost'} 
@@ -180,7 +223,84 @@ export default function BotCampaigns({
           </Card>
         )}
 
-        {/* VIEW 2: IMPORTAÇÃO EM MASSA */}
+        {/* VIEW 2: DISPARO PARA GRUPOS FAVORITOS */}
+        {activeTab === 'groups' && (
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Seção Disparo Rápido */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5 text-amber-500" />
+                  Enviar Mensagem ao Grupo
+                </CardTitle>
+                <CardDescription>
+                  Selecione um grupo favorito e envie uma mensagem diretamente.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {favoriteGroups.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-sm flex items-center gap-3">
+                    <Star className="h-5 w-5 text-amber-500" />
+                    Nenhum grupo favorito configurado. Use o painel abaixo para selecionar grupos.
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-sm font-semibold text-slate-700 block mb-1.5">1. Selecione o Grupo</label>
+                      <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Escolha um grupo favorito..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {favoriteGroups.map(g => (
+                            <SelectItem key={g.id} value={g.id}>
+                              ⭐ {g.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className={`transition-all ${!selectedGroup ? 'opacity-30 pointer-events-none' : ''}`}>
+                      <label className="text-sm font-semibold text-slate-700 block mb-1.5 mt-4">2. Escreva a Mensagem</label>
+                      <Textarea 
+                        placeholder="Escreva a mensagem para o grupo..."
+                        value={groupMessage}
+                        onChange={(e) => setGroupMessage(e.target.value)}
+                        className="h-32 text-sm bg-slate-50 border-slate-200 focus:bg-white resize-none"
+                      />
+                    </div>
+
+                    {selectedGroup && groupMessage.trim() && (
+                      <Button 
+                        onClick={handleSendToWAGroup} 
+                        disabled={sendingToGroup || !isConnected}
+                        className="w-full bg-amber-500 hover:bg-amber-600 h-11 text-base text-white shadow-sm"
+                      >
+                        {sendingToGroup ? (
+                          <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Enviando...</>
+                        ) : (
+                          <><Send className="h-5 w-5 mr-2" /> Enviar para {selectedGroup.name}</>
+                        )}
+                      </Button>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Seção Gerenciar Favoritos */}
+            <BotGroupManager 
+              escolaId={escolaId}
+              config={config}
+              isConnected={isConnected}
+              onSaveConfig={onSaveConfig}
+              savingConfig={savingConfig}
+            />
+          </div>
+        )}
+
+        {/* VIEW 3: IMPORTAÇÃO EM MASSA */}
         {activeTab === 'import' && (
           <div className="animate-in fade-in zoom-in-95 duration-200">
             <BulkImportTab escolaId="" />

@@ -99,9 +99,19 @@ function toBaileysJid(phone) {
 
 /**
  * Delay utility for rate limiting between messages
+ * Integrado com Inteligência Anti-Ban Aleatória: se o painel pedir 20s, 
+ * o bot vai sortear dinamicamente um tempo entre 14s e 38s (simulando humano).
  */
 function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    let finalMs = ms;
+    // Se o core do bot enviar 20000ms de delay (padrão hardcoded), sorteamos um delay humano
+    if (ms === 20000) {
+        const minMs = 14000;
+        const maxMs = 38000;
+        finalMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+        console.log(`⏳ [ANTI-BAN] Inteligência ativada: Simulando digitação por ${(finalMs / 1000).toFixed(1)} segundos...`);
+    }
+    return new Promise(resolve => setTimeout(resolve, finalMs));
 }
 
 module.exports = { formatMessage, sanitizePhone, toBaileysJid, delay };

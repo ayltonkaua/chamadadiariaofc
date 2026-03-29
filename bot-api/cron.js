@@ -8,7 +8,7 @@
  */
 
 const cron = require('node-cron');
-const { getActiveEscolas, sendMessage } = require('./whatsapp');
+const { getActiveEscolas, sendMessage, sendMessageToGroup } = require('./whatsapp');
 const { supabase } = require('./supabase');
 const { formatMessage, sanitizePhone, delay } = require('./utils/formatMessage');
 
@@ -352,12 +352,13 @@ function initCronJobs() {
         for (const { escolaId } of escolas) {
             try {
                 await processEscalation(escolaId);
+                await processBuscaAtivaAlerts(escolaId);
             } catch (err) {
                 console.error(`[CRON] [${escolaId.substring(0, 8)}] Escalation error:`, err.message);
             }
         }
 
-        console.log('[CRON] Escalation check completed');
+        console.log('[CRON] Escalation + Busca Ativa check completed');
     }, { timezone: 'America/Sao_Paulo' });
 
     // Monthly on 25th at 10:00 — Monthly summary
@@ -383,7 +384,7 @@ function initCronJobs() {
 
     console.log('Cron jobs initialized:');
     console.log('   Daily 18:00 — Consecutive + Risk alerts');
-    console.log('   Daily 21:00 — Escalation (3+ faltas sem resposta)');
+    console.log('   Daily 21:00 — Escalation + Busca Ativa');
     console.log('   Monthly 25th 10:00 — Monthly summary');
 }
 
@@ -489,4 +490,130 @@ async function processEscalation(escolaId) {
 }
 
 module.exports = { initCronJobs };
+
+/**
+ * Busca Ativa Alerts — Send group alerts for students with repeated absences
+ * 
+ * Alerta Novo: 3+ consecutive absences + no contact in last 7 days
+ * Alerta Reincidente: existing contact record + 3 more absences since that contact
+ */
+async function processBuscaAtivaAlerts(escolaId) {
+    console.log(`[CRON] [${escolaId.substring(0, 8)}] Processing Busca Ativa group alerts...`);
+
+    const config = await getTemplates(escolaId);
+    if (!config || !config.grupo_busca_ativa_id) {
+        console.log(`[CRON] [${escolaId.substring(0, 8)}] No grupo_busca_ativa_id configured — skipping`);
+        return;
+    }
+
+    const groupId = config.grupo_busca_ativa_id;
+
+    const { data: alunos } = await supabase
+        .from('alunos')
+        .select('id, nome, turma_id')
+        .eq('escola_id', escolaId)
+        .eq('situacao', 'ativo');
+
+    if (!alunos || alunos.length === 0) return;
+
+    let alertsSent = 0;
+    const today = new Date();
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    for (const aluno of alunos) {
+        // Count consecutive unjustified absences (recent days, ordered desc)
+        const { data: presencas } = await supabase
+            .from('presencas')
+            .select('data_chamada, presente, falta_justificada')
+            .eq('aluno_id', aluno.id)
+            .eq('escola_id', escolaId)
+            .order('data_chamada', { ascending: false })
+            .limit(15);
+
+        if (!presencas || presencas.length === 0) continue;
+
+        let consecutivas = 0;
+        for (const p of presencas) {
+            if (!p.presente && !p.falta_justificada) {
+                consecutivas++;
+            } else {
+                break;
+            }
+        }
+
+        if (consecutivas < 3) continue;
+
+        // Get student's turma name
+        let turmaNome = 'Sem turma';
+        if (aluno.turma_id) {
+            const { data: turma } = await supabase
+                .from('turmas')
+                .select('nome')
+                .eq('id', aluno.turma_id)
+                .single();
+            if (turma) turmaNome = turma.nome;
+        }
+
+        // Check for recent Busca Ativa contact
+        const { data: recentContact } = await supabase
+            .from('registros_contato_busca_ativa')
+            .select('id, created_at')
+            .eq('aluno_id', aluno.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        // Avoid duplicate alerts: check if we sent a group alert in last 2 days
+        const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: recentAlert } = await supabase
+            .from('whatsapp_logs')
+            .select('id')
+            .eq('aluno_id', aluno.id)
+            .eq('tipo', 'busca_ativa_grupo')
+            .gte('created_at', twoDaysAgo)
+            .limit(1);
+
+        if (recentAlert && recentAlert.length > 0) continue;
+
+        let message;
+
+        if (!recentContact || recentContact.length === 0 ||
+            new Date(recentContact[0].created_at) < new Date(sevenDaysAgo)) {
+            // ALERTA NOVO: sem contato nos últimos 7 dias
+            message = `🔔 *Alerta Busca Ativa*\n\nO aluno(a) *${aluno.nome}* atingiu *${consecutivas} faltas consecutivas* sem justificativa.\nTurma: *${turmaNome}*\n\n_Nenhum registro de contato recente encontrado._`;
+        } else {
+            // Tem contato recente — contar faltas após o contato
+            const contactDate = recentContact[0].created_at.split('T')[0];
+            let faltasAposContato = 0;
+            for (const p of presencas) {
+                if (p.data_chamada > contactDate && !p.presente && !p.falta_justificada) {
+                    faltasAposContato++;
+                }
+            }
+
+            if (faltasAposContato < 3) continue;
+
+            // ALERTA REINCIDENTE
+            message = `🚨 *Reincidência Grave — Busca Ativa*\n\nO aluno(a) *${aluno.nome}* acumula *${faltasAposContato} novas faltas* após o último contato da Busca Ativa.\nTurma: *${turmaNome}*\n\n_Solicito reforços urgentes._`;
+        }
+
+        try {
+            await sendMessageToGroup(escolaId, groupId, message);
+            await supabase.from('whatsapp_logs').insert({
+                escola_id: escolaId, aluno_id: aluno.id, telefone: groupId,
+                mensagem: message, tipo: 'busca_ativa_grupo', status: 'enviado',
+            });
+            alertsSent++;
+        } catch (err) {
+            console.error(`[CRON] [${escolaId.substring(0, 8)}] Busca Ativa group alert error for ${aluno.nome}:`, err.message);
+            await supabase.from('whatsapp_logs').insert({
+                escola_id: escolaId, aluno_id: aluno.id, telefone: groupId,
+                mensagem: message, tipo: 'busca_ativa_grupo', status: 'falha', erro: err.message,
+            });
+        }
+
+        await delay(CRON_SEND_DELAY_MS);
+    }
+
+    console.log(`[CRON] [${escolaId.substring(0, 8)}] Busca Ativa: ${alertsSent} group alerts sent`);
+}
 

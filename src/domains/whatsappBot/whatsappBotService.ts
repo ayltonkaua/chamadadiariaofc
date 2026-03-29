@@ -226,7 +226,8 @@ export const whatsappBotService = {
         config: Partial<Pick<WhatsAppBotConfig, 
             'template_risco' | 'template_consecutiva' | 'template_mensal' | 
             'template_falta_diaria' | 'template_escalacao' | 'grupo_busca_ativa_id' | 
-            'ativo' | 'auto_falta_diaria' | 'auto_consecutiva' | 'auto_mensal' | 'horario_falta_diaria'
+            'ativo' | 'auto_falta_diaria' | 'auto_consecutiva' | 'auto_mensal' | 'horario_falta_diaria' |
+            'grupos_favoritos'
         >>
     ): Promise<WhatsAppBotConfig> {
         const existing = await whatsappBotService.getConfig(escolaId);
@@ -427,6 +428,70 @@ RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
         const versoes = parseVersoes(texto);
 
         return { versoes, modelo };
+    },
+
+    // =====================
+    // Atendimentos (Secretaria URA)
+    // =====================
+
+    /**
+     * Get all atendimento tickets for an escola
+     */
+    async getAtendimentos(escolaId: string): Promise<any[]> {
+        const { data, error } = await db
+            .from('whatsapp_atendimentos')
+            .select('*')
+            .eq('escola_id', escolaId)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        return data || [];
+    },
+
+    /**
+     * Reply to an atendimento ticket — sends WA message and appends to respostas JSONB
+     */
+    async replyAtendimento(escolaId: string, ticketId: string, telefone: string, mensagem: string): Promise<void> {
+        // Send WhatsApp message via bot-api
+        await botFetch('/sendManual', escolaId, {
+            method: 'POST',
+            body: JSON.stringify({ telefone, mensagem }),
+        });
+
+        // Append reply to the ticket's respostas array
+        const { data: ticket } = await db
+            .from('whatsapp_atendimentos')
+            .select('respostas')
+            .eq('id', ticketId)
+            .single();
+
+        const respostas = ticket?.respostas || [];
+        respostas.push({
+            remetente: 'secretaria',
+            mensagem,
+            timestamp: new Date().toISOString(),
+        });
+
+        await db
+            .from('whatsapp_atendimentos')
+            .update({ 
+                respostas, 
+                status: 'EM_ATENDIMENTO',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', ticketId);
+    },
+
+    /**
+     * Close an atendimento ticket
+     */
+    async closeAtendimento(ticketId: string): Promise<void> {
+        const { error } = await db
+            .from('whatsapp_atendimentos')
+            .update({ status: 'FINALIZADO', updated_at: new Date().toISOString() })
+            .eq('id', ticketId);
+        
+        if (error) throw error;
     },
 };
 

@@ -446,8 +446,27 @@ CREATE TABLE public.whatsapp_bot_config (
   template_falta_diaria text DEFAULT 'Prezado(a) {responsavel}, informamos que o(a) aluno(a) *{nome}* não compareceu à aula hoje ({data}). Caso haja algum motivo, por favor entre em contato com a escola.'::text,
   template_escalacao text DEFAULT 'Prezado(a) {responsavel}, o(a) aluno(a) *{nome}* acumula *{faltas} faltas consecutivas* sem justificativa. É fundamental que nos informe o motivo para que possamos acionar a Busca Ativa e garantir a permanência escolar. Entre em contato com urgência.'::text,
   grupo_busca_ativa_id text,
+  auto_falta_diaria boolean DEFAULT false,
+  auto_consecutiva boolean DEFAULT false,
+  auto_mensal boolean DEFAULT false,
+  horario_falta_diaria time without time zone DEFAULT '18:00:00'::time without time zone,
+  grupos_favoritos jsonb DEFAULT '[]'::jsonb,
   CONSTRAINT whatsapp_bot_config_pkey PRIMARY KEY (id),
   CONSTRAINT whatsapp_bot_config_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
+);
+CREATE TABLE public.whatsapp_atendimentos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  telefone_origem text NOT NULL,
+  nome_contato text,
+  setor text NOT NULL CHECK (setor = ANY (ARRAY['carteirinha'::text, 'boletim'::text, 'declaracao'::text, 'pe_de_meia'::text])),
+  mensagem_inicial text,
+  status text NOT NULL DEFAULT 'ABERTO'::text CHECK (status = ANY (ARRAY['ABERTO'::text, 'EM_ATENDIMENTO'::text, 'FINALIZADO'::text])),
+  respostas jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT whatsapp_atendimentos_pkey PRIMARY KEY (id),
+  CONSTRAINT whatsapp_atendimentos_escola_id_fkey FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id)
 );
 CREATE TABLE public.whatsapp_justificativas (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -471,7 +490,7 @@ CREATE TABLE public.whatsapp_logs (
   aluno_id uuid,
   telefone text NOT NULL,
   mensagem text NOT NULL,
-  tipo text NOT NULL DEFAULT 'manual'::text CHECK (tipo = ANY (ARRAY['manual'::text, 'risco'::text, 'consecutiva'::text, 'mensal'::text, 'falta_diaria'::text, 'escalacao'::text, 'busca_ativa_grupo'::text])),
+  tipo text NOT NULL DEFAULT 'manual'::text CHECK (tipo = ANY (ARRAY['manual'::text, 'risco'::text, 'consecutiva'::text, 'mensal'::text, 'falta_diaria'::text, 'escalacao'::text, 'busca_ativa_grupo'::text, 'campanha'::text, 'atendimento'::text])),
   status text NOT NULL DEFAULT 'enviado'::text CHECK (status = ANY (ARRAY['enviado'::text, 'falha'::text, 'pendente'::text])),
   erro text,
   created_at timestamp with time zone DEFAULT now(),

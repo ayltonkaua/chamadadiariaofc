@@ -282,19 +282,47 @@ async function sendMessage(escolaId, phone, message) {
     }
 
     // Sanitize phone number
-    const sanitized = phone.replace(/\D/g, '');
-    if (sanitized.length < 10 || sanitized.length > 15) {
-        throw new Error('Número de telefone inválido');
+    let cleanPhone = phone.replace(/\D/g, '');
+    // Add Brazil country code if missing
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+        cleanPhone = '55' + cleanPhone;
     }
 
-    // Convert to Baileys JID (removes 9th digit for BR numbers)
-    const jid = toBaileysJid(sanitized);
-    if (!jid) {
-        throw new Error('Número de telefone inválido para envio');
+    if (cleanPhone.length < 12 || cleanPhone.length > 13) {
+        throw new Error('Número de telefone inválido (' + cleanPhone.length + ' digitos)');
     }
 
-    await sock.sendMessage(jid, { text: message });
-    return { success: true, phone: sanitized };
+    // ARRAY DE TENTATIVAS (Com e sem o 9)
+    let queries = [];
+    if (cleanPhone.length === 13 && cleanPhone.startsWith('55') && cleanPhone[4] === '9') {
+        const withoutNine = cleanPhone.substring(0, 4) + cleanPhone.substring(5);
+        queries.push(cleanPhone); // Tenta COM o 9 primeiro
+        queries.push(withoutNine); // Tenta SEM o 9 em seguida
+    } else if (cleanPhone.length === 12 && cleanPhone.startsWith('55')) {
+        const withNine = cleanPhone.substring(0, 4) + '9' + cleanPhone.substring(4);
+        queries.push(withNine); // Tenta COM o 9 inserido
+        queries.push(cleanPhone); // Tenta como veio
+    } else {
+        queries.push(cleanPhone);
+    }
+
+    // Busca na matriz do WhatsApp qual JID realmente existe
+    let validJid = null;
+    for (const q of queries) {
+        const jidToCheck = `${q}@s.whatsapp.net`;
+        const result = await sock.onWhatsApp(jidToCheck);
+        if (result && result.length > 0 && result[0].exists) {
+            validJid = result[0].jid;
+            break;
+        }
+    }
+
+    if (!validJid) {
+        throw new Error('Número não possui conta de WhatsApp ativa (' + cleanPhone + ').');
+    }
+
+    await sock.sendMessage(validJid, { text: message });
+    return { success: true, phone: validJid.split('@')[0] };
 }
 
 /**
@@ -416,9 +444,31 @@ async function addParticipantsToGroup(escolaId, groupJid, phones) {
 
     const results = [];
     for (const phone of phones) {
-        const jid = toBaileysJid(phone);
+        let cleanPhone = phone.replace(/\D/g, '');
+        if (cleanPhone.length === 10 || cleanPhone.length === 11) cleanPhone = '55' + cleanPhone;
+
+        let queries = [];
+        if (cleanPhone.length === 13 && cleanPhone.startsWith('55') && cleanPhone[4] === '9') {
+            queries.push(cleanPhone);
+            queries.push(cleanPhone.substring(0, 4) + cleanPhone.substring(5));
+        } else if (cleanPhone.length === 12 && cleanPhone.startsWith('55')) {
+            queries.push(cleanPhone.substring(0, 4) + '9' + cleanPhone.substring(4));
+            queries.push(cleanPhone);
+        } else {
+            queries.push(cleanPhone);
+        }
+
+        let jid = null;
+        for (const q of queries) {
+            const result = await sock.onWhatsApp(`${q}@s.whatsapp.net`);
+            if (result && result.length > 0 && result[0].exists) {
+                jid = result[0].jid;
+                break;
+            }
+        }
+
         if (!jid) {
-            results.push({ phone, success: false, error: 'Número inválido' });
+            results.push({ phone, success: false, error: 'Número não registrado no WhatsApp' });
             continue;
         }
 

@@ -20,4 +20,10 @@ export type {
     AiMessageTipo,
     AiMessageRequest,
     AiMessageResponse,
+    WhatsAppAtendimento,
+    AtendimentoReply,
+    AtendimentoSetor,
+    AtendimentoStatus,
+    JustificativaStatus,
+    JustificativaPendente,
 } from './types';
