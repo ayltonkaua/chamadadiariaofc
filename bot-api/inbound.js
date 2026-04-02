@@ -183,7 +183,7 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
     }
 
     // Verificar se há atendimento aberto para este telefone — se sim, canalizar mensagem
-    const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText);
+    const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
     if (hasOpenTicket) {
         console.log(`💬 [INBOUND] [${escolaId.substring(0,8)}] Mensagem canalizada para atendimento aberto | Tel: ${sessionKey.slice(-8)}`);
         return; // Mensagem foi adicionada ao ticket, não mostra menu
@@ -819,7 +819,7 @@ async function showFaltasDoAluno(escolaId, sessionKey, aluno, todosAlunos, reply
 // Se o pai já tem um ticket aberto/em_atendimento, novas mensagens
 // são adicionadas ao array de respostas do ticket automaticamente.
 // =====================
-async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText) {
+async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn) {
     try {
         const mensagem = (textContent || '').trim() || mediaFallbackText || '';
         if (!mensagem) return false;
@@ -839,6 +839,24 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
         }
 
         const ticket = tickets[0];
+        
+        // Se o usuário digitou 0 ou menu, ele quer sair do atendimento
+        const isExit = textContent.trim().match(/^(0|menu)$/i);
+        if (isExit) {
+            await supabase
+                .from('whatsapp_atendimentos')
+                .update({
+                    status: 'FINALIZADO',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', ticket.id);
+            
+            if (replyFn) {
+                await replyFn("Atendimento finalizado. Retornando ao menu principal...");
+            }
+            return false; // Retorna false para que o fluxo mostre o menu principal novamente
+        }
+
         const respostas = ticket.respostas || [];
         respostas.push({
             remetente: 'pai',
@@ -853,6 +871,11 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
                 updated_at: new Date().toISOString(),
             })
             .eq('id', ticket.id);
+
+        if (replyFn && respostas.length === 1) {
+            // Se for a primeira mensagem adicionada (após a msg inicial), envia um alerta de confirmação pequeno
+            await replyFn("Sua mensagem foi adicionada ao atendimento aberto. Aguarde o retorno da secretaria ou digite *0* para sair.");
+        }
 
         return true; // Mensagem canalizada com sucesso
     } catch (err) {

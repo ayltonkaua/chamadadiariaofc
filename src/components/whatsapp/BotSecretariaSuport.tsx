@@ -13,8 +13,18 @@ import { ptBR } from 'date-fns/locale';
 import { 
     Headphones, Phone, Send, CheckCircle2, Clock, AlertCircle, 
     MessageSquare, CreditCard, FileText, GraduationCap, Coins,
-    Loader2, ArrowLeft, Trash2
+    Loader2, ArrowLeft, Trash2, User
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactNode; color: string }> = {
     carteirinha: { label: 'Carteira de Estudante', icon: <CreditCard className="w-4 h-4" />, color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -56,6 +66,13 @@ export default function BotSecretariaSuport() {
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
     const [closingOrDeleting, setClosingOrDeleting] = useState(false);
+
+    // Attendant name modal
+    const [attendantName, setAttendantName] = useState(() => {
+        return sessionStorage.getItem('bot_attendant_name') || '';
+    });
+    const [nameModalOpen, setNameModalOpen] = useState(false);
+    const [tempName, setTempName] = useState('');
 
     const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -115,12 +132,23 @@ export default function BotSecretariaSuport() {
     // ═══ ENVIAR RESPOSTA ═══
     const handleReply = async () => {
         if (!replyText.trim() || sending || !selectedTicket) return;
+        
+        if (!attendantName) {
+            setTempName(userName);
+            setNameModalOpen(true);
+            return;
+        }
+
+        executeReply(attendantName);
+    };
+
+    const executeReply = async (nameToUse: string) => {
         setSending(true);
         try {
-            const mensagemFinal = `*${userName}:* ${replyText.trim()}`;
+            const mensagemFinal = `*${nameToUse}:* ${replyText.trim()}`;
             
             await whatsappBotService.replyAtendimento(
-                escolaId, selectedTicket.id, selectedTicket.telefone_origem, mensagemFinal, userName
+                escolaId, selectedTicket!.id, selectedTicket!.telefone_origem, mensagemFinal, nameToUse
             );
 
             setReplyText('');
@@ -131,6 +159,17 @@ export default function BotSecretariaSuport() {
         } finally {
             setSending(false);
         }
+    };
+
+    const handleSaveName = () => {
+        if (!tempName.trim()) {
+            toast.error('Por favor, informe seu nome.');
+            return;
+        }
+        setAttendantName(tempName.trim());
+        sessionStorage.setItem('bot_attendant_name', tempName.trim());
+        setNameModalOpen(false);
+        executeReply(tempName.trim());
     };
 
     // ═══ FINALIZAR ATENDIMENTO ═══
@@ -419,6 +458,41 @@ export default function BotSecretariaSuport() {
             onConfirm={handleConfirmDelete}
             loading={closingOrDeleting}
         />
+
+        <Dialog open={nameModalOpen} onOpenChange={setNameModalOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <User className="w-5 h-5 text-indigo-500" />
+                        Identificação do Atendente
+                    </DialogTitle>
+                    <DialogDescription>
+                        Por favor, informe seu nome. Ele aparecerá nas mensagens enviadas aos responsáveis.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="name">Seu nome</Label>
+                        <Input
+                            id="name"
+                            value={tempName}
+                            onChange={(e) => setTempName(e.target.value)}
+                            placeholder="Ex: Maria"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveName();
+                                }
+                            }}
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setNameModalOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleSaveName} className="bg-indigo-600 hover:bg-indigo-700">Começar a Atender</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
         </>
     );
 }
