@@ -339,10 +339,10 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
             
             if (!hasOpenTicket) {
-                // Ticket foi fechado pela secretaria. Limpa a sessão atual e exibe o menu principal novamente para essa mensagem.
+                // Se a secretaria fechou (ou ocorreu erro), perguntar antes de jogar menu pra garantir fluxo limpo
                 clearSession(sessionKey);
-                setSession(sessionKey, { stage: 'WAIT_URA_CHOICE', escolaId, phoneCom9, phoneSem9, originalMessage: textContent }, replyFn);
-                await replyFn(URA_MENU);
+                // Não força o URA imediatamente para evitar poluição visual de ping-pong. 
+                // Se o ticket encerrou, ele avisa (o route já avisa). Se não tinha ticket, ignoramos para ele dar um "oi".
             } else if (textContent.trim().match(/^(0|menu)$/i)) {
                 // Usuário encerrou o ticket
                 clearSession(sessionKey);
@@ -1039,8 +1039,13 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
             .order('created_at', { ascending: false })
             .limit(1);
 
-        if (error || !tickets || tickets.length === 0) {
-            return false; // Sem ticket aberto — seguir fluxo normal
+        if (error) {
+            console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro query Supabase:`, error.message);
+            return false;
+        }
+        
+        if (!tickets || tickets.length === 0) {
+            return false; // Sem ticket aberto genuinamente — seguir fluxo normal ou voltar pro URA
         }
 
         const ticket = tickets[0];
@@ -1062,20 +1067,32 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
             return false; // Retorna false para que o fluxo mostre o menu principal novamente
         }
 
-        const respostas = ticket.respostas || [];
+        let respostas = ticket.respostas;
+        if (typeof respostas === 'string') {
+            try { respostas = JSON.parse(respostas); } catch(e) { respostas = []; }
+        }
+        if (!Array.isArray(respostas)) {
+            respostas = [];
+        }
+
         respostas.push({
             remetente: 'pai',
             mensagem: mensagem.substring(0, 2000),
             timestamp: new Date().toISOString(),
         });
 
-        await supabase
+        const { error: updateError } = await supabase
             .from('whatsapp_atendimentos')
             .update({
                 respostas,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', ticket.id);
+            
+        if (updateError) {
+             console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro no update do ticket:`, updateError.message);
+             return false;
+        }
 
         if (replyFn && respostas.length === 1) {
             // Se for a primeira mensagem adicionada (após a msg inicial), envia um alerta de confirmação pequeno
