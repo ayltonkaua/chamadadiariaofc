@@ -141,13 +141,8 @@ export default function BotSecretariaSuport() {
     const handleReply = async () => {
         if (!replyText.trim() || sending || !selectedTicket) return;
         
-        if (!attendantName) {
-            setTempName(userName);
-            setNameModalOpen(true);
-            return;
-        }
-
-        executeReply(attendantName);
+        const nameToUse = attendantName.trim() || userName;
+        executeReply(nameToUse);
     };
 
     const executeReply = async (nameToUse: string) => {
@@ -155,13 +150,25 @@ export default function BotSecretariaSuport() {
         try {
             const mensagemFinal = `*${nameToUse}:* ${replyText.trim()}`;
             
+            // Atualização Otimista (Aparece na hora)
+            const novaResposta = {
+                remetente: 'secretaria' as 'secretaria',
+                mensagem: mensagemFinal,
+                atendente: nameToUse,
+                timestamp: new Date().toISOString()
+            };
+            setTickets(prev => prev.map(t => {
+                if (t.id === selectedTicket!.id) {
+                    return { ...t, respostas: [...(t.respostas || []), novaResposta] };
+                }
+                return t;
+            }));
+
             await whatsappBotService.replyAtendimento(
                 escolaId, selectedTicket!.id, selectedTicket!.telefone_origem, mensagemFinal, nameToUse
             );
 
             setReplyText('');
-            toast.success('Mensagem enviada!');
-            // Real-time atualizará o ticket automaticamente
         } catch (err: any) {
             toast.error('Erro ao enviar: ' + err.message);
         } finally {
@@ -185,7 +192,17 @@ export default function BotSecretariaSuport() {
         if (!selectedTicket) return;
         setClosingOrDeleting(true);
         try {
+            const nameToUse = attendantName.trim() || userName || 'Secretaria';
+            await whatsappBotService.replyAtendimento(
+                escolaId, selectedTicket.id, selectedTicket.telefone_origem, 
+                `*${nameToUse}:* Atendimento finalizado pela escola. Agradecemos o contato!`, 
+                nameToUse
+            );
             await whatsappBotService.closeAtendimento(selectedTicket.id);
+
+            // Atualização Otimista
+            setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: 'FINALIZADO' } : t));
+            
             toast.success('Atendimento finalizado!');
             setConfirmClose(false);
         } catch (err: any) {
@@ -416,23 +433,38 @@ export default function BotSecretariaSuport() {
 
                             {/* Input */}
                             {selectedTicket.status !== 'FINALIZADO' ? (
-                                <div className="px-4 py-3 bg-white border-t flex items-end gap-2 shrink-0">
-                                    <textarea
-                                        placeholder="Digite sua resposta..."
-                                        value={replyText}
-                                        onChange={(e) => setReplyText(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
-                                        className="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 min-h-[44px] max-h-[120px]"
-                                        rows={1}
-                                        disabled={sending}
-                                    />
-                                    <Button
-                                        onClick={handleReply}
-                                        disabled={!replyText.trim() || sending}
-                                        className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full h-11 w-11 p-0 shrink-0"
-                                    >
-                                        {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                                    </Button>
+                                <div className="px-4 py-3 bg-white border-t flex flex-col gap-2 shrink-0">
+                                    <div className="flex gap-2">
+                                        <div className="text-xs font-semibold text-slate-500 self-center">Assinar como:</div>
+                                        <input
+                                            type="text"
+                                            value={attendantName}
+                                            onChange={(e) => { 
+                                                setAttendantName(e.target.value); 
+                                                sessionStorage.setItem('bot_attendant_name', e.target.value);
+                                            }}
+                                            placeholder="Seu nome"
+                                            className="border rounded-md px-2 py-1 text-xs w-32 focus:outline-none focus:border-indigo-300 bg-slate-50"
+                                        />
+                                    </div>
+                                    <div className="flex items-end gap-2">
+                                        <textarea
+                                            placeholder="Digite sua resposta..."
+                                            value={replyText}
+                                            onChange={(e) => setReplyText(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
+                                            className="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 min-h-[44px] max-h-[120px]"
+                                            rows={1}
+                                            disabled={sending}
+                                        />
+                                        <Button
+                                            onClick={handleReply}
+                                            disabled={!replyText.trim() || sending}
+                                            className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full h-11 w-11 p-0 shrink-0"
+                                        >
+                                            {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="px-4 py-3 bg-slate-50 border-t text-center shrink-0">

@@ -878,7 +878,7 @@ async function startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem
     }
 
     // Mostrar os totais de falta sem opção interativa além de "ver"
-    let msg = `📊 *Resumo de Faltas Totais*\n\n`;
+    let msg = `📊 *Resumo de Faltas (Geral)*\n\n`;
     
     // Obter faltas para todos os validStudents
     const studentIds = validStudents.map(s => s.id);
@@ -891,8 +891,10 @@ async function startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem
 
     validStudents.forEach(st => {
         const absCount = (faltas || []).filter(f => f.aluno_id === st.id).length;
+        const totalAulasGeral = absCount * 6; // Pedido: Faltas contabilizadas x 6
         msg += `🎓 Aluno: *${st.nome}*\n`;
-        msg += `❌ Total de faltas acumuladas: *${absCount}*\n\n`;
+        msg += `⚠️ Faltas Registradas: *${absCount}* (inclui justificadas/não justificadas)\n`;
+        msg += `❌ Total de Aulas Perdidas (aprox): *${totalAulasGeral}* aulas\n\n`;
     });
 
     clearSession(sessionKey);
