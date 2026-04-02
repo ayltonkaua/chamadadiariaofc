@@ -7,8 +7,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { toast } from 'sonner';
-import { Check, X, Clock, MessageSquare, AlertCircle } from 'lucide-react';
+import { Check, X, Clock, MessageSquare, AlertCircle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import ModalMotivoRecusa from './ModalMotivoRecusa';
@@ -22,6 +23,11 @@ export default function KanbanJustificativas() {
     // Modal de Recusa
     const [recusaModalOpen, setRecusaModalOpen] = useState(false);
     const [recusaTarget, setRecusaTarget] = useState<JustificativaPendente | null>(null);
+
+    // Dialog de exclusão
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const escolaId = user?.escola_id;
 
@@ -158,6 +164,38 @@ export default function KanbanJustificativas() {
         setRecusaTarget(null);
     };
 
+    // =====================
+    // EXCLUIR JUSTIFICATIVA
+    // =====================
+    const handleDeleteClick = (id: string) => {
+        setDeleteTargetId(id);
+        setDeleteDialogOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deleteTargetId) return;
+        setIsDeleting(true);
+        try {
+            // @ts-ignore
+            const { error } = await supabase
+                .from('whatsapp_justificativas')
+                .delete()
+                .eq('id', deleteTargetId);
+
+            if (error) throw error;
+
+            setJustificativas(prev => prev.filter(j => j.id !== deleteTargetId));
+            toast.success('Justificativa excluída.');
+            setDeleteDialogOpen(false);
+            setDeleteTargetId(null);
+        } catch (err: any) {
+            console.error('Erro ao excluir justificativa:', err);
+            toast.error('Erro ao excluir justificativa.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     const pendentes = justificativas.filter(j => j.status === 'PENDENTE');
     const aprovadas = justificativas.filter(j => j.status === 'APROVADA');
     const recusadas = justificativas.filter(j => j.status === 'RECUSADA');
@@ -201,6 +239,7 @@ export default function KanbanJustificativas() {
                                     isProcessing={isProcessing === j.id} 
                                     onAction={handleAction} 
                                     onRecusar={handleRecusarClick}
+                                    onDelete={handleDeleteClick}
                                 />
                             ))
                         )}
@@ -217,7 +256,7 @@ export default function KanbanJustificativas() {
                     </div>
                     <div className="p-3 overflow-y-auto flex-1 space-y-3 custom-scrollbar opacity-80 hover:opacity-100 transition-opacity">
                         {aprovadas.map(j => (
-                            <JustificativaCard key={j.id} j={j} isProcessing={false} onAction={handleAction} onRecusar={handleRecusarClick} readOnly />
+                            <JustificativaCard key={j.id} j={j} isProcessing={false} onAction={handleAction} onRecusar={handleRecusarClick} onDelete={handleDeleteClick} readOnly />
                         ))}
                     </div>
                 </div>
@@ -232,7 +271,7 @@ export default function KanbanJustificativas() {
                     </div>
                     <div className="p-3 overflow-y-auto flex-1 space-y-3 custom-scrollbar opacity-80 hover:opacity-100 transition-opacity">
                         {recusadas.map(j => (
-                            <JustificativaCard key={j.id} j={j} isProcessing={false} onAction={handleAction} onRecusar={handleRecusarClick} readOnly />
+                            <JustificativaCard key={j.id} j={j} isProcessing={false} onAction={handleAction} onRecusar={handleRecusarClick} onDelete={handleDeleteClick} readOnly />
                         ))}
                     </div>
                 </div>
@@ -246,6 +285,18 @@ export default function KanbanJustificativas() {
                 alunoNome={recusaTarget?.aluno?.nome || 'Aluno'}
                 telefonePai={recusaTarget?.telefone_origem || ''}
             />
+
+            {/* Dialog de Confirmação de Exclusão */}
+            <ConfirmDialog
+                open={deleteDialogOpen}
+                onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setDeleteTargetId(null); }}
+                title="Excluir Justificativa"
+                description="Tem certeza que deseja excluir esta justificativa? Esta ação não pode ser desfeita."
+                confirmLabel="Excluir"
+                variant="destructive"
+                onConfirm={handleConfirmDelete}
+                loading={isDeleting}
+            />
         </>
     );
 }
@@ -258,12 +309,14 @@ function JustificativaCard({
     isProcessing, 
     onAction, 
     onRecusar,
+    onDelete,
     readOnly = false 
 }: { 
     j: JustificativaPendente, 
     isProcessing: boolean, 
     onAction: (id: string, status: JustificativaStatus) => void,
     onRecusar: (j: JustificativaPendente) => void,
+    onDelete: (id: string) => void,
     readOnly?: boolean
 }) {
     // Formata a data (ex: '15 de Março')
@@ -271,13 +324,22 @@ function JustificativaCard({
     const horaRecib = format(new Date(j.data_recebimento), "HH:mm");
 
     return (
-        <Card className="p-3 border-slate-200 shadow-sm bg-white hover:shadow-md transition-shadow relative">
+        <Card className="p-3 border-slate-200 shadow-sm bg-white hover:shadow-md transition-shadow relative group">
+            {/* Botão excluir */}
+            <button
+                onClick={() => onDelete(j.id)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 p-1 rounded"
+                title="Excluir justificativa"
+            >
+                <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
             <div className="flex justify-between items-start mb-2">
                 <div>
                     <h4 className="font-semibold text-slate-800 text-sm">{j.aluno?.nome || 'Aluno Desconhecido'}</h4>
                     <p className="text-xs text-slate-500 font-medium">Turma: {j.aluno?.turma?.nome || 'Sem turma'}</p>
                 </div>
-                <span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">Hoje às {horaRecib}</span>
+                <span className="text-[10px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 mr-5">Às {horaRecib}</span>
             </div>
 
             <div className="bg-indigo-50/50 border border-indigo-100 rounded-md p-2.5 my-3 relative">

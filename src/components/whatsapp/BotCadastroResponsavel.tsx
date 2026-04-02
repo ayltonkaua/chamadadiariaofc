@@ -6,6 +6,17 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogCancel,
+    AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { 
     Check, X, Clock, UserPlus, Phone, GraduationCap, 
@@ -76,6 +87,11 @@ export default function BotCadastroResponsavel() {
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState<string | null>(null);
     const [filtroStatus, setFiltroStatus] = useState<CadastroStatus | 'TODOS'>('PENDENTE');
+
+    // Modal de rejeição
+    const [rejectTarget, setRejectTarget] = useState<PreCadastro | null>(null);
+    const [rejectMotivo, setRejectMotivo] = useState('');
+    const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
 
     // =====================
     // Data Fetching
@@ -214,16 +230,20 @@ export default function BotCadastroResponsavel() {
     // =====================
     // Rejeitar
     // =====================
-    const handleRejeitar = async (cadastro: PreCadastro) => {
-        if (!user?.id || !escolaId) return;
-        
-        const motivo = prompt(`Motivo da rejeição do cadastro de ${cadastro.nome_responsavel}:`);
-        if (!motivo) return; // Cancelou o prompt
+    const handleRejeitar = (cadastro: PreCadastro) => {
+        setRejectTarget(cadastro);
+        setRejectMotivo('');
+        setRejectDialogOpen(true);
+    };
+
+    const handleConfirmReject = async () => {
+        if (!user?.id || !escolaId || !rejectTarget || !rejectMotivo.trim()) return;
+        const cadastro = rejectTarget;
         
         setIsProcessing(cadastro.id);
+        setRejectDialogOpen(false);
 
         try {
-            // 1. Marcar como rejeitado
             // @ts-ignore
             const { error } = await supabase
                 .from('whatsapp_pre_cadastros')
@@ -236,10 +256,9 @@ export default function BotCadastroResponsavel() {
 
             if (error) throw error;
 
-            // 2. Notificar o responsável via WhatsApp com o motivo
             try {
                 const nomeAluno = cadastro.aluno?.nome || 'o aluno informado';
-                const mensagem = `❌ *Cadastro Não Aprovado*\n\nOlá, *${cadastro.nome_responsavel}*!\n\nSeu cadastro como responsável do(a) aluno(a) *${nomeAluno}* não foi aprovado pela secretaria.\n\n*Motivo:* _"${motivo}"_\n\nPara mais informações, entre em contato com a secretaria da escola presencialmente.`;
+                const mensagem = `❌ *Cadastro Não Aprovado*\n\nOlá, *${cadastro.nome_responsavel}*!\n\nSeu cadastro como responsável do(a) aluno(a) *${nomeAluno}* não foi aprovado pela secretaria.\n\n*Motivo:* _"${rejectMotivo.trim()}"_\n\nPara mais informações, entre em contato com a secretaria da escola presencialmente.`;
 
                 await whatsappBotService.sendManual(escolaId, {
                     telefone: cadastro.telefone_responsavel,
@@ -259,6 +278,7 @@ export default function BotCadastroResponsavel() {
             toast.error('Erro ao rejeitar cadastro.');
         } finally {
             setIsProcessing(null);
+            setRejectTarget(null);
         }
     };
 
@@ -366,6 +386,34 @@ export default function BotCadastroResponsavel() {
                     />
                 ))}
             </div>
+
+            {/* Modal de Rejeição com Motivo */}
+            <AlertDialog open={rejectDialogOpen} onOpenChange={(open) => { setRejectDialogOpen(open); if (!open) { setRejectTarget(null); setRejectMotivo(''); } }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Rejeitar Cadastro</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Informe o motivo da rejeição do cadastro de <strong>{rejectTarget?.nome_responsavel}</strong>. O responsável será notificado via WhatsApp.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Textarea
+                        placeholder="Digite o motivo da rejeição..."
+                        value={rejectMotivo}
+                        onChange={(e) => setRejectMotivo(e.target.value)}
+                        className="min-h-[80px] text-sm"
+                    />
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => { e.preventDefault(); handleConfirmReject(); }}
+                            disabled={!rejectMotivo.trim()}
+                            className="bg-rose-600 hover:bg-rose-700 text-white"
+                        >
+                            Rejeitar e Notificar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

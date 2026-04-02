@@ -5,6 +5,7 @@ import type { BotStatus, WhatsAppBotConfig, WhatsAppLog, Turma, SendProgress } f
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bot, Zap, Rocket, MessageCircle, FileCheck2, Headphones, UserPlus } from 'lucide-react';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 import BotDashboard from '@/components/whatsapp/BotDashboard';
 import BotAutomations from '@/components/whatsapp/BotAutomations';
@@ -142,8 +143,10 @@ export default function BotWhatsAppPage() {
         }
     };
 
+    const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
     const handleDisconnect = async () => {
-        if (!confirm('Deseja realmente desconectar o WhatsApp desta escola?')) return;
+        setConfirmDisconnect(false);
         setDisconnecting(true);
         try {
             await whatsappBotService.disconnect(escolaId);
@@ -287,7 +290,7 @@ export default function BotWhatsAppPage() {
                         disconnecting={disconnecting}
                         onRefreshStatus={loadStatus}
                         onGenerateQR={handleGenerateQR}
-                        onDisconnect={handleDisconnect}
+                        onDisconnect={() => setConfirmDisconnect(true)}
                         manualPhone={manualPhone}
                         setManualPhone={setManualPhone}
                         manualMessage={manualMessage}
@@ -348,6 +351,17 @@ export default function BotWhatsAppPage() {
                 </TabsContent>
 
             </Tabs>
+
+            <ConfirmDialog
+                open={confirmDisconnect}
+                onOpenChange={setConfirmDisconnect}
+                title="Desconectar WhatsApp"
+                description="Deseja realmente desconectar o WhatsApp desta escola? O bot parará de funcionar até que você reconecte."
+                confirmLabel="Desconectar"
+                variant="destructive"
+                onConfirm={handleDisconnect}
+                loading={disconnecting}
+            />
         </div>
     );
 }

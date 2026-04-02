@@ -7,19 +7,20 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
     Headphones, Phone, Send, CheckCircle2, Clock, AlertCircle, 
     MessageSquare, CreditCard, FileText, GraduationCap, Coins,
-    Loader2, ArrowLeft
+    Loader2, ArrowLeft, Trash2
 } from 'lucide-react';
 
-const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactNode; color: string; bgLight: string }> = {
-    carteirinha: { label: 'Carteira de Estudante', icon: <CreditCard className="w-4 h-4" />, color: 'bg-blue-100 text-blue-700 border-blue-200', bgLight: 'bg-blue-50' },
-    boletim: { label: 'Histórico / Boletim', icon: <GraduationCap className="w-4 h-4" />, color: 'bg-purple-100 text-purple-700 border-purple-200', bgLight: 'bg-purple-50' },
-    declaracao: { label: 'Declaração de Escolaridade', icon: <FileText className="w-4 h-4" />, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', bgLight: 'bg-emerald-50' },
-    pe_de_meia: { label: 'Pé-de-Meia', icon: <Coins className="w-4 h-4" />, color: 'bg-amber-100 text-amber-700 border-amber-200', bgLight: 'bg-amber-50' },
+const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactNode; color: string }> = {
+    carteirinha: { label: 'Carteira de Estudante', icon: <CreditCard className="w-4 h-4" />, color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    boletim: { label: 'Histórico / Boletim', icon: <GraduationCap className="w-4 h-4" />, color: 'bg-purple-100 text-purple-700 border-purple-200' },
+    declaracao: { label: 'Declaração de Escolaridade', icon: <FileText className="w-4 h-4" />, color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    pe_de_meia: { label: 'Pé-de-Meia', icon: <Coins className="w-4 h-4" />, color: 'bg-amber-100 text-amber-700 border-amber-200' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -49,7 +50,12 @@ export default function BotSecretariaSuport() {
     const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
     const [sending, setSending] = useState(false);
-    const [closing, setClosing] = useState(false);
+
+    // Confirm dialogs
+    const [confirmClose, setConfirmClose] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [closingOrDeleting, setClosingOrDeleting] = useState(false);
 
     const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -66,25 +72,38 @@ export default function BotSecretariaSuport() {
         }
     };
 
+    // Carregamento inicial + real-time subscription
     useEffect(() => {
         loadTickets();
 
         const channel = supabase
-            .channel('public:whatsapp_atendimentos')
+            .channel('atendimentos-realtime')
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
                 table: 'whatsapp_atendimentos',
                 filter: `escola_id=eq.${escolaId}`
-            }, () => {
-                loadTickets();
+            }, (payload) => {
+                // Real-time: atualizar tickets ao vivo
+                if (payload.eventType === 'INSERT') {
+                    setTickets(prev => [payload.new as WhatsAppAtendimento, ...prev]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setTickets(prev => prev.map(t => 
+                        t.id === (payload.new as any).id ? { ...t, ...(payload.new as WhatsAppAtendimento) } : t
+                    ));
+                } else if (payload.eventType === 'DELETE') {
+                    setTickets(prev => prev.filter(t => t.id !== (payload.old as any).id));
+                    if (selectedTicketId === (payload.old as any).id) {
+                        setSelectedTicketId(null);
+                    }
+                }
             })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
     }, [escolaId]);
 
-    // Auto-scroll quando mensagens atualizam
+    // Auto-scroll
     useEffect(() => {
         if (chatEndRef.current) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -93,42 +112,20 @@ export default function BotSecretariaSuport() {
 
     const selectedTicket = tickets.find(t => t.id === selectedTicketId);
 
+    // ═══ ENVIAR RESPOSTA ═══
     const handleReply = async () => {
         if (!replyText.trim() || sending || !selectedTicket) return;
         setSending(true);
         try {
-            // Envia a mensagem com o nome do atendente prefixado
             const mensagemFinal = `*${userName}:* ${replyText.trim()}`;
             
             await whatsappBotService.replyAtendimento(
-                escolaId, 
-                selectedTicket.id, 
-                selectedTicket.telefone_origem, 
-                mensagemFinal
+                escolaId, selectedTicket.id, selectedTicket.telefone_origem, mensagemFinal, userName
             );
 
-            // Append local para atualização otimista
-            const updatedTickets = tickets.map(t => {
-                if (t.id === selectedTicket.id) {
-                    return {
-                        ...t,
-                        status: 'EM_ATENDIMENTO' as any,
-                        respostas: [
-                            ...(t.respostas || []),
-                            {
-                                remetente: 'secretaria' as const,
-                                mensagem: replyText.trim(),
-                                timestamp: new Date().toISOString(),
-                                atendente: userName,
-                            }
-                        ]
-                    };
-                }
-                return t;
-            });
-            setTickets(updatedTickets);
             setReplyText('');
             toast.success('Mensagem enviada!');
+            // Real-time atualizará o ticket automaticamente
         } catch (err: any) {
             toast.error('Erro ao enviar: ' + err.message);
         } finally {
@@ -136,21 +133,43 @@ export default function BotSecretariaSuport() {
         }
     };
 
-    const handleClose = async () => {
+    // ═══ FINALIZAR ATENDIMENTO ═══
+    const handleConfirmClose = async () => {
         if (!selectedTicket) return;
-        if (!confirm('Deseja finalizar este atendimento?')) return;
-        setClosing(true);
+        setClosingOrDeleting(true);
         try {
             await whatsappBotService.closeAtendimento(selectedTicket.id);
             toast.success('Atendimento finalizado!');
-            setTickets(prev => prev.map(t => 
-                t.id === selectedTicket.id ? { ...t, status: 'FINALIZADO' as any } : t
-            ));
-            setSelectedTicketId(null);
+            setConfirmClose(false);
         } catch (err: any) {
             toast.error('Erro ao finalizar: ' + err.message);
         } finally {
-            setClosing(false);
+            setClosingOrDeleting(false);
+        }
+    };
+
+    // ═══ EXCLUIR CONVERSA ═══
+    const handleConfirmDelete = async () => {
+        if (!deleteTargetId) return;
+        setClosingOrDeleting(true);
+        try {
+            // @ts-ignore
+            const { error } = await supabase
+                .from('whatsapp_atendimentos')
+                .delete()
+                .eq('id', deleteTargetId);
+
+            if (error) throw error;
+
+            setTickets(prev => prev.filter(t => t.id !== deleteTargetId));
+            if (selectedTicketId === deleteTargetId) setSelectedTicketId(null);
+            toast.success('Conversa excluída.');
+            setConfirmDelete(false);
+            setDeleteTargetId(null);
+        } catch (err: any) {
+            toast.error('Erro ao excluir: ' + err.message);
+        } finally {
+            setClosingOrDeleting(false);
         }
     };
 
@@ -158,10 +177,8 @@ export default function BotSecretariaSuport() {
     const closedTickets = tickets.filter(t => t.status === 'FINALIZADO');
     const sortedTickets = [...openTickets, ...closedTickets];
 
-    // ═══════════════════════════════════
-    // RENDER
-    // ═══════════════════════════════════
     return (
+        <>
         <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 260px)', minHeight: 500 }}>
             {/* Header */}
             <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-violet-50 to-indigo-50 shrink-0">
@@ -169,7 +186,7 @@ export default function BotSecretariaSuport() {
                     <Headphones className="w-5 h-5 text-violet-500" />
                     <div>
                         <h2 className="text-base font-semibold text-slate-800">Central de Atendimento</h2>
-                        <p className="text-xs text-slate-500">Conversas com responsáveis via WhatsApp</p>
+                        <p className="text-xs text-slate-500">Conversas ao vivo com responsáveis via WhatsApp</p>
                     </div>
                     {openTickets.length > 0 && (
                         <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 text-xs">
@@ -177,14 +194,12 @@ export default function BotSecretariaSuport() {
                         </Badge>
                     )}
                 </div>
-                <Button variant="outline" onClick={loadTickets} disabled={loading} size="sm">
-                    Atualizar
-                </Button>
+                <Button variant="outline" onClick={loadTickets} disabled={loading} size="sm">Atualizar</Button>
             </div>
 
-            {/* Body: List + Chat */}
+            {/* Body */}
             <div className="flex flex-1 overflow-hidden">
-                {/* ═══ LISTA DE TICKETS (Lateral) ═══ */}
+                {/* ═══ LISTA LATERAL ═══ */}
                 <div className={`w-full md:w-[360px] border-r flex flex-col bg-slate-50/50 shrink-0 ${selectedTicketId ? 'hidden md:flex' : 'flex'}`}>
                     {loading && tickets.length === 0 ? (
                         <div className="p-4 space-y-3">
@@ -194,7 +209,7 @@ export default function BotSecretariaSuport() {
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6">
                             <Headphones className="w-10 h-10 mb-2 opacity-20" />
                             <p className="text-sm font-medium">Nenhuma solicitação</p>
-                            <p className="text-xs mt-1 text-center">Quando responsáveis enviarem pedidos via WhatsApp, aparecerão aqui.</p>
+                            <p className="text-xs mt-1 text-center">Pedidos via WhatsApp aparecerão aqui.</p>
                         </div>
                     ) : (
                         <div className="overflow-y-auto flex-1">
@@ -203,51 +218,56 @@ export default function BotSecretariaSuport() {
                                 const isClosed = ticket.status === 'FINALIZADO';
                                 const isSelected = selectedTicketId === ticket.id;
                                 const lastMsg = ticket.respostas?.length > 0 
-                                    ? ticket.respostas[ticket.respostas.length - 1]
-                                    : null;
+                                    ? ticket.respostas[ticket.respostas.length - 1] : null;
                                 const unread = ticket.status === 'ABERTO';
 
                                 return (
-                                    <button
-                                        key={ticket.id}
-                                        onClick={() => setSelectedTicketId(ticket.id)}
-                                        className={`w-full text-left p-3.5 border-b border-slate-100 transition-all hover:bg-white ${
-                                            isSelected ? 'bg-indigo-50/80 border-l-2 border-l-indigo-500' : ''
-                                        } ${isClosed ? 'opacity-50' : ''}`}
-                                    >
-                                        <div className="flex items-start justify-between mb-1">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                {unread && <span className="w-2 h-2 bg-violet-500 rounded-full shrink-0" />}
-                                                <span className="font-semibold text-sm text-slate-800 truncate">
-                                                    {ticket.nome_contato || formatPhone(ticket.telefone_origem)}
+                                    <div key={ticket.id} className={`relative group ${isSelected ? 'bg-indigo-50/80 border-l-2 border-l-indigo-500' : ''} ${isClosed ? 'opacity-50' : ''}`}>
+                                        <button
+                                            onClick={() => setSelectedTicketId(ticket.id)}
+                                            className="w-full text-left p-3.5 border-b border-slate-100 transition-all hover:bg-white"
+                                        >
+                                            <div className="flex items-start justify-between mb-1">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {unread && <span className="w-2 h-2 bg-violet-500 rounded-full shrink-0" />}
+                                                    <span className="font-semibold text-sm text-slate-800 truncate">
+                                                        {ticket.nome_contato || formatPhone(ticket.telefone_origem)}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+                                                    {format(new Date(ticket.updated_at || ticket.created_at), 'HH:mm')}
                                                 </span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                                                {format(new Date(ticket.updated_at || ticket.created_at), 'HH:mm')}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 border ${setorCfg.color}`}>
-                                                {setorCfg.label}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs text-slate-500 truncate">
-                                            {lastMsg 
-                                                ? `${lastMsg.remetente === 'secretaria' ? '🏫' : '👤'} ${lastMsg.mensagem}`
-                                                : ticket.mensagem_inicial || 'Nova solicitação'
-                                            }
-                                        </p>
-                                    </button>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 border ${setorCfg.color}`}>
+                                                    {setorCfg.label}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-slate-500 truncate">
+                                                {lastMsg 
+                                                    ? `${lastMsg.remetente === 'secretaria' ? '🏫' : '👤'} ${lastMsg.mensagem}`
+                                                    : ticket.mensagem_inicial || 'Nova solicitação'
+                                                }
+                                            </p>
+                                        </button>
+                                        {/* Botão excluir (aparece no hover) */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setDeleteTargetId(ticket.id); setConfirmDelete(true); }}
+                                            className="absolute top-3 right-10 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 p-1 rounded"
+                                            title="Excluir conversa"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
                                 );
                             })}
                         </div>
                     )}
                 </div>
 
-                {/* ═══ CHAT (Área Principal) ═══ */}
+                {/* ═══ CHAT ═══ */}
                 <div className={`flex-1 flex flex-col ${!selectedTicketId ? 'hidden md:flex' : 'flex'}`}>
                     {!selectedTicket ? (
-                        // Empty state
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-300 bg-[#f0f2f5]">
                             <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
                             <p className="text-lg font-medium text-slate-400">Selecione um atendimento</p>
@@ -258,10 +278,7 @@ export default function BotSecretariaSuport() {
                             {/* Chat Header */}
                             <div className="px-4 py-3 bg-white border-b flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <button 
-                                        onClick={() => setSelectedTicketId(null)}
-                                        className="md:hidden text-slate-500 hover:text-slate-700"
-                                    >
+                                    <button onClick={() => setSelectedTicketId(null)} className="md:hidden text-slate-500 hover:text-slate-700">
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
                                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
@@ -273,8 +290,7 @@ export default function BotSecretariaSuport() {
                                         </h3>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                                                <Phone className="w-3 h-3" />
-                                                {formatPhone(selectedTicket.telefone_origem)}
+                                                <Phone className="w-3 h-3" />{formatPhone(selectedTicket.telefone_origem)}
                                             </span>
                                             <Badge variant="outline" className={`text-[9px] px-1.5 py-0 border ${STATUS_CONFIG[selectedTicket.status]?.color}`}>
                                                 {STATUS_CONFIG[selectedTicket.status]?.label}
@@ -282,24 +298,24 @@ export default function BotSecretariaSuport() {
                                         </div>
                                     </div>
                                 </div>
-                                {selectedTicket.status !== 'FINALIZADO' && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="border-green-200 text-green-700 hover:bg-green-50"
-                                        onClick={handleClose}
-                                        disabled={closing}
-                                    >
-                                        {closing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
-                                        Finalizar
+                                <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" className="text-slate-400 hover:text-rose-500 h-8 w-8 p-0"
+                                        onClick={() => { setDeleteTargetId(selectedTicket.id); setConfirmDelete(true); }}>
+                                        <Trash2 className="w-4 h-4" />
                                     </Button>
-                                )}
+                                    {selectedTicket.status !== 'FINALIZADO' && (
+                                        <Button variant="outline" size="sm"
+                                            className="border-green-200 text-green-700 hover:bg-green-50"
+                                            onClick={() => setConfirmClose(true)}>
+                                            <CheckCircle2 className="w-4 h-4 mr-1" /> Finalizar
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Chat Messages */}
                             <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23e2e8f0\' fill-opacity=\'0.3\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")', backgroundColor: '#f0f2f5' }}>
                                 
-                                {/* Setor badge */}
                                 <div className="flex justify-center">
                                     <Badge variant="outline" className={`text-xs px-3 py-1 border ${SETOR_CONFIG[selectedTicket.setor]?.color}`}>
                                         {SETOR_CONFIG[selectedTicket.setor]?.icon}
@@ -313,20 +329,18 @@ export default function BotSecretariaSuport() {
                                     </span>
                                 </div>
 
-                                {/* Mensagem inicial do pai */}
+                                {/* Mensagem inicial */}
                                 {selectedTicket.mensagem_inicial && (
                                     <div className="flex justify-start">
                                         <div className="bg-white rounded-lg rounded-tl-sm shadow-sm p-3 max-w-[75%] border border-slate-100">
                                             <p className="text-[10px] font-semibold text-indigo-600 mb-1">👤 {selectedTicket.nome_contato || 'Responsável'}</p>
                                             <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedTicket.mensagem_inicial}</p>
-                                            <p className="text-[10px] text-slate-400 text-right mt-1">
-                                                {format(new Date(selectedTicket.created_at), 'HH:mm')}
-                                            </p>
+                                            <p className="text-[10px] text-slate-400 text-right mt-1">{format(new Date(selectedTicket.created_at), 'HH:mm')}</p>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Respostas (thread contínua) */}
+                                {/* Thread */}
                                 {selectedTicket.respostas?.map((r: any, i: number) => {
                                     const isSecretaria = r.remetente === 'secretaria';
                                     return (
@@ -336,9 +350,7 @@ export default function BotSecretariaSuport() {
                                                     ? 'bg-[#d9fdd3] rounded-tr-sm border border-green-100' 
                                                     : 'bg-white rounded-tl-sm border border-slate-100'
                                             }`}>
-                                                <p className={`text-[10px] font-semibold mb-1 ${
-                                                    isSecretaria ? 'text-green-700' : 'text-indigo-600'
-                                                }`}>
+                                                <p className={`text-[10px] font-semibold mb-1 ${isSecretaria ? 'text-green-700' : 'text-indigo-600'}`}>
                                                     {isSecretaria 
                                                         ? `🏫 ${r.atendente || 'Secretaria'}` 
                                                         : `👤 ${selectedTicket.nome_contato || 'Responsável'}`
@@ -352,23 +364,17 @@ export default function BotSecretariaSuport() {
                                         </div>
                                     );
                                 })}
-
                                 <div ref={chatEndRef} />
                             </div>
 
-                            {/* Input Area */}
+                            {/* Input */}
                             {selectedTicket.status !== 'FINALIZADO' ? (
                                 <div className="px-4 py-3 bg-white border-t flex items-end gap-2 shrink-0">
                                     <textarea
                                         placeholder="Digite sua resposta..."
                                         value={replyText}
                                         onChange={(e) => setReplyText(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleReply();
-                                            }
-                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(); } }}
                                         className="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 min-h-[44px] max-h-[120px]"
                                         rows={1}
                                         disabled={sending}
@@ -378,10 +384,7 @@ export default function BotSecretariaSuport() {
                                         disabled={!replyText.trim() || sending}
                                         className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full h-11 w-11 p-0 shrink-0"
                                     >
-                                        {sending 
-                                            ? <Loader2 className="w-5 h-5 animate-spin" /> 
-                                            : <Send className="w-5 h-5" />
-                                        }
+                                        {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                                     </Button>
                                 </div>
                             ) : (
@@ -394,5 +397,28 @@ export default function BotSecretariaSuport() {
                 </div>
             </div>
         </div>
+
+        {/* Dialogs */}
+        <ConfirmDialog
+            open={confirmClose}
+            onOpenChange={setConfirmClose}
+            title="Finalizar Atendimento"
+            description="Deseja finalizar este atendimento? O responsável não poderá mais enviar mensagens nesta conversa."
+            confirmLabel="Finalizar"
+            variant="default"
+            onConfirm={handleConfirmClose}
+            loading={closingOrDeleting}
+        />
+        <ConfirmDialog
+            open={confirmDelete}
+            onOpenChange={(open) => { setConfirmDelete(open); if (!open) setDeleteTargetId(null); }}
+            title="Excluir Conversa"
+            description="Tem certeza que deseja excluir esta conversa? Todas as mensagens serão removidas permanentemente. Esta ação não pode ser desfeita."
+            confirmLabel="Excluir"
+            variant="destructive"
+            onConfirm={handleConfirmDelete}
+            loading={closingOrDeleting}
+        />
+        </>
     );
 }
