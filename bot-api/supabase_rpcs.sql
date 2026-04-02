@@ -1,136 +1,62 @@
--- ==========================================================================
--- Supabase RPCs for Alert Routes
--- 
--- These are OPTIONAL performance improvements. The JS code already uses
--- batch queries (.in()) as fallback.  Deploy these via Supabase Dashboard
--- → SQL Editor to further reduce round-trips.
--- ==========================================================================
+-- =============================================
+-- WhatsApp Bot — RPCs e Tabelas Auxiliares
+-- =============================================
 
--- 1. get_alunos_risco: students with absence rate > threshold
--- Returns: id, nome, nome_responsavel, telefone_responsavel, total_aulas, total_faltas, taxa_falta
-CREATE OR REPLACE FUNCTION get_alunos_risco(p_escola_id uuid, p_threshold numeric DEFAULT 30)
-RETURNS TABLE (
+-- Extensão para busca sem acentos
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+-- =============================================
+-- Tabela: whatsapp_pre_cadastros
+-- Pré-cadastros de responsáveis via WhatsApp Bot.
+-- A secretaria valida no painel antes de gravar
+-- os dados na tabela alunos.
+-- =============================================
+CREATE TABLE IF NOT EXISTS public.whatsapp_pre_cadastros (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  escola_id uuid NOT NULL,
+  aluno_id uuid NOT NULL,
+  nome_responsavel text NOT NULL,
+  telefone_responsavel text NOT NULL,
+  status text NOT NULL DEFAULT 'PENDENTE'
+    CHECK (status IN ('PENDENTE', 'APROVADO', 'REJEITADO')),
+  created_at timestamptz DEFAULT now(),
+  revisado_por uuid,
+  revisado_em timestamptz,
+  CONSTRAINT whatsapp_pre_cadastros_pkey PRIMARY KEY (id),
+  CONSTRAINT whatsapp_pre_cadastros_escola_id_fkey
+    FOREIGN KEY (escola_id) REFERENCES public.escola_configuracao(id),
+  CONSTRAINT whatsapp_pre_cadastros_aluno_id_fkey
+    FOREIGN KEY (aluno_id) REFERENCES public.alunos(id),
+  CONSTRAINT whatsapp_pre_cadastros_revisado_por_fkey
+    FOREIGN KEY (revisado_por) REFERENCES auth.users(id)
+);
+
+-- =============================================
+-- RPC: buscar_aluno_por_nome
+-- Busca fuzzy (sem acento, case-insensitive)
+-- para o fluxo de auto-cadastro do bot.
+-- =============================================
+CREATE OR REPLACE FUNCTION buscar_aluno_por_nome(
+    p_escola_id uuid,
+    p_nome_busca text
+) RETURNS TABLE(
     id uuid,
     nome text,
-    nome_responsavel text,
-    telefone_responsavel text,
-    total_aulas bigint,
-    total_faltas bigint,
-    taxa_falta numeric
-)
-LANGUAGE sql STABLE
-AS $$
-    SELECT
-        a.id,
-        a.nome,
-        a.nome_responsavel,
-        a.telefone_responsavel,
-        COUNT(p.id) AS total_aulas,
-        COUNT(p.id) FILTER (WHERE p.presente = false AND p.falta_justificada = false) AS total_faltas,
-        CASE 
-            WHEN COUNT(p.id) > 0 
-            THEN ROUND((COUNT(p.id) FILTER (WHERE p.presente = false AND p.falta_justificada = false)::numeric / COUNT(p.id)) * 100, 2)
-            ELSE 0
-        END AS taxa_falta
-    FROM alunos a
-    JOIN presencas p ON p.aluno_id = a.id AND p.escola_id = a.escola_id
-    WHERE a.escola_id = p_escola_id
-      AND a.situacao = 'ativo'
-      AND a.telefone_responsavel IS NOT NULL
-    GROUP BY a.id, a.nome, a.nome_responsavel, a.telefone_responsavel
-    HAVING CASE 
-        WHEN COUNT(p.id) > 0 
-        THEN (COUNT(p.id) FILTER (WHERE p.presente = false AND p.falta_justificada = false)::numeric / COUNT(p.id)) * 100
-        ELSE 0
-    END > p_threshold;
-$$;
-
--- 2. get_faltas_mes: monthly absence counts per student
--- Returns: aluno_id, nome, nome_responsavel, telefone_responsavel, faltas_mes
-CREATE OR REPLACE FUNCTION get_faltas_mes(p_escola_id uuid, p_first_day date, p_last_day date)
-RETURNS TABLE (
-    aluno_id uuid,
-    nome text,
-    nome_responsavel text,
-    telefone_responsavel text,
-    faltas_mes bigint
-)
-LANGUAGE sql STABLE
-AS $$
-    SELECT
-        a.id AS aluno_id,
-        a.nome,
-        a.nome_responsavel,
-        a.telefone_responsavel,
-        COUNT(p.id) AS faltas_mes
-    FROM alunos a
-    JOIN presencas p ON p.aluno_id = a.id AND p.escola_id = a.escola_id
-    WHERE a.escola_id = p_escola_id
-      AND a.situacao = 'ativo'
-      AND a.telefone_responsavel IS NOT NULL
-      AND p.presente = false
-      AND p.data_chamada >= p_first_day
-      AND p.data_chamada <= p_last_day
-    GROUP BY a.id, a.nome, a.nome_responsavel, a.telefone_responsavel
-    HAVING COUNT(p.id) > 0;
-$$;
-
--- 3. get_alunos_faltosos_dia: students absent on a specific date
--- Returns: aluno_id, nome, nome_responsavel, telefone_responsavel, turma_id, turma_nome
-CREATE OR REPLACE FUNCTION get_alunos_faltosos_dia(p_escola_id uuid, p_data date)
-RETURNS TABLE (
-    aluno_id uuid,
-    nome text,
-    nome_responsavel text,
-    telefone_responsavel text,
+    turma_nome text,
     turma_id uuid,
-    turma_nome text
-)
-LANGUAGE sql STABLE
-AS $$
-    SELECT DISTINCT ON (a.id)
-        a.id AS aluno_id,
-        a.nome,
-        a.nome_responsavel,
-        a.telefone_responsavel,
-        a.turma_id,
-        t.nome AS turma_nome
-    FROM presencas p
-    JOIN alunos a ON a.id = p.aluno_id
+    telefone_responsavel text,
+    telefone_responsavel_2 text
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT a.id, a.nome, COALESCE(t.nome, 'Sem turma') AS turma_nome,
+           a.turma_id, a.telefone_responsavel, a.telefone_responsavel_2
+    FROM alunos a
     LEFT JOIN turmas t ON t.id = a.turma_id
-    WHERE p.escola_id = p_escola_id
-      AND p.data_chamada = p_data
-      AND p.presente = false
-      AND p.falta_justificada = false
+    WHERE a.escola_id = p_escola_id
       AND a.situacao = 'ativo'
-    ORDER BY a.id, a.nome;
-$$;
-
--- 4. get_presencas_recentes: last N presencas for multiple students
--- Useful for computing consecutive absences in batch.
--- Note: This returns ALL rows — caller should group by aluno_id and limit per student.
-CREATE OR REPLACE FUNCTION get_presencas_recentes(p_escola_id uuid, p_aluno_ids uuid[], p_limit int DEFAULT 10)
-RETURNS TABLE (
-    aluno_id uuid,
-    presente boolean,
-    falta_justificada boolean,
-    data_chamada date,
-    row_num bigint
-)
-LANGUAGE sql STABLE
-AS $$
-    SELECT sub.aluno_id, sub.presente, sub.falta_justificada, sub.data_chamada, sub.rn
-    FROM (
-        SELECT
-            p.aluno_id,
-            p.presente,
-            p.falta_justificada,
-            p.data_chamada,
-            ROW_NUMBER() OVER (PARTITION BY p.aluno_id ORDER BY p.data_chamada DESC) AS rn
-        FROM presencas p
-        WHERE p.escola_id = p_escola_id
-          AND p.aluno_id = ANY(p_aluno_ids)
-    ) sub
-    WHERE sub.rn <= p_limit
-    ORDER BY sub.aluno_id, sub.data_chamada DESC;
-$$;
+      AND unaccent(lower(a.nome)) ILIKE '%' || unaccent(lower(trim(p_nome_busca))) || '%'
+    ORDER BY a.nome
+    LIMIT 10;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

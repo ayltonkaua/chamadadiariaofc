@@ -26,6 +26,7 @@ const {
     backupSession,
     restoreSession,
     deleteSessionBackup,
+    listSavedSessions,
 } = require('./sessionStorage');
 const { setupInboundListener } = require('./inbound');
 
@@ -490,6 +491,61 @@ async function addParticipantsToGroup(escolaId, groupJid, phones) {
     return results;
 }
 
+/**
+ * Auto-Start: Reconnect all escolas that have saved sessions.
+ * Called on server boot to ensure cron jobs fire for all active schools.
+ * 
+ * Strategy:
+ * 1. List all escola_ids with saved sessions in Supabase Storage
+ * 2. For each, attempt initWhatsApp (which restores + connects)
+ * 3. Add delay between each to avoid overwhelming WhatsApp
+ */
+async function autoStartSessions() {
+    console.log('\n🚀 [AUTO-START] Checking for saved sessions to reconnect...');
+    
+    try {
+        const escolaIds = await listSavedSessions();
+
+        if (escolaIds.length === 0) {
+            console.log('🚀 [AUTO-START] No saved sessions found — skipping');
+            return;
+        }
+
+        console.log(`🚀 [AUTO-START] Found ${escolaIds.length} saved session(s). Reconnecting...`);
+
+        let connected = 0;
+        let failed = 0;
+
+        for (const escolaId of escolaIds) {
+            // Skip if already connected (shouldn't happen on boot, but safety check)
+            if (instances[escolaId]?.connected) {
+                console.log(`✅ [AUTO-START] [${escolaId.substring(0, 8)}] Already connected — skipping`);
+                connected++;
+                continue;
+            }
+
+            try {
+                console.log(`🔄 [AUTO-START] [${escolaId.substring(0, 8)}] Initializing...`);
+                await initWhatsApp(escolaId);
+                connected++;
+                console.log(`✅ [AUTO-START] [${escolaId.substring(0, 8)}] Reconnected successfully`);
+            } catch (err) {
+                failed++;
+                console.error(`❌ [AUTO-START] [${escolaId.substring(0, 8)}] Failed:`, err.message);
+            }
+
+            // Delay between reconnections to avoid rate-limiting
+            if (escolaIds.indexOf(escolaId) < escolaIds.length - 1) {
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
+
+        console.log(`🚀 [AUTO-START] Complete: ${connected} connected, ${failed} failed\n`);
+    } catch (err) {
+        console.error('❌ [AUTO-START] Fatal error:', err.message);
+    }
+}
+
 module.exports = {
     initWhatsApp,
     getInstance,
@@ -501,4 +557,6 @@ module.exports = {
     addParticipantsToGroup,
     disconnect,
     getActiveEscolas,
+    autoStartSessions,
 };
+

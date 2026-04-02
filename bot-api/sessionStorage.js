@@ -166,9 +166,42 @@ async function deleteSessionBackup(escolaId) {
     }
 }
 
+/**
+ * List all escola IDs that have saved sessions in Supabase Storage.
+ * Used by the auto-start feature to reconnect after server restart.
+ * 
+ * The bucket structure is: {escola_id}/{session_file}
+ * We list the root of the bucket to get the "folder" names (escola IDs).
+ */
+async function listSavedSessions() {
+    try {
+        const { data: folders, error } = await supabase.storage
+            .from(BUCKET)
+            .list('', { limit: 200 });
+
+        if (error || !folders) {
+            console.error('❌ Error listing saved sessions:', error?.message);
+            return [];
+        }
+
+        // Supabase Storage returns "folders" as items with id=null
+        // Filter to UUIDs only (escola_id format)
+        const escolaIds = folders
+            .filter(f => f.name && f.name.length >= 32 && !f.name.startsWith('.'))
+            .map(f => f.name);
+
+        return escolaIds;
+    } catch (err) {
+        console.error('❌ listSavedSessions error:', err.message);
+        return [];
+    }
+}
+
 module.exports = {
     ensureBucket,
     backupSession,
     restoreSession,
     deleteSessionBackup,
+    listSavedSessions,
 };
+

@@ -1,23 +1,28 @@
 /**
- * WhatsApp Inbound Message Handler
+ * WhatsApp Inbound Message Handler — v2
  * 
  * URA-based menu system for incoming messages:
- * 1 - Justificar Falta (existing Kanban flow)
+ * 1 - Justificar Falta (com listagem de datas e múltiplos alunos)
  * 2 - Carteira de Estudante
  * 3 - Histórico/Boletim Escolar
  * 4 - Declaração de Escolaridade
  * 5 - Pé-de-Meia
  * 
- * Options 2-5 create tickets in whatsapp_atendimentos table.
+ * Se o telefone não está vinculado, oferece auto-cadastro
+ * (pré-cadastro com aprovação da secretaria).
  */
 
 const { supabase } = require('./supabase');
 const { sendMessage } = require('./utils/formatMessage'); 
 
-// Cache em memória para gerenciar conversas pendentes
+// =====================
+// Cache de conversas ativas
+// =====================
 const activeConversations = new Map();
 
+// =====================
 // Helpers de Sessão
+// =====================
 function clearSession(phone) {
     if (activeConversations.has(phone)) {
         clearTimeout(activeConversations.get(phone).timer);
@@ -40,7 +45,10 @@ function setSession(phone, data, replyFn) {
     activeConversations.set(phone, { ...data, timer });
 }
 
-const RECENT_DAYS_THRESHOLD = 3;
+// =====================
+// Constantes
+// =====================
+const RECENT_DAYS_THRESHOLD = 30;
 
 const SETOR_MAP = {
     '2': { setor: 'carteirinha', label: 'Carteira de Estudante' },
@@ -61,61 +69,89 @@ Escolha uma opção digitando o número correspondente:
 
 _Responda apenas com o número da opção desejada._`;
 
+const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+// =====================
+// Formatar telefone para exibição
+// =====================
+function formatPhoneDisplay(phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 13 && cleaned.startsWith('55')) {
+        const ddd = cleaned.substring(2, 4);
+        const p1 = cleaned.substring(4, 5);
+        const p2 = cleaned.substring(5, 9);
+        const p3 = cleaned.substring(9, 13);
+        return `(${ddd}) ${p1} ${p2}-${p3}`;
+    }
+    if (cleaned.length === 12 && cleaned.startsWith('55')) {
+        const ddd = cleaned.substring(2, 4);
+        const p1 = cleaned.substring(4, 8);
+        const p2 = cleaned.substring(8, 12);
+        return `(${ddd}) ${p1}-${p2}`;
+    }
+    return phone;
+}
+
+// =====================
+// Formatar data para exibição BR com dia da semana
+// =====================
+function formatDateBR(dateStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    const diaSem = DIAS_SEMANA[d.getDay()];
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year} (${diaSem})`;
+}
+
+// =====================
+// Listener de Mensagens Recebidas
+// =====================
 function setupInboundListener(sock, escolaId) {
     sock.ev.on('messages.upsert', async (m) => {
         try {
             console.log(`\n\n=== 📥 NOVA MENSAGEM RECEBIDA [${escolaId.substring(0,8)}] ===`);
-            console.log(JSON.stringify(m, null, 2));
 
-            if (m.type !== 'notify') {
-                console.log(`[INBOUND] Ignorando tipo não-notify: ${m.type}`);
-                return;
-            }
+            if (m.type !== 'notify') return;
 
             const msg = m.messages[0];
-            if (!msg || !msg.message) {
-                console.log(`[INBOUND] Mensagem vazia ou sem prop message`);
-                return;
-            }
-            if (msg.key.fromMe) {
-                 console.log(`[INBOUND] Ignorando mensagem enviada por mim mesmo`);
-                 return;
-            }
-            if (msg.key.remoteJid.endsWith('@g.us')) {
-                 console.log(`[INBOUND] Ignorando mensagem de grupo: ${msg.key.remoteJid}`);
-                 return;
-            }
+            if (!msg || !msg.message) return;
+            if (msg.key.fromMe) return;
+            if (msg.key.remoteJid.endsWith('@g.us')) return;
 
-            // Extract text message (handle standard text and extended text from reply)
+            // Detectar mídia (foto, documento, vídeo)
+            const hasMedia = !!(
+                msg.message.imageMessage || 
+                msg.message.documentMessage ||
+                msg.message.videoMessage
+            );
+
+            // Extrair texto (com fallback para mídia)
             const textContent = 
                 msg.message.conversation || 
                 msg.message.extendedTextMessage?.text || 
-                msg.message.imageMessage?.caption || // If they send a photo of the "atestado" and write text
+                msg.message.imageMessage?.caption ||
                 '';
 
-            if (!textContent.trim()) return;
+            const mediaFallbackText = hasMedia ? '[Atestado/Documento em anexo]' : null;
 
-            // Get sender phone number
+            // Se não tem texto E não tem mídia, ignorar
+            if (!textContent.trim() && !mediaFallbackText) return;
+
+            // Obter telefone do remetente
             let rawPhone = msg.key.remoteJid;
             
             if (rawPhone.includes('@lid')) {
                 const parsedMsg = JSON.parse(JSON.stringify(msg));
                 const realPhoneJid = parsedMsg.key?.senderPn || parsedMsg.key?.participant || parsedMsg.participant;
-                
-                if (realPhoneJid) {
-                    rawPhone = realPhoneJid;
-                }
+                if (realPhoneJid) rawPhone = realPhoneJid;
             }
             
-            // Clean the domain part (@s.whatsapp.net, @lid, etc)
             rawPhone = rawPhone.split('@')[0];
             
-            // For Baileys, we can just send response back using sock.sendMessage
             const reply = async (text) => {
                 await sock.sendMessage(msg.key.remoteJid, { text }, { quoted: msg });
             };
 
-            await processIncomingMessage(escolaId, rawPhone, textContent, reply);
+            await processIncomingMessage(escolaId, rawPhone, textContent, reply, mediaFallbackText);
 
         } catch (error) {
             console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Error:`, error.message);
@@ -123,11 +159,13 @@ function setupInboundListener(sock, escolaId) {
     });
 }
 
-async function processIncomingMessage(escolaId, phoneString, textContent, replyFn) {
-    // Treat the incoming phone to match local database format
+// =====================
+// Processador Principal
+// =====================
+async function processIncomingMessage(escolaId, phoneString, textContent, replyFn, mediaFallbackText) {
     let cleanPhone = phoneString.split('@')[0].replace(/\D/g, '');
     
-    // Calcula as duas variações do número que o WhatsApp nos deu:
+    // Variações do número brasileiro (com e sem nono dígito)
     let phoneCom9 = cleanPhone;
     let phoneSem9 = cleanPhone;
     
@@ -137,47 +175,46 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
         phoneCom9 = cleanPhone.substring(0, 4) + '9' + cleanPhone.substring(4);
     }
 
-    // Para o cache, usamos a string base q veio
     const sessionKey = cleanPhone;
 
-    // --- ROTEADOR DE MÁQUINA DE ESTADO ---
+    // Se tem conversa ativa, rotear para a máquina de estado
     if (activeConversations.has(sessionKey)) {
-        return await handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, replyFn);
+        return await handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, replyFn, mediaFallbackText);
     }
 
-    // --- FLUXO URA: EXIBIR MENU PRINCIPAL ---
+    // Exibir menu URA
     console.log(`📋 [INBOUND] [${escolaId.substring(0,8)}] Exibindo menu URA para ${sessionKey.slice(-8)}`);
     setSession(sessionKey, { 
         stage: 'WAIT_URA_CHOICE', 
         escolaId, 
+        phoneCom9,
+        phoneSem9,
         originalMessage: textContent 
     }, replyFn);
     await replyFn(URA_MENU);
 }
 
-/**
- * MÁQUINA DE ESTADO DO FLUXO COMPLETO
- */
-async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, replyFn) {
+// =====================
+// MÁQUINA DE ESTADO COMPLETA
+// =====================
+async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, replyFn, mediaFallbackText) {
     const session = activeConversations.get(sessionKey);
     const textLower = textContent.toLowerCase().trim();
+    const text = textContent.trim();
 
     try {
-        // =====================
-        // STAGE: URA MENU CHOICE
-        // =====================
+        // ===================================
+        // MENU URA — Escolha da Opção
+        // ===================================
         if (session.stage === 'WAIT_URA_CHOICE') {
-            // Aceita a opção APENAS se o usuário digitou o número isolado (com pontuação opcional). Ex: "1", "1.", "[1]"
-            const match = textContent.trim().match(/^\[?0*([1-5])\]?[\.\-\)]*$/);
+            const match = text.match(/^\[?0*([1-5])\]?[\.\-\)]*$/);
             const choice = match ? match[1] : null;
 
             if (choice === '1') {
-                // OPÇÃO 1: Justificar Falta → verificar cadastro
-                return await handleJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, session.originalMessage, replyFn);
+                return await startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
             }
 
             if (SETOR_MAP[choice]) {
-                // OPÇÕES 2-5: Atendimento Secretaria
                 const { setor, label } = SETOR_MAP[choice];
                 setSession(sessionKey, { 
                     ...session, 
@@ -189,19 +226,22 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                 return;
             }
 
-            // Opção inválida
-            setSession(sessionKey, session, replyFn); // reset timer
+            setSession(sessionKey, session, replyFn);
             await replyFn("Não entendi. Por favor, responda apenas com o *número* da opção desejada (1 a 5).");
             return;
         }
 
-        // =====================
-        // STAGE: ATENDIMENTO MSG (Options 2-5)
-        // =====================
+        // ===================================
+        // ATENDIMENTO (Opções 2-5)
+        // ===================================
         if (session.stage === 'WAIT_ATENDIMENTO_MSG') {
-            const mensagem = textContent.trim();
+            const mensagem = text || mediaFallbackText || '';
+            if (!mensagem) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Por favor, envie sua mensagem ou documento.");
+                return;
+            }
 
-            // Buscar nome do contato (se tiver cadastro)
             let nomeContato = null;
             const { data: students } = await supabase
                 .from('alunos')
@@ -215,7 +255,6 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                 nomeContato = students[0].nome_responsavel;
             }
 
-            // Criar ticket na tabela whatsapp_atendimentos
             const { error: insertError } = await supabase
                 .from('whatsapp_atendimentos')
                 .insert({
@@ -241,36 +280,388 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             return;
         }
 
-        // =====================
-        // STAGE: JUSTIFICATIVA MOTIVO (from registration flow)
-        // =====================
-        if (session.stage === 'WAIT_MOTIVO') {
-            const motivo = textContent.trim();
-            const studentId = session.studentObj.id;
-            const nomeAluno = session.studentObj.nome;
-            const todayStr = new Date().toISOString().split('T')[0];
+        // ===================================
+        // CADASTRO — Quer se cadastrar?
+        // ===================================
+        if (session.stage === 'WAIT_QUER_CADASTRO') {
+            if (textLower === 's' || textLower === 'sim') {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_CAD_NOME_ALUNO',
+                }, replyFn);
+                await replyFn("📝 *Vamos iniciar seu cadastro!*\n\nDigite o *nome completo do aluno(a)*:");
+                return;
+            }
+            if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
+                clearSession(sessionKey);
+                await replyFn("Ok! Se precisar, envie uma nova mensagem a qualquer momento. 👋");
+                return;
+            }
+            setSession(sessionKey, session, replyFn);
+            await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
+            return;
+        }
 
-            const { error: insertError } = await supabase
-                .from('whatsapp_justificativas')
-                .insert({
-                    escola_id: escolaId,
-                    aluno_id: studentId,
-                    data_falta: todayStr,
-                    telefone_origem: sessionKey,
-                    mensagem_pai: motivo.substring(0, 1000),
-                    status: 'PENDENTE'
-                });
-            
-            clearSession(sessionKey);
-
-            if (insertError) {
-                console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Insert erro:`, insertError.message);
-                await replyFn("Tivemos um problema para registrar sua justificativa. Entre em contato com a secretaria.");
+        // ===================================
+        // CADASTRO — Nome do aluno (busca fuzzy)
+        // ===================================
+        if (session.stage === 'WAIT_CAD_NOME_ALUNO') {
+            if (text.length < 3) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("O nome precisa ter pelo menos 3 caracteres. Tente novamente:");
                 return;
             }
 
-            console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Justificativa recebida para ${nomeAluno}`);
-            await replyFn(`🤖 *Aviso do Assistente Virtual:*\n\nRecebemos sua mensagem! Ela foi encaminhada como *Justificativa de Falta* para a coordenação e está em análise. Emitiremos um retorno em breve.\n\n_(Nota: Esta linha do WhatsApp envia apenas notificações escolares automáticas)._`);
+            // Busca fuzzy via RPC
+            const { data: alunos, error: rpcError } = await supabase
+                .rpc('buscar_aluno_por_nome', {
+                    p_escola_id: escolaId,
+                    p_nome_busca: text,
+                });
+
+            if (rpcError) {
+                console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] RPC error:`, rpcError.message);
+                clearSession(sessionKey);
+                await replyFn("Ocorreu um erro ao buscar. Tente novamente mais tarde.");
+                return;
+            }
+
+            if (!alunos || alunos.length === 0) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("❌ Nenhum aluno encontrado com esse nome nesta escola.\n\nVerifique a grafia e tente novamente, ou envie *0* para cancelar.");
+                return;
+            }
+
+            if (alunos.length === 1) {
+                const a = alunos[0];
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_CAD_CONFIRMA_ALUNO',
+                    alunoEncontrado: a,
+                    alunosLista: null,
+                }, replyFn);
+                await replyFn(`Encontramos:\n\n🎓 *${a.nome}*\n📋 Turma: *${a.turma_nome}*\n\nÉ esse aluno? Responda *S* (Sim) ou *N* (Não):`);
+                return;
+            }
+
+            // Múltiplos resultados
+            let lista = "Encontramos os seguintes alunos:\n\n";
+            alunos.forEach((a, i) => {
+                lista += `${i + 1}️⃣ - *${a.nome}* (${a.turma_nome})\n`;
+            });
+            lista += "\nDigite o *número* do aluno correto, ou *0* para cancelar:";
+
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_CAD_CONFIRMA_ALUNO',
+                alunoEncontrado: null,
+                alunosLista: alunos,
+            }, replyFn);
+            await replyFn(lista);
+            return;
+        }
+
+        // ===================================
+        // CADASTRO — Confirma aluno
+        // ===================================
+        if (session.stage === 'WAIT_CAD_CONFIRMA_ALUNO') {
+            if (text === '0') {
+                clearSession(sessionKey);
+                await replyFn("Cadastro cancelado. Se precisar, envie uma nova mensagem. 👋");
+                return;
+            }
+
+            let alunoSelecionado = null;
+
+            if (session.alunoEncontrado) {
+                // Confirmação de resultado único
+                if (textLower === 's' || textLower === 'sim') {
+                    alunoSelecionado = session.alunoEncontrado;
+                } else if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
+                    setSession(sessionKey, {
+                        ...session,
+                        stage: 'WAIT_CAD_NOME_ALUNO',
+                        alunoEncontrado: null,
+                    }, replyFn);
+                    await replyFn("Ok! Digite o nome completo do aluno novamente:");
+                    return;
+                } else {
+                    setSession(sessionKey, session, replyFn);
+                    await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
+                    return;
+                }
+            } else if (session.alunosLista) {
+                // Seleção de lista
+                const idx = parseInt(text, 10);
+                if (isNaN(idx) || idx < 1 || idx > session.alunosLista.length) {
+                    setSession(sessionKey, session, replyFn);
+                    await replyFn(`Digite um número de *1* a *${session.alunosLista.length}*, ou *0* para cancelar.`);
+                    return;
+                }
+                alunoSelecionado = session.alunosLista[idx - 1];
+            }
+
+            if (!alunoSelecionado) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Não entendi. Tente novamente.");
+                return;
+            }
+
+            // Verificar se já existe pré-cadastro pendente
+            const { data: existente } = await supabase
+                .from('whatsapp_pre_cadastros')
+                .select('id')
+                .eq('aluno_id', alunoSelecionado.id)
+                .eq('telefone_responsavel', sessionKey)
+                .eq('status', 'PENDENTE')
+                .maybeSingle();
+
+            if (existente) {
+                clearSession(sessionKey);
+                await replyFn("📋 Já existe um cadastro pendente de aprovação para este aluno com seu número. Aguarde a confirmação da secretaria.");
+                return;
+            }
+
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_CAD_NOME_RESP',
+                alunoSelecionado,
+            }, replyFn);
+            await replyFn(`✅ Aluno selecionado: *${alunoSelecionado.nome}*\n\nAgora, digite *seu nome completo* (nome do responsável):`);
+            return;
+        }
+
+        // ===================================
+        // CADASTRO — Nome do responsável
+        // ===================================
+        if (session.stage === 'WAIT_CAD_NOME_RESP') {
+            if (text.length < 3) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("O nome precisa ter pelo menos 3 caracteres. Tente novamente:");
+                return;
+            }
+
+            const nomeResp = text;
+            const phoneDisplay = formatPhoneDisplay(sessionKey);
+
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_CAD_CONFIRMA_TEL',
+                nomeResponsavel: nomeResp,
+            }, replyFn);
+            await replyFn(`Seu número de telefone é:\n📱 *${phoneDisplay}*\n\nEstá correto? Responda *S* (Sim) ou *N* (Não):`);
+            return;
+        }
+
+        // ===================================
+        // CADASTRO — Confirma telefone
+        // ===================================
+        if (session.stage === 'WAIT_CAD_CONFIRMA_TEL') {
+            if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
+                clearSession(sessionKey);
+                await replyFn("Para cadastrar com outro número, envie a mensagem a partir do telefone correto ou procure a secretaria da escola.");
+                return;
+            }
+            if (textLower !== 's' && textLower !== 'sim') {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
+                return;
+            }
+
+            // Exibir resumo
+            const aluno = session.alunoSelecionado;
+            const phoneDisplay = formatPhoneDisplay(sessionKey);
+            const resumo = `📋 *Resumo do Cadastro:*\n━━━━━━━━━━━━━━━━━━\n👤 Responsável: *${session.nomeResponsavel}*\n🎓 Aluno(a): *${aluno.nome}*\n📚 Turma: *${aluno.turma_nome}*\n📱 Telefone: *${phoneDisplay}*\n━━━━━━━━━━━━━━━━━━\n\nTodas as informações estão corretas?\nResponda *S* para confirmar ou *N* para cancelar:`;
+
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_CAD_RESUMO',
+            }, replyFn);
+            await replyFn(resumo);
+            return;
+        }
+
+        // ===================================
+        // CADASTRO — Confirmação do resumo
+        // ===================================
+        if (session.stage === 'WAIT_CAD_RESUMO') {
+            if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
+                clearSession(sessionKey);
+                await replyFn("Cadastro cancelado. Se precisar, envie uma nova mensagem a qualquer momento. 👋");
+                return;
+            }
+            if (textLower !== 's' && textLower !== 'sim') {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
+                return;
+            }
+
+            // Gravar pré-cadastro
+            const { error: insertError } = await supabase
+                .from('whatsapp_pre_cadastros')
+                .insert({
+                    escola_id: escolaId,
+                    aluno_id: session.alunoSelecionado.id,
+                    nome_responsavel: session.nomeResponsavel,
+                    telefone_responsavel: sessionKey,
+                    status: 'PENDENTE',
+                });
+
+            clearSession(sessionKey);
+
+            if (insertError) {
+                console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro ao gravar pré-cadastro:`, insertError.message);
+                await replyFn("Ocorreu um erro ao registrar seu cadastro. Tente novamente mais tarde ou procure a secretaria.");
+                return;
+            }
+
+            console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Pré-cadastro criado: ${session.nomeResponsavel} → ${session.alunoSelecionado.nome}`);
+            await replyFn("✅ *Cadastro enviado com sucesso!*\n\nA secretaria da escola irá analisar e confirmar seu cadastro. Após a aprovação, você poderá utilizar todos os recursos do bot, incluindo justificativas de faltas.\n\n_Você será notificado quando o cadastro for aprovado._ 📋");
+            return;
+        }
+
+        // ===================================
+        // JUSTIFICATIVA — Seleção de aluno
+        // ===================================
+        if (session.stage === 'WAIT_ALUNO_CHOICE') {
+            const idx = parseInt(text, 10);
+            if (isNaN(idx) || idx < 1 || idx > session.alunosVinculados.length) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn(`Digite um número de *1* a *${session.alunosVinculados.length}*:`);
+                return;
+            }
+
+            const aluno = session.alunosVinculados[idx - 1];
+            return await showFaltasDoAluno(escolaId, sessionKey, aluno, session.alunosVinculados, replyFn);
+        }
+
+        // ===================================
+        // JUSTIFICATIVA — Seleção de datas
+        // ===================================
+        if (session.stage === 'WAIT_DATA_CHOICE') {
+            const faltas = session.faltasDisponiveis;
+
+            if (text === '0') {
+                // Todas as datas
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_MOTIVO',
+                    datasSelecionadas: faltas.map(f => f.data_chamada),
+                }, replyFn);
+                await replyFn(`Você selecionou *todas as ${faltas.length} datas*.\n\nDescreva o motivo da(s) falta(s) ou envie a foto do atestado médico:`);
+                return;
+            }
+
+            // Parse seleção: "1,3" ou "1, 3" ou "1 3" etc
+            const indices = text.split(/[\s,;]+/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+            const validos = indices.filter(n => n >= 1 && n <= faltas.length);
+
+            if (validos.length === 0) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn(`Responda com o(s) número(s) das datas (ex: *1,3*) ou *0* para todas:`);
+                return;
+            }
+
+            const datasSelecionadas = [...new Set(validos)].map(i => faltas[i - 1].data_chamada);
+
+            const datasFormatadas = datasSelecionadas.map(d => formatDateBR(d)).join('\n• ');
+
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_MOTIVO',
+                datasSelecionadas,
+            }, replyFn);
+            await replyFn(`Datas selecionadas:\n• ${datasFormatadas}\n\nDescreva o motivo da(s) falta(s) ou envie a foto do atestado médico:`);
+            return;
+        }
+
+        // ===================================
+        // JUSTIFICATIVA — Motivo/Atestado
+        // ===================================
+        if (session.stage === 'WAIT_MOTIVO') {
+            const motivo = text || mediaFallbackText || '';
+            if (!motivo) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Por favor, descreva o motivo ou envie uma foto do atestado:");
+                return;
+            }
+
+            const studentId = session.alunoAtual.id;
+            const nomeAluno = session.alunoAtual.nome;
+            const datas = session.datasSelecionadas;
+            let erroCount = 0;
+
+            for (const dataFalta of datas) {
+                // Verificar duplicata
+                const { data: existing } = await supabase
+                    .from('whatsapp_justificativas')
+                    .select('id')
+                    .eq('aluno_id', studentId)
+                    .eq('data_falta', dataFalta)
+                    .in('status', ['PENDENTE', 'APROVADA'])
+                    .maybeSingle();
+
+                if (existing) continue; // pula duplicata silenciosamente
+
+                const { error: insertError } = await supabase
+                    .from('whatsapp_justificativas')
+                    .insert({
+                        escola_id: escolaId,
+                        aluno_id: studentId,
+                        data_falta: dataFalta,
+                        telefone_origem: sessionKey,
+                        mensagem_pai: motivo.substring(0, 1000),
+                        status: 'PENDENTE'
+                    });
+                
+                if (insertError) {
+                    console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Insert erro:`, insertError.message);
+                    erroCount++;
+                }
+            }
+
+            if (erroCount === datas.length) {
+                clearSession(sessionKey);
+                await replyFn("Tivemos um problema para registrar sua(s) justificativa(s). Entre em contato com a secretaria.");
+                return;
+            }
+
+            console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Justificativa(s) recebida(s) para ${nomeAluno} — ${datas.length} data(s)`);
+
+            // Perguntar se quer justificar outro aluno
+            if (session.alunosVinculados && session.alunosVinculados.length > 1) {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_OUTRO_ALUNO',
+                }, replyFn);
+                await replyFn(`✅ *Justificativa(s) registrada(s) com sucesso!*\n\nAluno(a): *${nomeAluno}*\nDatas: ${datas.length} falta(s) justificada(s)\n\nA coordenação irá analisar e retornar em breve.\n\nDeseja justificar falta de *outro aluno*? Responda *S* (Sim) ou *N* (Não):`);
+            } else {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_OUTRO_ALUNO',
+                }, replyFn);
+                await replyFn(`✅ *Justificativa(s) registrada(s) com sucesso!*\n\nAluno(a): *${nomeAluno}*\nDatas: ${datas.length} falta(s) justificada(s)\n\nA coordenação irá analisar e retornar em breve.\n\n_(Nota: Esta linha do WhatsApp envia apenas notificações escolares automáticas)._`);
+                // Se só tem 1 aluno, encerrar automaticamente após mostrar confirmação
+                clearSession(sessionKey);
+            }
+            return;
+        }
+
+        // ===================================
+        // JUSTIFICATIVA — Outro aluno?
+        // ===================================
+        if (session.stage === 'WAIT_OUTRO_ALUNO') {
+            if (textLower === 's' || textLower === 'sim') {
+                // Voltar para seleção de aluno
+                return await showAlunoSelection(escolaId, sessionKey, session.alunosVinculados, replyFn);
+            }
+            if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
+                clearSession(sessionKey);
+                await replyFn("Ok! Se precisar, envie uma nova mensagem a qualquer momento. Até logo! 👋");
+                return;
+            }
+            setSession(sessionKey, session, replyFn);
+            await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
             return;
         }
 
@@ -280,86 +671,139 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
     }
 }
 
-/**
- * FLUXO DE JUSTIFICATIVA DE FALTA (Opção 1 da URA)
- * 
- * 1. Verifica se o telefone está cadastrado em alunos
- * 2. Se SIM → segue fluxo de justificativa
- * 3. Se NÃO → orienta a procurar a secretaria
- */
-async function handleJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, originalMessage, replyFn) {
-    // 1. Buscar aluno pelo telefone (busca indexável nos formatos exatos)
+// =====================
+// INÍCIO DO FLUXO DE JUSTIFICATIVA
+// =====================
+async function startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn) {
+    // Buscar alunos vinculados ao telefone
     const { data: students, error: studentError } = await supabase
         .from('alunos')
-        .select('id, nome, telefone_responsavel, telefone_responsavel_2')
+        .select('id, nome, turma_id, telefone_responsavel, telefone_responsavel_2')
         .eq('escola_id', escolaId)
         .eq('situacao', 'ativo')
         .or(`telefone_responsavel.in.(${phoneCom9},${phoneSem9}),telefone_responsavel_2.in.(${phoneCom9},${phoneSem9})`);
 
-    if (studentError || !students || students.length === 0) {
-        // Número NÃO cadastrado → orientar cadastro presencial
+    if (studentError) {
+        console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro ao buscar alunos:`, studentError.message);
         clearSession(sessionKey);
-        console.log(`⚠️ [INBOUND] [${escolaId.substring(0,8)}] Telefone não cadastrado: ${phoneCom9}`);
-        await replyFn("⚠️ *Número não cadastrado!*\n\nSeu número de telefone não está registrado no sistema da escola.\n\nPara justificar faltas por WhatsApp, é necessário que a secretaria cadastre seu número como responsável do aluno.\n\n*Procure a secretaria da escola para realizar o cadastro.* Após isso, poderá usar este canal normalmente.");
+        await replyFn("Ocorreu um erro ao verificar seu cadastro. Tente novamente mais tarde.");
         return;
     }
 
-    // 2. Número cadastrado → buscar falta recente
-    let targetStudent = null;
-    let targetAbsenceDate = null;
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const threeDaysAgo = new Date(today.getTime() - (RECENT_DAYS_THRESHOLD * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+    // NÚMERO NÃO VINCULADO → oferecer auto-cadastro
+    if (!students || students.length === 0) {
+        console.log(`📋 [INBOUND] [${escolaId.substring(0,8)}] Telefone não vinculado: ${phoneCom9} — oferecendo cadastro`);
+        setSession(sessionKey, {
+            stage: 'WAIT_QUER_CADASTRO',
+            escolaId,
+            phoneCom9,
+            phoneSem9,
+        }, replyFn);
+        await replyFn("📋 Seu número de telefone ainda não está vinculado a nenhum aluno nesta escola.\n\nDeseja realizar o *cadastro de responsável*?\nResponda *S* (Sim) ou *N* (Não):");
+        return;
+    }
 
-    // Priority 1: Find a student that ALREADY has a recent unjustified absence
-    for (const student of students) {
-        const { data: presencas } = await supabase
-            .from('presencas')
-            .select('data_chamada')
-            .eq('aluno_id', student.id)
-            .eq('escola_id', escolaId)
-            .eq('presente', false)
-            .eq('falta_justificada', false)
-            .gte('data_chamada', threeDaysAgo)
-            .order('data_chamada', { ascending: false })
-            .limit(1);
-
-        if (presencas && presencas.length > 0) {
-            targetStudent = student;
-            targetAbsenceDate = presencas[0].data_chamada;
-            break;
+    // Enriquecer com nome da turma
+    const turmaIds = [...new Set(students.map(s => s.turma_id).filter(Boolean))];
+    let turmaMap = {};
+    if (turmaIds.length > 0) {
+        const { data: turmas } = await supabase
+            .from('turmas')
+            .select('id, nome')
+            .in('id', turmaIds);
+        if (turmas) {
+            turmas.forEach(t => { turmaMap[t.id] = t.nome; });
         }
     }
+    
+    const alunosComTurma = students.map(s => ({
+        ...s,
+        turma_nome: turmaMap[s.turma_id] || 'Sem turma',
+    }));
 
-    // Priority 2: Preemptive Justification (Atestado Antecipado)
-    if (!targetStudent) {
-        targetStudent = students[0];
-        targetAbsenceDate = todayStr;
+    if (alunosComTurma.length === 1) {
+        // Único aluno → ir direto para faltas
+        return await showFaltasDoAluno(escolaId, sessionKey, alunosComTurma[0], alunosComTurma, replyFn);
     }
 
-    // 3. Check for duplicate justification
-    const { data: existing } = await supabase
-        .from('whatsapp_justificativas')
-        .select('id')
-        .eq('aluno_id', targetStudent.id)
-        .eq('data_falta', targetAbsenceDate)
-        .in('status', ['PENDENTE', 'APROVADA'])
-        .maybeSingle();
+    // Múltiplos alunos → selecionar
+    return await showAlunoSelection(escolaId, sessionKey, alunosComTurma, replyFn);
+}
 
-    if (existing) {
+// =====================
+// LISTAR ALUNOS PARA SELEÇÃO
+// =====================
+async function showAlunoSelection(escolaId, sessionKey, alunos, replyFn) {
+    let msg = "Você possui mais de um aluno vinculado:\n\n";
+    alunos.forEach((a, i) => {
+        msg += `${i + 1}️⃣ - *${a.nome}* (${a.turma_nome})\n`;
+    });
+    msg += "\nDigite o *número* do aluno que deseja justificar:";
+
+    setSession(sessionKey, {
+        stage: 'WAIT_ALUNO_CHOICE',
+        escolaId,
+        alunosVinculados: alunos,
+    }, replyFn);
+    await replyFn(msg);
+}
+
+// =====================
+// LISTAR FALTAS DO ALUNO
+// =====================
+async function showFaltasDoAluno(escolaId, sessionKey, aluno, todosAlunos, replyFn) {
+    const today = new Date();
+    const threshold = new Date(today.getTime() - (RECENT_DAYS_THRESHOLD * 24 * 60 * 60 * 1000));
+    const thresholdStr = threshold.toISOString().split('T')[0];
+
+    const { data: faltas, error: faltaError } = await supabase
+        .from('presencas')
+        .select('id, data_chamada')
+        .eq('aluno_id', aluno.id)
+        .eq('escola_id', escolaId)
+        .eq('presente', false)
+        .eq('falta_justificada', false)
+        .gte('data_chamada', thresholdStr)
+        .order('data_chamada', { ascending: false });
+
+    if (faltaError) {
+        console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro ao buscar faltas:`, faltaError.message);
         clearSession(sessionKey);
-        await replyFn(`🤖 Já existe uma justificativa registrada para o aluno(a) *${targetStudent.nome}* nesta data. Aguarde o retorno da coordenação.`);
+        await replyFn("Ocorreu um erro ao buscar as faltas. Tente novamente mais tarde.");
         return;
     }
 
-    // 4. Pedir o motivo
-    setSession(sessionKey, { 
-        stage: 'WAIT_MOTIVO', 
-        escolaId, 
-        studentObj: targetStudent, 
-        absenceDate: targetAbsenceDate 
+    if (!faltas || faltas.length === 0) {
+        // Sem faltas — perguntar se quer justificar outro
+        if (todosAlunos && todosAlunos.length > 1) {
+            setSession(sessionKey, {
+                stage: 'WAIT_OUTRO_ALUNO',
+                escolaId,
+                alunosVinculados: todosAlunos,
+            }, replyFn);
+            await replyFn(`✅ O aluno(a) *${aluno.nome}* não possui faltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias!\n\nDeseja verificar falta de *outro aluno*? Responda *S* ou *N*:`);
+        } else {
+            clearSession(sessionKey);
+            await replyFn(`✅ O aluno(a) *${aluno.nome}* não possui faltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias!\n\nSe precisar de algo, envie uma nova mensagem.`);
+        }
+        return;
+    }
+
+    // Listar as faltas
+    let msg = `Aluno(a): *${aluno.nome}*\n\nFaltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias:\n\n`;
+    faltas.forEach((f, i) => {
+        msg += `${i + 1}️⃣ - ${formatDateBR(f.data_chamada)}\n`;
+    });
+    msg += `\n0️⃣ - Justificar *TODAS* as datas acima\n\nResponda com o(s) número(s) das datas que deseja justificar.\nExemplo: *1,3* ou *0* para todas.`;
+
+    setSession(sessionKey, {
+        stage: 'WAIT_DATA_CHOICE',
+        escolaId,
+        alunoAtual: aluno,
+        alunosVinculados: todosAlunos,
+        faltasDisponiveis: faltas,
     }, replyFn);
-    await replyFn(`Identificamos o aluno(a) *${targetStudent.nome}*.\n\nPor favor, descreva o motivo da falta (ou envie a foto do atestado) para encaminharmos à coordenação:`);
+    await replyFn(msg);
 }
 
 module.exports = { setupInboundListener };

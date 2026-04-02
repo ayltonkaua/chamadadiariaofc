@@ -14,6 +14,7 @@ const express = require('express');
 const cors = require('cors');
 const { validateEscola } = require('./supabase');
 const { initCronJobs } = require('./cron');
+const { autoStartSessions } = require('./whatsapp');
 
 const manualRoutes = require('./routes/manual');
 const alertRoutes = require('./routes/alerts');
@@ -90,6 +91,16 @@ function rateLimitMiddleware(req, res, next) {
 
     next();
 }
+
+// Cleanup stale rate limit entries every 5 minutes to prevent memory leak
+setInterval(() => {
+    const now = Date.now();
+    for (const key of Object.keys(rateLimits)) {
+        if (now - rateLimits[key].windowStart > RATE_LIMIT_WINDOW * 2) {
+            delete rateLimits[key];
+        }
+    }
+}, 5 * 60 * 1000);
 
 // =====================
 // API Key Middleware
@@ -197,4 +208,12 @@ app.listen(PORT, () => {
 
     // Initialize cron jobs
     initCronJobs();
+
+    // Auto-reconnect saved sessions after 10s (give server time to stabilize)
+    setTimeout(() => {
+        autoStartSessions().catch(err => {
+            console.error('❌ Auto-start failed:', err.message);
+        });
+    }, 10000);
 });
+
