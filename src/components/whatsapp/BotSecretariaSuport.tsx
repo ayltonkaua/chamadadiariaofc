@@ -93,6 +93,11 @@ export default function BotSecretariaSuport() {
     useEffect(() => {
         loadTickets();
 
+        // Fallback: Atualização silenciosa a cada 5 segundos
+        const intervalId = setInterval(() => {
+            loadTickets();
+        }, 5000);
+
         const channel = supabase
             .channel('atendimentos-realtime')
             .on('postgres_changes', {
@@ -117,7 +122,10 @@ export default function BotSecretariaSuport() {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { 
+            clearInterval(intervalId);
+            supabase.removeChannel(channel); 
+        };
     }, [escolaId]);
 
     // Auto-scroll

@@ -34,13 +34,15 @@ function setSession(phone, data, replyFn) {
     if (activeConversations.has(phone)) {
         clearTimeout(activeConversations.get(phone).timer);
     }
-    // Timeout de 5 minutos
+    // Timeout de 3 minutos
     const timer = setTimeout(async () => {
-        try {
-            await replyFn("⏱️ Tempo limite esgotado. Esta sessão foi encerrada. Se precisar, envie uma nova mensagem.");
-        } catch(e) {}
         activeConversations.delete(phone);
-    }, 5 * 60 * 1000);
+        if (replyFn) {
+            try {
+                await replyFn("⏱️ Tempo inativo. Este atendimento automático foi encerrado. Se precisar de algo, envie uma nova mensagem.");
+            } catch(e) {}
+        }
+    }, 3 * 60 * 1000);
     
     activeConversations.set(phone, { ...data, timer });
 }
@@ -66,6 +68,7 @@ Escolha uma opção digitando o número correspondente:
 3️⃣ - Histórico/Boletim Escolar
 4️⃣ - Declaração de Escolaridade
 5️⃣ - Pé-de-Meia
+6️⃣ - Consultar Faltas
 
 _Responda apenas com o número da opção desejada._`;
 
@@ -105,6 +108,8 @@ function formatDateBR(dateStr) {
 // =====================
 // Listener de Mensagens Recebidas
 // =====================
+const processedMessages = new Set();
+
 function setupInboundListener(sock, escolaId) {
     sock.ev.on('messages.upsert', async (m) => {
         try {
@@ -116,6 +121,20 @@ function setupInboundListener(sock, escolaId) {
             if (!msg || !msg.message) return;
             if (msg.key.fromMe) return;
             if (msg.key.remoteJid.endsWith('@g.us')) return;
+
+            // Prevenção de duplicidade: ignorar se já processamos essa mensagem na memória
+            if (msg.key.id && processedMessages.has(msg.key.id)) {
+                return;
+            }
+            
+            if (msg.key.id) {
+                processedMessages.add(msg.key.id);
+                // Limpar cache a cada 200 mensagens para não gastar RAM infinita
+                if (processedMessages.size > 200) {
+                    const firstItem = processedMessages.values().next().value;
+                    processedMessages.delete(firstItem);
+                }
+            }
 
             // Detectar mídia (foto, documento, vídeo)
             const hasMedia = !!(
@@ -214,11 +233,15 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
         // MENU URA — Escolha da Opção
         // ===================================
         if (session.stage === 'WAIT_URA_CHOICE') {
-            const match = text.match(/^\[?0*([1-5])\]?[\.\-\)]*$/);
+            const match = text.match(/^\[?0*([1-6])\]?[\.\-\)]*$/);
             const choice = match ? match[1] : null;
 
             if (choice === '1') {
                 return await startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+            }
+
+            if (choice === '6') {
+                return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
             }
 
             if (SETOR_MAP[choice]) {
@@ -234,7 +257,7 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             }
 
             setSession(sessionKey, session, replyFn);
-            await replyFn("Não entendi. Por favor, responda apenas com o *número* da opção desejada (1 a 5).");
+            await replyFn("Não entendi. Por favor, responda apenas com o *número* da opção desejada (1 a 6).");
             return;
         }
 
@@ -295,9 +318,9 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             if (textLower === 's' || textLower === 'sim') {
                 setSession(sessionKey, {
                     ...session,
-                    stage: 'WAIT_CAD_NOME_ALUNO',
+                    stage: 'WAIT_CAD_TIPO_USUARIO',
                 }, replyFn);
-                await replyFn("📝 *Vamos iniciar seu cadastro!*\n\nDigite o *nome completo do aluno(a)*:");
+                await replyFn("Para iniciarmos, me diga:\n\nVocê é o *Aluno(a)* (Responda 1) ou o *Responsável Legal* (Responda 2)?");
                 return;
             }
             if (textLower === 'n' || textLower === 'não' || textLower === 'nao') {
@@ -307,6 +330,60 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             }
             setSession(sessionKey, session, replyFn);
             await replyFn("Responda apenas com *S* (Sim) ou *N* (Não).");
+            return;
+        }
+
+        // ===================================
+        // CADASTRO — Tipo de Usuário (Aluno ou Responsável)
+        // ===================================
+        if (session.stage === 'WAIT_CAD_TIPO_USUARIO') {
+            if (text === '1') {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_CAD_ESTUDANTE_TEL_RESP',
+                    isEstudante: true
+                }, replyFn);
+                await replyFn("👨‍🎓 Como você é aluno, para habilitar suas funções de segurança precisamos do celular do seu responsável legal.\n\n*Digite o celular do seu responsável* com DDD (Exemplo: 85999999999):");
+                return;
+            } else if (text === '2') {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_CAD_NOME_ALUNO',
+                    isEstudante: false
+                }, replyFn);
+                await replyFn("📝 *Certo! Vamos iniciar seu cadastro como responsável.*\n\nDigite o *nome completo do aluno(a)*:");
+                return;
+            } else {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("Responda apenas com *1* (Aluno) ou *2* (Responsável).");
+                return;
+            }
+        }
+
+        // ===================================
+        // CADASTRO ESTUDANTE — Recebe número do Pai e pede nome do aluno
+        // ===================================
+        if (session.stage === 'WAIT_CAD_ESTUDANTE_TEL_RESP') {
+            let cleanTel = text.replace(/\D/g, '');
+            if (cleanTel.length < 10) {
+                setSession(sessionKey, session, replyFn);
+                await replyFn("⚠️ Telefone inválido. Por favor, digite o celular do responsável COM DDD (ex: 85999999999):");
+                return;
+            }
+            // fix br phone formatting internally
+            if (cleanTel.length === 10 || cleanTel.length === 11) {
+                cleanTel = '55' + cleanTel;
+            }
+            if (cleanTel.length === 12 && cleanTel.startsWith('55')) {
+                cleanTel = cleanTel.substring(0, 4) + '9' + cleanTel.substring(4);
+            }
+            
+            setSession(sessionKey, {
+                ...session,
+                stage: 'WAIT_CAD_NOME_ALUNO',
+                telefoneRespInformadoPeloEstudante: cleanTel
+            }, replyFn);
+            await replyFn("Obrigado. Agora, digite seu *nome completo* (nome do aluno) para eu encontrá-lo:");
             return;
         }
 
@@ -450,7 +527,18 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             }
 
             const nomeResp = text;
-            const phoneDisplay = formatPhoneDisplay(sessionKey);
+            const phoneToRegister = session.telefoneRespInformadoPeloEstudante || session.phoneCom9 || sessionKey;
+            const phoneDisplay = formatPhoneDisplay(phoneToRegister);
+
+            if (session.isEstudante) {
+                setSession(sessionKey, {
+                    ...session,
+                    stage: 'WAIT_CAD_CONFIRMA_TEL',
+                    nomeResponsavel: nomeResp,
+                }, replyFn);
+                await replyFn(`O celular associado ao seu responsável será:\n📱 *${phoneDisplay}*\n\nEstá correto? Responda *S* (Sim) ou *N* (Não):`);
+                return;
+            }
 
             setSession(sessionKey, {
                 ...session,
@@ -478,12 +566,14 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
 
             // Exibir resumo
             const aluno = session.alunoSelecionado;
-            const phoneDisplay = formatPhoneDisplay(sessionKey);
-            const resumo = `📋 *Resumo do Cadastro:*\n━━━━━━━━━━━━━━━━━━\n👤 Responsável: *${session.nomeResponsavel}*\n🎓 Aluno(a): *${aluno.nome}*\n📚 Turma: *${aluno.turma_nome}*\n📱 Telefone: *${phoneDisplay}*\n━━━━━━━━━━━━━━━━━━\n\nTodas as informações estão corretas?\nResponda *S* para confirmar ou *N* para cancelar:`;
+            const phoneToRegister = session.telefoneRespInformadoPeloEstudante || session.phoneCom9 || sessionKey;
+            const phoneDisplay = formatPhoneDisplay(phoneToRegister);
+            const resumo = `📋 *Resumo do Cadastro:*\n━━━━━━━━━━━━━━━━━━\n👤 Responsável: *${session.nomeResponsavel}*\n🎓 Aluno(a): *${aluno.nome}*\n📚 Turma: *${aluno.turma_nome}*\n📱 Celular do Resp.: *${phoneDisplay}*\n━━━━━━━━━━━━━━━━━━\n\nTodas as informações estão corretas?\nResponda *S* para confirmar ou *N* para cancelar:`;
 
             setSession(sessionKey, {
                 ...session,
                 stage: 'WAIT_CAD_RESUMO',
+                telefoneCadastroFinal: phoneToRegister
             }, replyFn);
             await replyFn(resumo);
             return;
@@ -505,13 +595,14 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             }
 
             // Gravar pré-cadastro com telefone normalizado (13 dígitos, com 9)
+            const resolvedPhone = session.telefoneCadastroFinal || session.phoneCom9 || sessionKey;
             const { error: insertError } = await supabase
                 .from('whatsapp_pre_cadastros')
                 .insert({
                     escola_id: escolaId,
                     aluno_id: session.alunoSelecionado.id,
                     nome_responsavel: session.nomeResponsavel,
-                    telefone_responsavel: session.phoneCom9 || sessionKey,
+                    telefone_responsavel: resolvedPhone,
                     status: 'PENDENTE',
                 });
 
@@ -736,6 +827,76 @@ async function startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9
 
     // Múltiplos alunos → selecionar
     return await showAlunoSelection(escolaId, sessionKey, alunosComTurma, replyFn);
+}
+
+// =====================
+// INÍCIO DO FLUXO DE CONSULTA DE FALTAS
+// =====================
+async function startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn) {
+    // Buscar se o telefone é do aluno, ou responsável
+    const { data: students, error: studentError } = await supabase
+        .from('alunos')
+        .select('id, nome, turma_id, telefone_responsavel, telefone_responsavel_2, telefone_aluno')
+        .eq('escola_id', escolaId)
+        .eq('situacao', 'ativo')
+        .or(`telefone_responsavel.in.(${phoneCom9},${phoneSem9}),telefone_responsavel_2.in.(${phoneCom9},${phoneSem9}),telefone_aluno.in.(${phoneCom9},${phoneSem9})`);
+
+    if (studentError) {
+        console.error(`❌ [INBOUND] Erro ao buscar faltas (consulta):`, studentError.message);
+        clearSession(sessionKey);
+        await replyFn("Ocorreu um erro ao verificar seu cadastro. Tente novamente mais tarde.");
+        return;
+    }
+
+    if (!students || students.length === 0) {
+        console.log(`📋 [INBOUND] Telefone não vinculado: ${phoneCom9} — oferecendo cadastro`);
+        setSession(sessionKey, { stage: 'WAIT_QUER_CADASTRO', escolaId, phoneCom9, phoneSem9 }, replyFn);
+        await replyFn("📋 Seu número de telefone não está vinculado a uma matrícula nesta escola.\n\nDeseja realizar o *cadastro de acesso ao Bot e Portal*?\nResponda *S* (Sim) ou *N* (Não):");
+        return;
+    }
+
+    // Identificar modo (Responsável vs Estudante sem Responsável)
+    // Se ele for APENAS "telefone_aluno" e "telefone_responsavel" for diferente ou nulo, o estudante precisa vincular pai
+    let validStudents = [];
+    let needsParentRegistration = false;
+
+    for (const st of students) {
+        const isParent = (st.telefone_responsavel === phoneCom9 || st.telefone_responsavel === phoneSem9 ||
+                          st.telefone_responsavel_2 === phoneCom9 || st.telefone_responsavel_2 === phoneSem9);
+        if (isParent) {
+            validStudents.push(st);
+        } else if (st.telefone_aluno === phoneCom9 || st.telefone_aluno === phoneSem9) {
+            needsParentRegistration = true;
+        }
+    }
+
+    // Se só match como aluno e nunca como pai, exige cadastro do pai
+    if (validStudents.length === 0 && needsParentRegistration) {
+        setSession(sessionKey, { stage: 'WAIT_CAD_ESTUDANTE_TEL_RESP', isEstudante: true, escolaId, phoneCom9, phoneSem9 }, replyFn);
+        await replyFn("👨‍🎓 Olá! Vimos que você está acessando como Estudante.\n\nPara consultar faltas por aqui, as regras de segurança exigem o cadastro de um *Responsável Legal*.\n\nDigite o número de *celular com DDD* do seu responsável (Ex: 85999999999):");
+        return;
+    }
+
+    // Mostrar os totais de falta sem opção interativa além de "ver"
+    let msg = `📊 *Resumo de Faltas Totais*\n\n`;
+    
+    // Obter faltas para todos os validStudents
+    const studentIds = validStudents.map(s => s.id);
+    const { data: faltas } = await supabase
+        .from('presencas')
+        .select('aluno_id')
+        .in('aluno_id', studentIds)
+        .eq('escola_id', escolaId)
+        .eq('presente', false);
+
+    validStudents.forEach(st => {
+        const absCount = (faltas || []).filter(f => f.aluno_id === st.id).length;
+        msg += `🎓 Aluno: *${st.nome}*\n`;
+        msg += `❌ Total de faltas acumuladas: *${absCount}*\n\n`;
+    });
+
+    clearSession(sessionKey);
+    await replyFn(msg + `_Para detalhamento por matéria, por favor procure a escola ou acesse o Portal do Aluno._`);
 }
 
 // =====================
