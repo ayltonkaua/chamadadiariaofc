@@ -37,6 +37,21 @@ function setSession(phone, data, replyFn) {
     // Timeout de 3 minutos
     const timer = setTimeout(async () => {
         activeConversations.delete(phone);
+        
+        // Finalizar tickets em aberto se a inatividade ocorrer no meio do atendimento
+        if (data && data.escolaId && data.phoneCom9) {
+            try {
+                await supabase
+                    .from('whatsapp_atendimentos')
+                    .update({ status: 'FINALIZADO', updated_at: new Date().toISOString() })
+                    .eq('escola_id', data.escolaId)
+                    .in('telefone_origem', [phone, data.phoneCom9, data.phoneSem9])
+                    .in('status', ['ABERTO', 'EM_ATENDIMENTO']);
+            } catch (err) {
+                console.error("Erro ao fechar ticket por inatividade:", err);
+            }
+        }
+
         if (replyFn) {
             try {
                 await replyFn("⏱️ Tempo inativo. Este atendimento automático foi encerrado. Se precisar de algo, envie uma nova mensagem.");
@@ -297,8 +312,13 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                     respostas: [],
                 });
 
-            // NÃO limpa sessão — conversa continua ativa até a secretaria finalizar
-            clearSession(sessionKey);
+            // Manter sessão ativa para escutar novas mensagens (renovar timeout a cada envio)
+            setSession(sessionKey, { 
+                stage: 'IN_ATENDIMENTO', 
+                escolaId, 
+                phoneCom9, 
+                phoneSem9 
+            }, replyFn);
 
             if (insertError) {
                 console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro ao criar atendimento:`, insertError.message);
@@ -308,6 +328,28 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
 
             console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Atendimento criado: ${session.setorLabel} | Tel: ${sessionKey}`);
             await replyFn(`✅ *Solicitação registrada com sucesso!*\n\nSua solicitação de *${session.setorLabel}* foi encaminhada para a secretaria da escola. Enquanto o atendimento estiver aberto, todas as suas mensagens nesta conversa serão encaminhadas para a secretaria.\n\n_Protocolo registrado automaticamente._`);
+            return;
+        }
+
+        // ===================================
+        // ATENDIMENTO HUMANIZADO (MENSAGENS RETORNADAS)
+        // ===================================
+        if (session.stage === 'IN_ATENDIMENTO') {
+            // Repassa a nova mensagem para o canal do painel e renova a sessão para +3min
+            const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
+            
+            if (!hasOpenTicket) {
+                // Ticket foi fechado pela secretaria. Limpa a sessão atual e exibe o menu principal novamente para essa mensagem.
+                clearSession(sessionKey);
+                setSession(sessionKey, { stage: 'WAIT_URA_CHOICE', escolaId, phoneCom9, phoneSem9, originalMessage: textContent }, replyFn);
+                await replyFn(URA_MENU);
+            } else if (textContent.trim().match(/^(0|menu)$/i)) {
+                // Usuário encerrou o ticket
+                clearSession(sessionKey);
+            } else {
+                // Ticket está aberto, mensagem processada. Renova o timer.
+                setSession(sessionKey, session, null);
+            }
             return;
         }
 
