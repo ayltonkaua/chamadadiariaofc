@@ -38,24 +38,19 @@ function setSession(phone, data, replyFn) {
     const timer = setTimeout(async () => {
         activeConversations.delete(phone);
         
-        // Finalizar tickets em aberto se a inatividade ocorrer no meio do atendimento
-        if (data && data.escolaId && data.phoneCom9) {
-            try {
-                await supabase
-                    .from('whatsapp_atendimentos')
-                    .update({ status: 'FINALIZADO', updated_at: new Date().toISOString() })
-                    .eq('escola_id', data.escolaId)
-                    .in('telefone_origem', [phone, data.phoneCom9, data.phoneSem9])
-                    .in('status', ['ABERTO', 'EM_ATENDIMENTO']);
-            } catch (err) {
-                console.error("Erro ao fechar ticket por inatividade:", err);
-            }
+        if (data && data.stage === 'IN_ATENDIMENTO') {
+            // Se o usuário está em atendimento, ele provavelmente está aguardando a resposta da escola.
+            // Apenas limpamos da memória para economizar recursos. Não fechamos o ticket.
+            // E não enviamos a mensagem automática de inatividade.
+            return;
         }
-
+        
         if (replyFn) {
             try {
-                await replyFn("⏱️ Tempo inativo. Este atendimento automático foi encerrado. Se precisar de algo, envie uma nova mensagem.");
-            } catch(e) {}
+                await replyFn("⏱️ Tempo inativo. Sessão encerrada.\n\nSe precisar de mais alguma coisa, envie uma nova mensagem.");
+            } catch (err) {
+                console.error("Erro ao enviar mensagem de inatividade:", err);
+            }
         }
     }, 3 * 60 * 1000);
     
