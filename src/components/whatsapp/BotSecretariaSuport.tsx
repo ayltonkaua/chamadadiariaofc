@@ -1,27 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { whatsappBotService } from '@/domains/whatsappBot';
 import type { WhatsAppAtendimento, AtendimentoSetor } from '@/domains/whatsappBot';
 import { toast } from 'sonner';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
     Headphones, Phone, Send, CheckCircle2, Clock, AlertCircle, 
     MessageSquare, CreditCard, FileText, GraduationCap, Coins,
-    Loader2, X
+    Loader2, ArrowLeft
 } from 'lucide-react';
 
-const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactNode; color: string }> = {
-    carteirinha: { label: 'Carteira de Estudante', icon: <CreditCard className="w-4 h-4" />, color: 'bg-blue-100 text-blue-700 border-blue-200' },
-    boletim: { label: 'Histórico / Boletim', icon: <GraduationCap className="w-4 h-4" />, color: 'bg-purple-100 text-purple-700 border-purple-200' },
-    declaracao: { label: 'Declaração de Escolaridade', icon: <FileText className="w-4 h-4" />, color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-    pe_de_meia: { label: 'Pé-de-Meia', icon: <Coins className="w-4 h-4" />, color: 'bg-amber-100 text-amber-700 border-amber-200' },
+const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactNode; color: string; bgLight: string }> = {
+    carteirinha: { label: 'Carteira de Estudante', icon: <CreditCard className="w-4 h-4" />, color: 'bg-blue-100 text-blue-700 border-blue-200', bgLight: 'bg-blue-50' },
+    boletim: { label: 'Histórico / Boletim', icon: <GraduationCap className="w-4 h-4" />, color: 'bg-purple-100 text-purple-700 border-purple-200', bgLight: 'bg-purple-50' },
+    declaracao: { label: 'Declaração de Escolaridade', icon: <FileText className="w-4 h-4" />, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', bgLight: 'bg-emerald-50' },
+    pe_de_meia: { label: 'Pé-de-Meia', icon: <Coins className="w-4 h-4" />, color: 'bg-amber-100 text-amber-700 border-amber-200', bgLight: 'bg-amber-50' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -30,19 +28,33 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
     FINALIZADO: { label: 'Finalizado', color: 'bg-green-100 text-green-800 border-green-200', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
 };
 
+function formatPhone(phone: string): string {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 13 && cleaned.startsWith('55')) {
+        return `(${cleaned.substring(2,4)}) ${cleaned[4]} ${cleaned.substring(5,9)}-${cleaned.substring(9)}`;
+    }
+    if (cleaned.length === 12 && cleaned.startsWith('55')) {
+        return `(${cleaned.substring(2,4)}) ${cleaned.substring(4,8)}-${cleaned.substring(8)}`;
+    }
+    return phone;
+}
+
 export default function BotSecretariaSuport() {
     const { user } = useAuth();
     const escolaId = user?.escola_id || '';
+    const userName = (user as any)?.user_metadata?.nome || (user as any)?.email?.split('@')[0] || 'Atendente';
+
     const [tickets, setTickets] = useState<WhatsAppAtendimento[]>([]);
     const [loading, setLoading] = useState(true);
-    const [replyingId, setReplyingId] = useState<string | null>(null);
+    const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
     const [sending, setSending] = useState(false);
-    const [closing, setClosing] = useState<string | null>(null);
+    const [closing, setClosing] = useState(false);
+
+    const chatEndRef = useRef<HTMLDivElement>(null);
 
     const loadTickets = async () => {
         if (!escolaId) return;
-        setLoading(true);
         try {
             const data = await whatsappBotService.getAtendimentos(escolaId);
             setTickets(data);
@@ -57,7 +69,6 @@ export default function BotSecretariaSuport() {
     useEffect(() => {
         loadTickets();
 
-        // Subscribe to real-time changes
         const channel = supabase
             .channel('public:whatsapp_atendimentos')
             .on('postgres_changes', {
@@ -70,284 +81,318 @@ export default function BotSecretariaSuport() {
             })
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => { supabase.removeChannel(channel); };
     }, [escolaId]);
 
-    const handleReply = async (ticket: WhatsAppAtendimento) => {
-        if (!replyText.trim() || sending) return;
+    // Auto-scroll quando mensagens atualizam
+    useEffect(() => {
+        if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [tickets, selectedTicketId]);
+
+    const selectedTicket = tickets.find(t => t.id === selectedTicketId);
+
+    const handleReply = async () => {
+        if (!replyText.trim() || sending || !selectedTicket) return;
         setSending(true);
         try {
-            await whatsappBotService.replyAtendimento(escolaId, ticket.id, ticket.telefone_origem, replyText.trim());
-            toast.success('Mensagem enviada ao responsável!');
+            // Envia a mensagem com o nome do atendente prefixado
+            const mensagemFinal = `*${userName}:* ${replyText.trim()}`;
+            
+            await whatsappBotService.replyAtendimento(
+                escolaId, 
+                selectedTicket.id, 
+                selectedTicket.telefone_origem, 
+                mensagemFinal
+            );
+
+            // Append local para atualização otimista
+            const updatedTickets = tickets.map(t => {
+                if (t.id === selectedTicket.id) {
+                    return {
+                        ...t,
+                        status: 'EM_ATENDIMENTO' as any,
+                        respostas: [
+                            ...(t.respostas || []),
+                            {
+                                remetente: 'secretaria' as const,
+                                mensagem: replyText.trim(),
+                                timestamp: new Date().toISOString(),
+                                atendente: userName,
+                            }
+                        ]
+                    };
+                }
+                return t;
+            });
+            setTickets(updatedTickets);
             setReplyText('');
-            setReplyingId(null);
-            loadTickets();
+            toast.success('Mensagem enviada!');
         } catch (err: any) {
-            toast.error('Erro ao enviar mensagem: ' + err.message);
+            toast.error('Erro ao enviar: ' + err.message);
         } finally {
             setSending(false);
         }
     };
 
-    const handleClose = async (ticketId: string) => {
-        setClosing(ticketId);
+    const handleClose = async () => {
+        if (!selectedTicket) return;
+        if (!confirm('Deseja finalizar este atendimento?')) return;
+        setClosing(true);
         try {
-            await whatsappBotService.closeAtendimento(ticketId);
+            await whatsappBotService.closeAtendimento(selectedTicket.id);
             toast.success('Atendimento finalizado!');
-            setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: 'FINALIZADO' as any } : t));
+            setTickets(prev => prev.map(t => 
+                t.id === selectedTicket.id ? { ...t, status: 'FINALIZADO' as any } : t
+            ));
+            setSelectedTicketId(null);
         } catch (err: any) {
             toast.error('Erro ao finalizar: ' + err.message);
         } finally {
-            setClosing(null);
+            setClosing(false);
         }
     };
 
     const openTickets = tickets.filter(t => t.status !== 'FINALIZADO');
     const closedTickets = tickets.filter(t => t.status === 'FINALIZADO');
+    const sortedTickets = [...openTickets, ...closedTickets];
 
+    // ═══════════════════════════════════
+    // RENDER
+    // ═══════════════════════════════════
     return (
-        <div className="bg-white rounded-2xl border shadow-sm min-h-[500px] flex flex-col overflow-hidden">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 260px)', minHeight: 500 }}>
             {/* Header */}
-            <div className="p-6 border-b flex justify-between items-center bg-gradient-to-r from-violet-50 to-indigo-50">
-                <div>
-                    <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                        <Headphones className="w-5 h-5 text-violet-500" />
-                        Central de Atendimento — Secretaria
-                    </h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Gerencie solicitações dos responsáveis recebidas via WhatsApp.
-                    </p>
-                </div>
+            <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-violet-50 to-indigo-50 shrink-0">
                 <div className="flex items-center gap-3">
+                    <Headphones className="w-5 h-5 text-violet-500" />
+                    <div>
+                        <h2 className="text-base font-semibold text-slate-800">Central de Atendimento</h2>
+                        <p className="text-xs text-slate-500">Conversas com responsáveis via WhatsApp</p>
+                    </div>
                     {openTickets.length > 0 && (
                         <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 text-xs">
                             {openTickets.length} aberto{openTickets.length !== 1 ? 's' : ''}
                         </Badge>
                     )}
-                    <Button variant="outline" onClick={loadTickets} disabled={loading} size="sm">
-                        Atualizar
-                    </Button>
                 </div>
+                <Button variant="outline" onClick={loadTickets} disabled={loading} size="sm">
+                    Atualizar
+                </Button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-auto p-6 bg-slate-50/30">
-                {loading && tickets.length === 0 ? (
-                    <div className="space-y-4">
-                        {[1, 2, 3].map(i => <Skeleton key={i} className="h-36 w-full rounded-xl" />)}
-                    </div>
-                ) : tickets.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-16">
-                        <Headphones className="w-12 h-12 mb-3 text-slate-200" />
-                        <p className="text-lg font-medium text-slate-600">Nenhuma solicitação</p>
-                        <p className="text-sm mt-1">Quando responsáveis enviarem pedidos via menu do WhatsApp, eles aparecerão aqui.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {/* Tickets abertos primeiro */}
-                        {openTickets.map(ticket => (
-                            <TicketCard
-                                key={ticket.id}
-                                ticket={ticket}
-                                isReplying={replyingId === ticket.id}
-                                replyText={replyText}
-                                sending={sending}
-                                closing={closing === ticket.id}
-                                onToggleReply={() => {
-                                    setReplyingId(replyingId === ticket.id ? null : ticket.id);
-                                    setReplyText('');
-                                }}
-                                onReplyTextChange={setReplyText}
-                                onSendReply={() => handleReply(ticket)}
-                                onClose={() => handleClose(ticket.id)}
-                            />
-                        ))}
+            {/* Body: List + Chat */}
+            <div className="flex flex-1 overflow-hidden">
+                {/* ═══ LISTA DE TICKETS (Lateral) ═══ */}
+                <div className={`w-full md:w-[360px] border-r flex flex-col bg-slate-50/50 shrink-0 ${selectedTicketId ? 'hidden md:flex' : 'flex'}`}>
+                    {loading && tickets.length === 0 ? (
+                        <div className="p-4 space-y-3">
+                            {[1,2,3].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
+                        </div>
+                    ) : tickets.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6">
+                            <Headphones className="w-10 h-10 mb-2 opacity-20" />
+                            <p className="text-sm font-medium">Nenhuma solicitação</p>
+                            <p className="text-xs mt-1 text-center">Quando responsáveis enviarem pedidos via WhatsApp, aparecerão aqui.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-y-auto flex-1">
+                            {sortedTickets.map(ticket => {
+                                const setorCfg = SETOR_CONFIG[ticket.setor] || SETOR_CONFIG.carteirinha;
+                                const isClosed = ticket.status === 'FINALIZADO';
+                                const isSelected = selectedTicketId === ticket.id;
+                                const lastMsg = ticket.respostas?.length > 0 
+                                    ? ticket.respostas[ticket.respostas.length - 1]
+                                    : null;
+                                const unread = ticket.status === 'ABERTO';
 
-                        {/* Divider */}
-                        {closedTickets.length > 0 && openTickets.length > 0 && (
-                            <div className="flex items-center gap-3 py-2">
-                                <div className="flex-1 h-px bg-slate-200" />
-                                <span className="text-xs text-slate-400 font-medium">Finalizados</span>
-                                <div className="flex-1 h-px bg-slate-200" />
-                            </div>
-                        )}
-
-                        {/* Tickets finalizados */}
-                        {closedTickets.map(ticket => (
-                            <TicketCard
-                                key={ticket.id}
-                                ticket={ticket}
-                                isReplying={false}
-                                replyText=""
-                                sending={false}
-                                closing={false}
-                                onToggleReply={() => {}}
-                                onReplyTextChange={() => {}}
-                                onSendReply={() => {}}
-                                onClose={() => {}}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ─────────────────────────────────────────────
-// Ticket Card Component
-// ─────────────────────────────────────────────
-function TicketCard({
-    ticket,
-    isReplying,
-    replyText,
-    sending,
-    closing,
-    onToggleReply,
-    onReplyTextChange,
-    onSendReply,
-    onClose,
-}: {
-    ticket: WhatsAppAtendimento;
-    isReplying: boolean;
-    replyText: string;
-    sending: boolean;
-    closing: boolean;
-    onToggleReply: () => void;
-    onReplyTextChange: (text: string) => void;
-    onSendReply: () => void;
-    onClose: () => void;
-}) {
-    const setorCfg = SETOR_CONFIG[ticket.setor] || SETOR_CONFIG.carteirinha;
-    const statusCfg = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.ABERTO;
-    const isClosed = ticket.status === 'FINALIZADO';
-    const date = new Date(ticket.created_at);
-
-    return (
-        <Card className={`p-5 hover:shadow-md transition-shadow relative overflow-hidden ${isClosed ? 'opacity-60 grayscale-[20%]' : ''}`}>
-            {ticket.status === 'ABERTO' && (
-                <div className="absolute top-0 left-0 w-1 h-full bg-yellow-400" />
-            )}
-            {ticket.status === 'EM_ATENDIMENTO' && (
-                <div className="absolute top-0 left-0 w-1 h-full bg-blue-400" />
-            )}
-
-            <div className="flex flex-col gap-3">
-                {/* Header: Setor + Status + Time */}
-                <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className={`flex items-center gap-1.5 px-2.5 py-0.5 border ${setorCfg.color}`}>
-                        {setorCfg.icon}
-                        {setorCfg.label}
-                    </Badge>
-                    <Badge variant="outline" className={`flex items-center gap-1.5 px-2.5 py-0.5 border ${statusCfg.color}`}>
-                        {statusCfg.icon}
-                        {statusCfg.label}
-                    </Badge>
-                    <span className="text-xs text-slate-400 ml-auto">
-                        {format(date, "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
-                    </span>
-                </div>
-
-                {/* Contact Info */}
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <div className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                        <Phone className="w-3.5 h-3.5" />
-                        {ticket.telefone_origem}
-                    </div>
-                    {ticket.nome_contato && (
-                        <>
-                            <span className="text-slate-300">•</span>
-                            <span className="font-medium text-slate-700">{ticket.nome_contato}</span>
-                        </>
+                                return (
+                                    <button
+                                        key={ticket.id}
+                                        onClick={() => setSelectedTicketId(ticket.id)}
+                                        className={`w-full text-left p-3.5 border-b border-slate-100 transition-all hover:bg-white ${
+                                            isSelected ? 'bg-indigo-50/80 border-l-2 border-l-indigo-500' : ''
+                                        } ${isClosed ? 'opacity-50' : ''}`}
+                                    >
+                                        <div className="flex items-start justify-between mb-1">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                {unread && <span className="w-2 h-2 bg-violet-500 rounded-full shrink-0" />}
+                                                <span className="font-semibold text-sm text-slate-800 truncate">
+                                                    {ticket.nome_contato || formatPhone(ticket.telefone_origem)}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+                                                {format(new Date(ticket.updated_at || ticket.created_at), 'HH:mm')}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 border ${setorCfg.color}`}>
+                                                {setorCfg.label}
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-slate-500 truncate">
+                                            {lastMsg 
+                                                ? `${lastMsg.remetente === 'secretaria' ? '🏫' : '👤'} ${lastMsg.mensagem}`
+                                                : ticket.mensagem_inicial || 'Nova solicitação'
+                                            }
+                                        </p>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
 
-                {/* Message */}
-                {ticket.mensagem_inicial && (
-                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-lg text-sm text-slate-700 whitespace-pre-wrap">
-                        {ticket.mensagem_inicial}
-                    </div>
-                )}
+                {/* ═══ CHAT (Área Principal) ═══ */}
+                <div className={`flex-1 flex flex-col ${!selectedTicketId ? 'hidden md:flex' : 'flex'}`}>
+                    {!selectedTicket ? (
+                        // Empty state
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 bg-[#f0f2f5]">
+                            <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
+                            <p className="text-lg font-medium text-slate-400">Selecione um atendimento</p>
+                            <p className="text-sm text-slate-400 mt-1">Escolha uma conversa na lista ao lado</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Chat Header */}
+                            <div className="px-4 py-3 bg-white border-b flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => setSelectedTicketId(null)}
+                                        className="md:hidden text-slate-500 hover:text-slate-700"
+                                    >
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </button>
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white font-bold text-sm">
+                                        {(selectedTicket.nome_contato || '?')[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-sm text-slate-800">
+                                            {selectedTicket.nome_contato || formatPhone(selectedTicket.telefone_origem)}
+                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                                <Phone className="w-3 h-3" />
+                                                {formatPhone(selectedTicket.telefone_origem)}
+                                            </span>
+                                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 border ${STATUS_CONFIG[selectedTicket.status]?.color}`}>
+                                                {STATUS_CONFIG[selectedTicket.status]?.label}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedTicket.status !== 'FINALIZADO' && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-green-200 text-green-700 hover:bg-green-50"
+                                        onClick={handleClose}
+                                        disabled={closing}
+                                    >
+                                        {closing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle2 className="w-4 h-4 mr-1" />}
+                                        Finalizar
+                                    </Button>
+                                )}
+                            </div>
 
-                {/* Respostas (thread) */}
-                {ticket.respostas && ticket.respostas.length > 0 && (
-                    <div className="space-y-2 pl-3 border-l-2 border-indigo-200">
-                        {ticket.respostas.map((r: any, i: number) => (
-                            <div key={i} className={`text-sm p-2 rounded-lg ${
-                                r.remetente === 'secretaria' 
-                                    ? 'bg-indigo-50 text-indigo-800 border border-indigo-100' 
-                                    : 'bg-slate-50 text-slate-700 border border-slate-100'
-                            }`}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-[10px] font-semibold uppercase">
-                                        {r.remetente === 'secretaria' ? '🏫 Secretaria' : '👤 Responsável'}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400">
-                                        {r.timestamp ? format(new Date(r.timestamp), 'HH:mm', { locale: ptBR }) : ''}
+                            {/* Chat Messages */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23e2e8f0\' fill-opacity=\'0.3\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")', backgroundColor: '#f0f2f5' }}>
+                                
+                                {/* Setor badge */}
+                                <div className="flex justify-center">
+                                    <Badge variant="outline" className={`text-xs px-3 py-1 border ${SETOR_CONFIG[selectedTicket.setor]?.color}`}>
+                                        {SETOR_CONFIG[selectedTicket.setor]?.icon}
+                                        <span className="ml-1.5">{SETOR_CONFIG[selectedTicket.setor]?.label}</span>
+                                    </Badge>
+                                </div>
+
+                                <div className="flex justify-center">
+                                    <span className="text-[10px] text-slate-400 bg-white/80 px-3 py-1 rounded-full shadow-sm">
+                                        {format(new Date(selectedTicket.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                                     </span>
                                 </div>
-                                <p className="whitespace-pre-wrap">{r.mensagem}</p>
+
+                                {/* Mensagem inicial do pai */}
+                                {selectedTicket.mensagem_inicial && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-white rounded-lg rounded-tl-sm shadow-sm p-3 max-w-[75%] border border-slate-100">
+                                            <p className="text-[10px] font-semibold text-indigo-600 mb-1">👤 {selectedTicket.nome_contato || 'Responsável'}</p>
+                                            <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedTicket.mensagem_inicial}</p>
+                                            <p className="text-[10px] text-slate-400 text-right mt-1">
+                                                {format(new Date(selectedTicket.created_at), 'HH:mm')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Respostas (thread contínua) */}
+                                {selectedTicket.respostas?.map((r: any, i: number) => {
+                                    const isSecretaria = r.remetente === 'secretaria';
+                                    return (
+                                        <div key={i} className={`flex ${isSecretaria ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`rounded-lg shadow-sm p-3 max-w-[75%] ${
+                                                isSecretaria 
+                                                    ? 'bg-[#d9fdd3] rounded-tr-sm border border-green-100' 
+                                                    : 'bg-white rounded-tl-sm border border-slate-100'
+                                            }`}>
+                                                <p className={`text-[10px] font-semibold mb-1 ${
+                                                    isSecretaria ? 'text-green-700' : 'text-indigo-600'
+                                                }`}>
+                                                    {isSecretaria 
+                                                        ? `🏫 ${r.atendente || 'Secretaria'}` 
+                                                        : `👤 ${selectedTicket.nome_contato || 'Responsável'}`
+                                                    }
+                                                </p>
+                                                <p className="text-sm text-slate-700 whitespace-pre-wrap">{r.mensagem}</p>
+                                                <p className="text-[10px] text-slate-400 text-right mt-1">
+                                                    {r.timestamp ? format(new Date(r.timestamp), 'HH:mm') : ''}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                <div ref={chatEndRef} />
                             </div>
-                        ))}
-                    </div>
-                )}
 
-                {/* Actions */}
-                {!isClosed && (
-                    <div className="flex gap-2 pt-2 border-t border-slate-100">
-                        <Button
-                            variant="default"
-                            className="bg-[#25D366] hover:bg-[#128C7E] text-white border-0 shadow-sm"
-                            size="sm"
-                            onClick={onToggleReply}
-                        >
-                            <MessageSquare className="w-4 h-4 mr-1.5" />
-                            {isReplying ? 'Cancelar' : 'Responder'}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="border-slate-200 text-slate-600 hover:text-green-600 hover:border-green-200 hover:bg-green-50"
-                            size="sm"
-                            onClick={onClose}
-                            disabled={closing}
-                        >
-                            {closing ? (
-                                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                            {/* Input Area */}
+                            {selectedTicket.status !== 'FINALIZADO' ? (
+                                <div className="px-4 py-3 bg-white border-t flex items-end gap-2 shrink-0">
+                                    <textarea
+                                        placeholder="Digite sua resposta..."
+                                        value={replyText}
+                                        onChange={(e) => setReplyText(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                handleReply();
+                                            }
+                                        }}
+                                        className="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 min-h-[44px] max-h-[120px]"
+                                        rows={1}
+                                        disabled={sending}
+                                    />
+                                    <Button
+                                        onClick={handleReply}
+                                        disabled={!replyText.trim() || sending}
+                                        className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-full h-11 w-11 p-0 shrink-0"
+                                    >
+                                        {sending 
+                                            ? <Loader2 className="w-5 h-5 animate-spin" /> 
+                                            : <Send className="w-5 h-5" />
+                                        }
+                                    </Button>
+                                </div>
                             ) : (
-                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                <div className="px-4 py-3 bg-slate-50 border-t text-center shrink-0">
+                                    <p className="text-xs text-slate-400">✅ Atendimento finalizado</p>
+                                </div>
                             )}
-                            Finalizar
-                        </Button>
-                    </div>
-                )}
-
-                {/* Reply Area */}
-                {isReplying && (
-                    <div className="flex gap-2 animate-in slide-in-from-top-2 duration-200">
-                        <Textarea
-                            placeholder="Digite sua resposta ao responsável..."
-                            value={replyText}
-                            onChange={(e) => onReplyTextChange(e.target.value)}
-                            className="min-h-[80px] text-sm resize-none flex-1"
-                            disabled={sending}
-                        />
-                        <Button
-                            onClick={onSendReply}
-                            disabled={!replyText.trim() || sending}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white self-end"
-                            size="sm"
-                        >
-                            {sending ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Send className="w-4 h-4" />
-                            )}
-                        </Button>
-                    </div>
-                )}
+                        </>
+                    )}
+                </div>
             </div>
-        </Card>
+        </div>
     );
 }

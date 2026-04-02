@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { whatsappBotService } from '@/domains/whatsappBot';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -141,7 +142,7 @@ export default function BotCadastroResponsavel() {
     // Aprovar — grava no aluno e atualiza status
     // =====================
     const handleAprovar = async (cadastro: PreCadastro) => {
-        if (!user?.id) return;
+        if (!user?.id || !escolaId) return;
         setIsProcessing(cadastro.id);
 
         try {
@@ -158,7 +159,6 @@ export default function BotCadastroResponsavel() {
             } else if (!aluno.telefone_responsavel_2) {
                 updatePayload.telefone_responsavel_2 = cadastro.telefone_responsavel;
             } else {
-                // Ambos os campos já estão preenchidos — sobrescrever o principal
                 updatePayload.telefone_responsavel = cadastro.telefone_responsavel;
             }
 
@@ -184,9 +184,22 @@ export default function BotCadastroResponsavel() {
 
             if (statusError) throw statusError;
 
-            toast.success(`Cadastro de ${cadastro.nome_responsavel} aprovado! Telefone vinculado ao aluno(a) ${aluno.nome}.`);
+            // 3. Notificar o responsável via WhatsApp
+            try {
+                const nomeAluno = aluno.nome || 'seu filho(a)';
+                const mensagem = `✅ *Cadastro Aprovado!*\n\nOlá, *${cadastro.nome_responsavel}*!\n\nSeu cadastro como responsável do(a) aluno(a) *${nomeAluno}* foi *aprovado* pela secretaria. \n\nAgora você pode utilizar todos os recursos do bot, incluindo justificativas de faltas. Basta enviar uma mensagem a qualquer momento!`;
 
-            // Optimistic update
+                await whatsappBotService.sendManual(escolaId, {
+                    telefone: cadastro.telefone_responsavel,
+                    mensagem,
+                });
+            } catch (notifErr: any) {
+                console.error('Erro ao notificar aprovação:', notifErr);
+                // Não bloquear a aprovação por falha na notificação
+            }
+
+            toast.success(`Cadastro de ${cadastro.nome_responsavel} aprovado! Responsável notificado via WhatsApp.`);
+
             setCadastros(prev => prev.map(c =>
                 c.id === cadastro.id ? { ...c, status: 'APROVADO' as CadastroStatus } : c
             ));
@@ -202,11 +215,15 @@ export default function BotCadastroResponsavel() {
     // Rejeitar
     // =====================
     const handleRejeitar = async (cadastro: PreCadastro) => {
-        if (!user?.id) return;
-        if (!confirm(`Deseja rejeitar o cadastro de ${cadastro.nome_responsavel}?`)) return;
+        if (!user?.id || !escolaId) return;
+        
+        const motivo = prompt(`Motivo da rejeição do cadastro de ${cadastro.nome_responsavel}:`);
+        if (!motivo) return; // Cancelou o prompt
+        
         setIsProcessing(cadastro.id);
 
         try {
+            // 1. Marcar como rejeitado
             // @ts-ignore
             const { error } = await supabase
                 .from('whatsapp_pre_cadastros')
@@ -219,7 +236,21 @@ export default function BotCadastroResponsavel() {
 
             if (error) throw error;
 
-            toast.success('Cadastro rejeitado.');
+            // 2. Notificar o responsável via WhatsApp com o motivo
+            try {
+                const nomeAluno = cadastro.aluno?.nome || 'o aluno informado';
+                const mensagem = `❌ *Cadastro Não Aprovado*\n\nOlá, *${cadastro.nome_responsavel}*!\n\nSeu cadastro como responsável do(a) aluno(a) *${nomeAluno}* não foi aprovado pela secretaria.\n\n*Motivo:* _"${motivo}"_\n\nPara mais informações, entre em contato com a secretaria da escola presencialmente.`;
+
+                await whatsappBotService.sendManual(escolaId, {
+                    telefone: cadastro.telefone_responsavel,
+                    mensagem,
+                });
+                toast.success('Cadastro rejeitado. Responsável notificado via WhatsApp.');
+            } catch (notifErr: any) {
+                console.error('Erro ao notificar rejeição:', notifErr);
+                toast.success('Cadastro rejeitado, mas houve erro ao notificar o responsável.');
+            }
+
             setCadastros(prev => prev.map(c =>
                 c.id === cadastro.id ? { ...c, status: 'REJEITADO' as CadastroStatus } : c
             ));

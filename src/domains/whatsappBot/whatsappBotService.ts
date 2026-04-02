@@ -451,7 +451,7 @@ RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
     /**
      * Reply to an atendimento ticket — sends WA message and appends to respostas JSONB
      */
-    async replyAtendimento(escolaId: string, ticketId: string, telefone: string, mensagem: string): Promise<void> {
+    async replyAtendimento(escolaId: string, ticketId: string, telefone: string, mensagem: string, atendenteName?: string): Promise<void> {
         // Send WhatsApp message via bot-api
         await botFetch('/sendManual', escolaId, {
             method: 'POST',
@@ -468,7 +468,8 @@ RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
         const respostas = ticket?.respostas || [];
         respostas.push({
             remetente: 'secretaria',
-            mensagem,
+            mensagem: mensagem.replace(/^\*[^:]+:\*\s*/, ''), // Remove prefix "*Nome:* " for storage
+            atendente: atendenteName || 'Secretaria',
             timestamp: new Date().toISOString(),
         });
 

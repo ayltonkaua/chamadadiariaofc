@@ -182,6 +182,13 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
         return await handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, replyFn, mediaFallbackText);
     }
 
+    // Verificar se há atendimento aberto para este telefone — se sim, canalizar mensagem
+    const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText);
+    if (hasOpenTicket) {
+        console.log(`💬 [INBOUND] [${escolaId.substring(0,8)}] Mensagem canalizada para atendimento aberto | Tel: ${sessionKey.slice(-8)}`);
+        return; // Mensagem foi adicionada ao ticket, não mostra menu
+    }
+
     // Exibir menu URA
     console.log(`📋 [INBOUND] [${escolaId.substring(0,8)}] Exibindo menu URA para ${sessionKey.slice(-8)}`);
     setSession(sessionKey, { 
@@ -259,7 +266,7 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                 .from('whatsapp_atendimentos')
                 .insert({
                     escola_id: escolaId,
-                    telefone_origem: sessionKey,
+                    telefone_origem: phoneCom9,
                     nome_contato: nomeContato,
                     setor: session.setor,
                     mensagem_inicial: mensagem.substring(0, 2000),
@@ -267,6 +274,7 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                     respostas: [],
                 });
 
+            // NÃO limpa sessão — conversa continua ativa até a secretaria finalizar
             clearSession(sessionKey);
 
             if (insertError) {
@@ -276,7 +284,7 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
             }
 
             console.log(`📩 [INBOUND] [${escolaId.substring(0,8)}] Atendimento criado: ${session.setorLabel} | Tel: ${sessionKey}`);
-            await replyFn(`✅ *Solicitação registrada com sucesso!*\n\nSua solicitação de *${session.setorLabel}* foi encaminhada para a secretaria da escola. Nossa equipe analisará e responderá em breve por esta conversa.\n\n_Protocolo registrado automaticamente._`);
+            await replyFn(`✅ *Solicitação registrada com sucesso!*\n\nSua solicitação de *${session.setorLabel}* foi encaminhada para a secretaria da escola. Enquanto o atendimento estiver aberto, todas as suas mensagens nesta conversa serão encaminhadas para a secretaria.\n\n_Protocolo registrado automaticamente._`);
             return;
         }
 
@@ -412,7 +420,7 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                 .from('whatsapp_pre_cadastros')
                 .select('id')
                 .eq('aluno_id', alunoSelecionado.id)
-                .eq('telefone_responsavel', sessionKey)
+                .eq('telefone_responsavel', session.phoneCom9 || sessionKey)
                 .eq('status', 'PENDENTE')
                 .maybeSingle();
 
@@ -496,14 +504,14 @@ async function handleActiveConversation(escolaId, sessionKey, phoneCom9, phoneSe
                 return;
             }
 
-            // Gravar pré-cadastro
+            // Gravar pré-cadastro com telefone normalizado (13 dígitos, com 9)
             const { error: insertError } = await supabase
                 .from('whatsapp_pre_cadastros')
                 .insert({
                     escola_id: escolaId,
                     aluno_id: session.alunoSelecionado.id,
                     nome_responsavel: session.nomeResponsavel,
-                    telefone_responsavel: sessionKey,
+                    telefone_responsavel: session.phoneCom9 || sessionKey,
                     status: 'PENDENTE',
                 });
 
@@ -804,6 +812,53 @@ async function showFaltasDoAluno(escolaId, sessionKey, aluno, todosAlunos, reply
         faltasDisponiveis: faltas,
     }, replyFn);
     await replyFn(msg);
+}
+
+// =====================
+// CANALIZAR MENSAGENS PARA ATENDIMENTO ABERTO
+// Se o pai já tem um ticket aberto/em_atendimento, novas mensagens
+// são adicionadas ao array de respostas do ticket automaticamente.
+// =====================
+async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText) {
+    try {
+        const mensagem = (textContent || '').trim() || mediaFallbackText || '';
+        if (!mensagem) return false;
+
+        // Buscar atendimento aberto ou em_atendimento para este telefone
+        const { data: tickets, error } = await supabase
+            .from('whatsapp_atendimentos')
+            .select('id, respostas, status')
+            .eq('escola_id', escolaId)
+            .in('telefone_origem', [sessionKey, phoneCom9, phoneSem9])
+            .in('status', ['ABERTO', 'EM_ATENDIMENTO'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (error || !tickets || tickets.length === 0) {
+            return false; // Sem ticket aberto — seguir fluxo normal
+        }
+
+        const ticket = tickets[0];
+        const respostas = ticket.respostas || [];
+        respostas.push({
+            remetente: 'pai',
+            mensagem: mensagem.substring(0, 2000),
+            timestamp: new Date().toISOString(),
+        });
+
+        await supabase
+            .from('whatsapp_atendimentos')
+            .update({
+                respostas,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', ticket.id);
+
+        return true; // Mensagem canalizada com sucesso
+    } catch (err) {
+        console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro ao canalizar para atendimento:`, err.message);
+        return false;
+    }
 }
 
 module.exports = { setupInboundListener };
