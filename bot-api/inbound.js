@@ -1090,8 +1090,13 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
         }
 
         if (replyFn && respostas.length === 1) {
-            // Se for a primeira mensagem adicionada (após a msg inicial), envia um alerta de confirmação pequeno
-            await replyFn("Sua mensagem foi adicionada ao atendimento aberto. Aguarde o retorno da secretaria ou digite *0* para sair.");
+            // Se for a primeira mensagem adicionada, envia um alerta de confirmação.
+            // Envolver em try/catch para não quebrar a lógica se houver falha na rede ou WABox.
+            try {
+                await replyFn("Sua mensagem foi adicionada ao atendimento aberto. Aguarde o retorno da secretaria ou digite *0* para sair.");
+            } catch (replyErr) {
+                console.error("Erro ao enviar aviso de canalização silenciosa:", replyErr.message);
+            }
         }
 
         return true; // Mensagem canalizada com sucesso
