@@ -327,6 +327,7 @@ export default function BotWhatsAppPage() {
                         savingConfig={savingConfig}
                         onSaveConfig={handleSaveConfig}
                         isConnected={isConnected}
+                        escolaId={escolaId}
                      />
                 </TabsContent>
 
