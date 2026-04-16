@@ -90,8 +90,8 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
     },
     { title: 'Disciplinas', icon: BookOpen, href: '/disciplinas', description: 'Grade' },
     { title: 'Relatórios', icon: LineChart, href: '/gestor/dashboard', roles: ['admin', 'diretor'] },
+    { title: 'Busca Ativa', icon: ShieldAlert, href: '/busca-ativa' },
     ...(FEATURE_FLAGS.MAPA_ALUNOS ? [{ title: 'Mapa de Alunos', icon: MapPin, href: '/mapa', roles: ['admin', 'diretor', 'coordenador'] }] : []),
-    ...(FEATURE_FLAGS.EVASAO_AI ? [{ title: 'Prevenção de Evasão', icon: ShieldAlert, href: '/evasao', roles: ['admin', 'diretor', 'coordenador', 'staff'] }] : []),
     { title: 'Programas Sociais', icon: HandCoins, href: '/gestor/programas', roles: ['admin', 'diretor'] },
     { title: 'Ano Letivo', icon: CalendarDays, href: '/ano-letivo', roles: ['admin', 'diretor', 'secretario'] },
     // Arquivos só aparece se existirem anos arquivados

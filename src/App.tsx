@@ -44,6 +44,7 @@ import {
   GerenciarAcessoPage as LazyGerenciarAcessoPage,
   GerenciarProgramasPage as LazyGerenciarProgramasPage,
 } from "@/app/routes.lazy";
+import CentralBuscaAtivaPage from "@/pages/CentralBuscaAtivaPage";
 import BotWhatsAppPage from "@/pages/BotWhatsAppPage";
 import { FEATURE_FLAGS } from "@/config/featureFlags";
 
@@ -170,7 +171,7 @@ const App = () => {
                         <Route path="/turmas/:turmaId/alunos" element={<GerenciarAlunosPage />} />
                         <Route path="/turmas/:turmaId/alunos/:alunoId" element={<AlunoPage />} />
                         <Route path="/gerenciar-alunos/:turmaId" element={<GerenciarAlunosPage />} />
-
+                        <Route path="/busca-ativa" element={<CentralBuscaAtivaPage />} />
 
                         <Route path="/historico-chamada/:turmaId" element={<HistoricoChamadaPage />} />
                         <Route path="/consultar-faltas" element={<ConsultarFaltasPage />} />

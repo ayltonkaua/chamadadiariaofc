@@ -159,6 +159,144 @@ export const gestorService = {
     },
 
     /**
+     * Resumo mensal de chamadas para exportação
+     */
+    async getResumoMensal(escolaId: string, anoLetivoId?: string | null): Promise<{
+        mesBase: string;
+        mes: string;
+        chamadasRealizadas: number;
+        totalPresencas: number;
+        totalFaltas: number;
+        percentualFaltas: number;
+    }[]> {
+        log.debug('Getting resumo mensal', { escolaId, anoLetivoId });
+
+        let dataInicio: string | null = null;
+        let dataFim: string | null = null;
+
+        if (anoLetivoId) {
+            const { data: anoLetivo } = await supabase
+                .from('anos_letivos')
+                .select('data_inicio, data_fim')
+                .eq('id', anoLetivoId)
+                .single();
+            if (anoLetivo) {
+                dataInicio = anoLetivo.data_inicio;
+                dataFim = anoLetivo.data_fim;
+            }
+        }
+
+        let query = supabase
+            .from('presencas')
+            .select('data_chamada, presente, falta_justificada, turma_id')
+            .eq('escola_id', escolaId);
+
+        if (dataInicio) query = query.gte('data_chamada', dataInicio);
+        if (dataFim) query = query.lte('data_chamada', dataFim);
+
+        const { data, error } = await query;
+        if (error || !data) {
+            log.error('Failed to fetch presencas for resumo', { error: String(error) });
+            return [];
+        }
+
+        const mapByMonth = new Map<string, { presencas: number, faltas: number, rollCalls: Set<string> }>();
+        const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+        for (const p of data) {
+            let mesBase = '';
+            let dataLocalStr = '';
+
+            if (p.data_chamada && p.data_chamada.includes('T')) {
+                // É ISO timestamp vindo do DB. Força conversão exata para UTC-3 (America/Sao_Paulo)
+                // independente da máquina (Node ou Browser) estar em UTC ou outro fuso.
+                const d = new Date(p.data_chamada);
+                const spTime = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Sao_Paulo',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).format(d);
+                // spTime template is "MM/DD/YYYY" using en-US
+                const [mes, dia, ano] = spTime.split('/');
+                mesBase = `${ano}-${mes}`;
+                dataLocalStr = `${ano}-${mes}-${dia}`;
+            } else if (p.data_chamada) {
+                // É apenas data (yyyy-MM-dd) que já está formatada correta
+                mesBase = p.data_chamada.substring(0, 7);
+                dataLocalStr = p.data_chamada;
+            }
+
+            if (!mapByMonth.has(mesBase)) {
+                mapByMonth.set(mesBase, { presencas: 0, faltas: 0, rollCalls: new Set() });
+            }
+            const agg = mapByMonth.get(mesBase)!;
+            if (p.presente) agg.presencas++;
+            else agg.faltas++;
+            
+            if (p.turma_id && dataLocalStr) {
+                agg.rollCalls.add(`${dataLocalStr}_${p.turma_id}`);
+            }
+        }
+
+        const result = Array.from(mapByMonth.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([mesBase, agg]) => {
+                const [ano, mes] = mesBase.split('-');
+                const mesNum = parseInt(mes, 10);
+                const totalRegistros = agg.presencas + agg.faltas;
+                const percentualFaltas = totalRegistros > 0 ? (agg.faltas / totalRegistros) * 100 : 0;
+                return {
+                    mesBase,
+                    mes: `${monthNames[mesNum - 1]} ${ano}`,
+                    chamadasRealizadas: agg.rollCalls.size,
+                    totalPresencas: agg.presencas,
+                    totalFaltas: agg.faltas,
+                    percentualFaltas
+                };
+            });
+
+        return result;
+    },
+
+    /**
+     * Busca ativa resumo para alunos selecionados
+     */
+    async getBuscaAtivaResumo(escolaId: string, alunoIds: string[]): Promise<Map<string, { contatado: boolean, ultimoContato?: string, totalContatos: number, ultimoStatus?: string, historico: any[] }>> {
+        if (!alunoIds.length) return new Map();
+
+        const { data, error } = await supabase
+            .from('registros_contato_busca_ativa' as any)
+            .select('aluno_id, data_contato, status_funil, forma_contato, justificativa_faltas, monitor_responsavel')
+            .eq('escola_id', escolaId)
+            .in('aluno_id', alunoIds)
+            .order('data_contato', { ascending: false });
+
+        if (error) {
+            log.warn('Failed to fetch registros busca ativa', { error: String(error) });
+            return new Map();
+        }
+
+        const map = new Map<string, { contatado: boolean, ultimoContato?: string, totalContatos: number, ultimoStatus?: string, historico: any[] }>();
+        for (const row of ((data as any[]) || [])) {
+            const existing = map.get(row.aluno_id);
+            if (!existing) {
+                map.set(row.aluno_id, { 
+                    contatado: true, 
+                    ultimoContato: row.data_contato, 
+                    totalContatos: 1,
+                    ultimoStatus: row.status_funil,
+                    historico: [row]
+                });
+            } else {
+                existing.totalContatos++;
+                existing.historico.push(row);
+            }
+        }
+        return map;
+    },
+
+    /**
      * Gets escola KPIs only
      */
     async getKpis(escolaId: string): Promise<KpiData | null> {

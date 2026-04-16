@@ -22,8 +22,11 @@ import {
     type ExportKPI,
 } from '@/lib/exportUtils';
 import type { KpiData, KpiAdminData, TurmaComparisonData, AlunoRiscoData, AlunoFaltasConsecutivasData } from '@/domains';
+import { gestorService } from '@/domains/gestor/services/gestor.service';
 
 interface ExportButtonProps {
+    escolaId: string;
+    anoLetivoId?: string;
     nomeEscola: string;
     anoLetivo?: string;
     kpis: KpiData | null;
@@ -35,6 +38,8 @@ interface ExportButtonProps {
 }
 
 export function ExportButton({
+    escolaId,
+    anoLetivoId,
     nomeEscola,
     anoLetivo,
     kpis,
@@ -46,68 +51,112 @@ export function ExportButton({
 }: ExportButtonProps) {
     const [isExporting, setIsExporting] = useState(false);
 
-    const prepareExportData = (): DashboardExportData => {
-        // Build KPIs array
-        const exportKpis: ExportKPI[] = [];
+    const prepareExportData = async (): Promise<DashboardExportData> => {
+        // Obter ids para buscar contatos da busca ativa
+        const alunosComRiscoIds = [...new Set([
+            ...alunosRisco.map(a => a.aluno_id),
+            ...alunosConsecutivos.map(a => a.aluno_id)
+        ])];
 
+        // Buscar dados extras
+        const [resumoMensal, buscaAtivaResumo] = await Promise.all([
+            gestorService.getResumoMensal(escolaId, anoLetivoId),
+            gestorService.getBuscaAtivaResumo(escolaId, alunosComRiscoIds)
+        ]);
+
+        let totalBuscaAtiva = 0;
+        let alunosSemContato = 0;
+
+        alunosRisco.forEach(a => {
+            const bt = buscaAtivaResumo.get(a.aluno_id);
+            if (bt?.contatado) totalBuscaAtiva += bt.totalContatos;
+            else alunosSemContato++;
+        });
+
+        // KPIs Atualizados
+        const exportKpis: ExportKPI[] = [];
         if (kpis) {
             exportKpis.push(
                 { label: 'Taxa de Presença Geral', value: formatPercent(kpis.taxa_presenca_geral) },
-                { label: 'Total de Alunos', value: kpis.total_alunos || 0 }
+                { label: 'Total de Alunos Ativos', value: kpis.total_alunos || 0 },
+                { label: 'Alunos em Risco (>30% faltas)', value: alunosRisco.length },
+                { label: 'Alunos com 3+ Faltas Consec.', value: alunosConsecutivos.length },
+                { label: 'Contatos Busca Ativa (Total)', value: totalBuscaAtiva },
+                { label: 'Alunos no Risco s/ Contato BA', value: alunosSemContato }
             );
         }
 
-        if (kpisAdmin) {
-            exportKpis.push(
-                { label: 'Atestados Pendentes', value: kpisAdmin.atestados_pendentes || 0 },
-                { label: 'Justificativas a Rever', value: kpisAdmin.justificativas_a_rever || 0 }
-            );
-        }
-
-        // Build tables
         const tabelas: DashboardExportData['tabelas'] = [];
 
-        // Table: Frequency by Class
+        // 1. Resumo Mensal (NOVO)
+        if (resumoMensal.length > 0) {
+            tabelas.push({
+                titulo: 'Resumo Mensal de Frequência',
+                data: {
+                    headers: ['Mês', '% Presença', '% Faltas'],
+                    rows: resumoMensal.map(m => [
+                        m.mes,
+                        formatPercent(100 - m.percentualFaltas),
+                        formatPercent(m.percentualFaltas)
+                    ])
+                }
+            });
+        }
+
+        // 2. Frequência por Turma
         if (turmasData.length > 0) {
             tabelas.push({
                 titulo: 'Frequência por Turma',
                 data: {
-                    headers: ['Turma', 'Taxa de Presença'],
-                    rows: turmasData.map(t => [
-                        t.turma_nome || '-',
-                        formatPercent(t.taxa_presenca)
-                    ])
+                    headers: ['Turma', 'Taxa de Presença', 'Alunos em Risco'],
+                    rows: turmasData.map(t => {
+                        const countRisco = alunosRisco.filter(a => a.turma_nome === t.turma_nome).length;
+                        return [
+                            t.turma_nome || '-',
+                            formatPercent(t.taxa_presenca),
+                            countRisco
+                        ];
+                    })
                 }
             });
         }
 
-        // Table: Students at Risk
+        // 3. Alunos em Risco
         if (alunosRisco.length > 0) {
             tabelas.push({
-                titulo: 'Alunos em Risco',
+                titulo: 'Alunos em Risco de Evasão',
                 data: {
-                    headers: ['Aluno', 'Turma', 'Total de Faltas'],
-                    rows: alunosRisco.map(a => [
-                        a.aluno_nome || '-',
-                        a.turma_nome || '-',
-                        a.total_faltas || 0
-                    ])
+                    headers: ['Aluno', 'Turma', 'Total Faltas', 'Status Busca Ativa', 'Último Contato'],
+                    rows: alunosRisco.map(a => {
+                        const ba = buscaAtivaResumo.get(a.aluno_id);
+                        return [
+                            a.aluno_nome || '-',
+                            a.turma_nome || '-',
+                            a.total_faltas || 0,
+                            ba?.contatado ? '✓ Contatado' : '✗ Sem contato',
+                            ba?.ultimoContato ? new Date(ba.ultimoContato).toLocaleDateString('pt-BR') : '-'
+                        ];
+                    })
                 }
             });
         }
 
-        // Table: Consecutive Absences
+        // 4. Faltas Consecutivas
         if (alunosConsecutivos.length > 0) {
             tabelas.push({
                 titulo: 'Faltas Consecutivas',
                 data: {
-                    headers: ['Aluno', 'Turma', 'Faltas Consecutivas', 'Última Falta'],
-                    rows: alunosConsecutivos.map(a => [
-                        a.aluno_nome || '-',
-                        a.turma_nome || '-',
-                        a.contagem_faltas_consecutivas || 0,
-                        a.ultima_falta || '-'
-                    ])
+                    headers: ['Aluno', 'Turma', 'Faltas Seguidas', 'Status Busca Ativa', 'Último Contato'],
+                    rows: alunosConsecutivos.map(a => {
+                        const ba = buscaAtivaResumo.get(a.aluno_id);
+                        return [
+                            a.aluno_nome || '-',
+                            a.turma_nome || '-',
+                            a.contagem_faltas_consecutivas || 0,
+                            ba?.contatado ? '✓ Contatado' : '✗ Sem contato',
+                            ba?.ultimoContato ? new Date(ba.ultimoContato).toLocaleDateString('pt-BR') : '-'
+                        ];
+                    })
                 }
             });
         }
@@ -123,7 +172,7 @@ export function ExportButton({
     const handleExportPDF = async () => {
         setIsExporting(true);
         try {
-            const data = prepareExportData();
+            const data = await prepareExportData();
             await exportDashboardPDF(data);
             toast({
                 title: 'PDF Exportado!',
@@ -132,8 +181,8 @@ export function ExportButton({
         } catch (error) {
             console.error('Erro ao exportar PDF:', error);
             toast({
-                title: 'Erro ao exportar',
-                description: 'Não foi possível gerar o PDF. Tente novamente.',
+                title: 'Erro ao analisar/exportar',
+                description: 'Não foi possível gerar o PDF. Revise a quantidade de dados.',
                 variant: 'destructive',
             });
         } finally {
@@ -144,7 +193,7 @@ export function ExportButton({
     const handleExportExcel = async () => {
         setIsExporting(true);
         try {
-            const data = prepareExportData();
+            const data = await prepareExportData();
             exportDashboardExcel(data);
             toast({
                 title: 'Excel Exportado!',
@@ -153,8 +202,8 @@ export function ExportButton({
         } catch (error) {
             console.error('Erro ao exportar Excel:', error);
             toast({
-                title: 'Erro ao exportar',
-                description: 'Não foi possível gerar o Excel. Tente novamente.',
+                title: 'Erro ao analisar/exportar',
+                description: 'Não foi possível gerar o Excel. Revise a quantidade de dados.',
                 variant: 'destructive',
             });
         } finally {
@@ -171,17 +220,17 @@ export function ExportButton({
                     ) : (
                         <Download className="mr-2 h-4 w-4" />
                     )}
-                    Exportar
+                    {isExporting ? 'Processando...' : 'Exportar Relatório'}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleExportPDF} disabled={isExporting}>
                     <FileText className="mr-2 h-4 w-4" />
-                    Exportar PDF
+                    Relatório em PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportExcel} disabled={isExporting}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Exportar Excel
+                    Planilha (Excel)
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>

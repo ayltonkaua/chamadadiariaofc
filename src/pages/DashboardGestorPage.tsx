@@ -36,6 +36,7 @@ import {
   type UltimaPresenca
 } from '@/domains';
 import { useEscolaConfig } from "@/contexts/EscolaConfigContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -109,6 +110,7 @@ function AlunoListItem({ aluno, tipo }: { aluno: AlunoRiscoData | AlunoFaltasCon
 
 // --- PÁGINA PRINCIPAL ---
 export default function DashboardGestorPage() {
+  const { user } = useAuth();
   const { config } = useEscolaConfig();
   const corPrimaria = config?.cor_primaria || "#3B82F6";
   const corSecundaria = config?.cor_secundaria || "#F59E0B";
@@ -186,6 +188,8 @@ export default function DashboardGestorPage() {
           <GerenciarEstagiosModal />
           
           <ExportButton
+            escolaId={user?.escola_id || ''}
+            anoLetivoId={filtroAnoLetivoId}
             nomeEscola={config?.nome || 'Escola'}
             anoLetivo={anosLetivosDisponiveis.find(a => a.id === filtroAnoLetivoId)?.nome || ''}
             kpis={kpis}
