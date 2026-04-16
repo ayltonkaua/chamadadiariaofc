@@ -200,7 +200,7 @@ export default function CentralBuscaAtivaPage() {
     ).length;
 
     return (
-        <div className="flex-1 flex flex-col h-[calc(100vh-64px)] bg-slate-50 relative overflow-hidden">
+        <div className="flex-1 flex flex-col h-[calc(100dvh-64px)] bg-slate-50 relative overflow-hidden">
             {/* Modal Controlado pelo Drag */}
             {studentToRegister && (
                 <RegistrarContatoModal 
@@ -222,7 +222,7 @@ export default function CentralBuscaAtivaPage() {
             )}
 
             {/* Header */}
-            <div className="bg-white border-b px-6 py-4 flex-shrink-0 z-10 shadow-sm">
+            <div className="bg-white border-b px-4 md:px-6 py-3 md:py-4 flex-shrink-0 z-10 shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -238,52 +238,52 @@ export default function CentralBuscaAtivaPage() {
                 </div>
 
                 {/* Widgets */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="bg-red-50 border-red-100">
-                        <CardContent className="p-4 flex items-center justify-between">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+                    <Card className="bg-red-50 border-red-100 flex-1">
+                        <CardContent className="p-3 md:p-4 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-red-600">Casos Críticos</p>
-                                <h3 className="text-2xl font-bold text-red-900">{alunosConsecutivos.length}</h3>
+                                <p className="text-xs md:text-sm font-medium text-red-600">Casos Críticos</p>
+                                <h3 className="text-xl md:text-2xl font-bold text-red-900">{alunosConsecutivos.length}</h3>
                             </div>
-                            <AlertTriangle className="h-8 w-8 text-red-200" />
+                            <AlertTriangle className="h-5 w-5 md:h-8 md:w-8 text-red-200" />
                         </CardContent>
                     </Card>
-                    <Card className="bg-amber-50 border-amber-100">
-                        <CardContent className="p-4 flex items-center justify-between">
+                    <Card className="bg-amber-50 border-amber-100 flex-1">
+                        <CardContent className="p-3 md:p-4 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-amber-600">Risco Contínuo</p>
-                                <h3 className="text-2xl font-bold text-amber-900">{alunosRisco.length}</h3>
+                                <p className="text-xs md:text-sm font-medium text-amber-600">Risco Contínuo</p>
+                                <h3 className="text-xl md:text-2xl font-bold text-amber-900">{alunosRisco.length}</h3>
                             </div>
-                            <AlertCircle className="h-8 w-8 text-amber-200" />
+                            <AlertCircle className="h-5 w-5 md:h-8 md:w-8 text-amber-200" />
                         </CardContent>
                     </Card>
-                    <Card className="bg-blue-50 border-blue-100">
-                        <CardContent className="p-4 flex items-center justify-between">
+                    <Card className="bg-blue-50 border-blue-100 flex-1">
+                        <CardContent className="p-3 md:p-4 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-blue-600">Por Fazer</p>
-                                <h3 className="text-2xl font-bold text-blue-900">{colunas['NAO_MONITORADOS'].length}</h3>
+                                <p className="text-xs md:text-sm font-medium text-blue-600">Por Fazer</p>
+                                <h3 className="text-xl md:text-2xl font-bold text-blue-900">{colunas['NAO_MONITORADOS'].length}</h3>
                             </div>
-                            <Clock className="h-8 w-8 text-blue-200" />
+                            <Clock className="h-5 w-5 md:h-8 md:w-8 text-blue-200" />
                         </CardContent>
                     </Card>
-                    <Card className="bg-emerald-50 border-emerald-100">
-                        <CardContent className="p-4 flex items-center justify-between">
+                    <Card className="bg-emerald-50 border-emerald-100 flex-1">
+                        <CardContent className="p-3 md:p-4 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-emerald-600">Alunos Tratados</p>
-                                <h3 className="text-2xl font-bold text-emerald-900">{contatosHoje} hoje</h3>
+                                <p className="text-xs md:text-sm font-medium text-emerald-600">Alunos Tratados</p>
+                                <h3 className="text-xl md:text-2xl font-bold text-emerald-900">{contatosHoje} hoje</h3>
                             </div>
-                            <CheckCircle className="h-8 w-8 text-emerald-200" />
+                            <CheckCircle className="h-5 w-5 md:h-8 md:w-8 text-emerald-200" />
                         </CardContent>
                     </Card>
                 </div>
             </div>
 
             {/* Kanban Board Area */}
-            <div className="flex-1 overflow-x-auto p-6 scrollbar-thin">
+            <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin snap-x snap-mandatory">
                 {loading ? (
-                    <div className="flex gap-6 h-full">
+                    <div className="flex gap-6 h-full items-stretch px-4 md:px-6 pt-4 md:pt-6 pb-2 w-max">
                         {[1, 2, 3].map(i => (
-                            <div key={i} className="min-w-[320px] max-w-[320px] lg:min-w-[350px] h-full flex flex-col gap-4">
+                            <div key={i} className="min-w-[85vw] md:min-w-[320px] max-w-[85vw] md:max-w-[320px] lg:min-w-[350px] lg:max-w-[350px] h-full flex flex-col gap-4 snap-center p-3">
                                 <Skeleton className="h-10 w-full rounded" />
                                 <Skeleton className="h-32 w-full rounded-xl" />
                                 <Skeleton className="h-32 w-full rounded-xl" />
@@ -292,7 +292,7 @@ export default function CentralBuscaAtivaPage() {
                     </div>
                 ) : (
                     <DragDropContext onDragEnd={onDragEnd}>
-                        <div className="flex flex-col lg:flex-row gap-6 lg:h-full items-start pb-10 lg:pb-0">
+                        <div className="flex gap-4 md:gap-6 h-full items-stretch w-max px-4 md:px-6 pt-4 md:pt-6 pb-2">
                             
                             {/* Coluna Não Monitorados */}
                             <Droppable droppableId="NAO_MONITORADOS">
@@ -300,13 +300,13 @@ export default function CentralBuscaAtivaPage() {
                                     <div 
                                         {...provided.droppableProps}
                                         ref={provided.innerRef}
-                                        className={`w-full lg:min-w-[350px] lg:max-w-[350px] bg-slate-200/50 rounded-xl p-3 flex flex-col gap-3 min-h-[350px] lg:max-h-full overflow-y-auto border-2 shadow-sm transition-colors ${snapshot.isDraggingOver ? 'border-dashed border-gray-400 bg-slate-200' : 'border-transparent'}`}
+                                        className={`w-[85vw] md:w-[320px] lg:w-[350px] h-full flex flex-col bg-slate-200/50 rounded-xl overflow-hidden border-2 shadow-sm transition-colors snap-center ${snapshot.isDraggingOver ? 'border-dashed border-gray-400 bg-slate-200' : 'border-transparent'}`}
                                     >
-                                        <div className="flex items-center justify-between sticky top-0 bg-slate-200/90 backdrop-blur pb-2 z-10 border-b border-white/50 pt-1">
+                                        <div className="flex items-center justify-between bg-slate-200/90 backdrop-blur z-10 border-b border-white/50 p-3 pt-3 flex-shrink-0">
                                             <h3 className="font-bold text-slate-700 uppercase text-sm tracking-wide">Não Monitorados</h3>
                                             <div className="bg-white text-slate-700 text-xs py-0.5 px-2 rounded font-bold shadow-sm">{colunas['NAO_MONITORADOS'].length}</div>
                                         </div>
-                                        <div className="flex flex-col gap-3 min-h-[4rem]">
+                                        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
                                             {colunas['NAO_MONITORADOS'].slice(0, visibleCount['NAO_MONITORADOS']).map((aluno, index) => (
                                                 <Draggable key={`nao_mon_${aluno.aluno_id}`} draggableId={aluno.aluno_id} index={index}>
                                                     {(dragProv, dragSnap) => (
@@ -343,13 +343,13 @@ export default function CentralBuscaAtivaPage() {
                                     <div 
                                         {...provided.droppableProps}
                                         ref={provided.innerRef}
-                                        className={`w-full lg:min-w-[350px] lg:max-w-[350px] bg-blue-100/50 rounded-xl p-3 flex flex-col gap-3 min-h-[350px] lg:max-h-full overflow-y-auto border-2 shadow-sm transition-colors ${snapshot.isDraggingOver ? 'border-dashed border-blue-400 bg-blue-100' : 'border-transparent'}`}
+                                        className={`w-[85vw] md:w-[320px] lg:w-[350px] h-full flex flex-col bg-blue-100/50 rounded-xl overflow-hidden border-2 shadow-sm transition-colors snap-center ${snapshot.isDraggingOver ? 'border-dashed border-blue-400 bg-blue-100' : 'border-transparent'}`}
                                     >
-                                        <div className="flex items-center justify-between sticky top-0 bg-blue-100/90 backdrop-blur pb-2 z-10 border-b border-white/50 pt-1">
+                                        <div className="flex items-center justify-between bg-blue-100/90 backdrop-blur z-10 border-b border-white/50 p-3 pt-3 flex-shrink-0">
                                             <h3 className="font-bold text-blue-800 uppercase text-sm tracking-wide">Monitorados</h3>
                                             <div className="bg-white text-blue-800 text-xs py-0.5 px-2 rounded font-bold shadow-sm">{colunas['MONITORADOS'].length}</div>
                                         </div>
-                                        <div className="flex flex-col gap-3 min-h-[4rem]">
+                                        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
                                             {colunas['MONITORADOS'].slice(0, visibleCount['MONITORADOS']).map((aluno, index) => (
                                                 <Draggable key={`mon_${aluno.aluno_id}`} draggableId={aluno.aluno_id} index={index}>
                                                     {(dragProv, dragSnap) => (
@@ -386,13 +386,13 @@ export default function CentralBuscaAtivaPage() {
                                     <div 
                                         {...provided.droppableProps}
                                         ref={provided.innerRef}
-                                        className={`w-full lg:min-w-[350px] lg:max-w-[350px] bg-emerald-100/50 rounded-xl p-3 flex flex-col gap-3 min-h-[350px] lg:max-h-full overflow-y-auto border-2 shadow-sm transition-colors ${snapshot.isDraggingOver ? 'border-dashed border-emerald-400 bg-emerald-100' : 'border-transparent'}`}
+                                        className={`w-[85vw] md:w-[320px] lg:w-[350px] h-full flex flex-col bg-emerald-100/50 rounded-xl overflow-hidden border-2 shadow-sm transition-colors snap-center ${snapshot.isDraggingOver ? 'border-dashed border-emerald-400 bg-emerald-100' : 'border-transparent'}`}
                                     >
-                                        <div className="flex items-center justify-between sticky top-0 bg-emerald-100/90 backdrop-blur pb-2 z-10 border-b border-white/50 pt-1">
+                                        <div className="flex items-center justify-between bg-emerald-100/90 backdrop-blur z-10 border-b border-white/50 p-3 pt-3 flex-shrink-0">
                                             <h3 className="font-bold text-emerald-800 uppercase text-sm tracking-wide">Retornaram</h3>
                                             <div className="bg-white text-emerald-800 text-xs py-0.5 px-2 rounded font-bold shadow-sm">{colunas['RETORNARAM'].length}</div>
                                         </div>
-                                        <div className="flex flex-col gap-3 min-h-[4rem]">
+                                        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
                                             {colunas['RETORNARAM'].slice(0, visibleCount['RETORNARAM']).map((aluno, index) => (
                                                 <Draggable key={`ret_${aluno.aluno_id}`} draggableId={aluno.aluno_id} index={index}>
                                                     {(dragProv, dragSnap) => (
