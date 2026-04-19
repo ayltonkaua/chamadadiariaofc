@@ -69,14 +69,13 @@ async function startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phone
             return;
         }
 
-        const { data: registros, error } = await supabase
+        const { data: rawRegistros, error } = await supabase
             .from('programas_registros')
             .select(`
                 id, dados_pagamento, matricula_beneficiario,
-                programas_sociais!inner(nome, ativo)
+                programas_sociais (nome, ativo)
             `)
-            .in('matricula_beneficiario', matriculas)
-            .eq('programas_sociais.ativo', true);
+            .in('matricula_beneficiario', matriculas);
 
         if (error) {
             console.error(`❌ [CONSULTA-BENEFICIO] Erro ao buscar registros:`, error.message);
@@ -84,6 +83,8 @@ async function startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phone
             clearSession(sessionKey);
             return;
         }
+
+        const registros = (rawRegistros || []).filter(r => r.programas_sociais && r.programas_sociais.ativo);
 
         if (!registros || registros.length === 0) {
             await replyFn(`📋 *Consulta de Benefícios*\n\nNenhum benefício ou pagamento foi encontrado para a(s) matrícula(s) vinculada(s) ao seu número.\n\nSe tiver dúvidas, procure a secretaria da escola.`);
