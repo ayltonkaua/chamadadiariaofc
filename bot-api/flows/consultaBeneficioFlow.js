@@ -72,7 +72,7 @@ async function startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phone
         const { data: registros, error } = await supabase
             .from('programas_registros')
             .select(`
-                id, data_pagamento, dados_pagamento, matricula_beneficiario,
+                id, dados_pagamento, matricula_beneficiario,
                 programas_sociais!inner(nome, ativo)
             `)
             .in('matricula_beneficiario', matriculas)
@@ -108,7 +108,7 @@ async function startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phone
 
             msg += `👤 *Aluno(a):* ${student?.nome || 'Desconhecido'}\n`;
             msg += `💰 *Benefício:* ${reg.programas_sociais.nome}\n`;
-            msg += `📅 *Pagamento:* ${reg.data_pagamento ? formatDateBR(reg.data_pagamento) : (dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Data não informada')}\n`;
+            msg += `📅 *Pagamento:* ${dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Data não informada'}\n`;
             msg += `💵 *Valor:* ${formatCurrency(dados.valor)}\n`;
             msg += `🔒 *Responsável (CPF):* ${maskCPF(dados.cpf_responsavel)}\n`;
             msg += `🏦 *Conta:* Ag: ${maskAgencia(dados.agencia)} | Cc: ${maskConta(dados.conta)}\n`;
@@ -155,7 +155,7 @@ async function handleWaitBeneficioCpf(session, sessionKey, text, replyFn) {
             authSuccess = true;
             msg += `👤 *Aluno(a):* ${reg.alunoNome}\n`;
             msg += `💰 *Benefício:* ${reg.programas_sociais.nome}\n`;
-            msg += `📅 *Pagamento:* ${reg.data_pagamento ? formatDateBR(reg.data_pagamento) : (dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Data não informada')}\n`;
+            msg += `📅 *Pagamento:* ${dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Data não informada'}\n`;
             msg += `💵 *Valor:* ${formatCurrency(dados.valor)}\n`;
             msg += `✅ *Responsável:* ${dados.nome_responsavel || 'Não informado'} (${dados.cpf_responsavel})\n`;
             msg += `🏦 *Banco:* ${dados.banco || 'Não informado'}\n`;
