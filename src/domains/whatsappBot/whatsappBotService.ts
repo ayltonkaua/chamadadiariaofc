@@ -458,24 +458,29 @@ RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
             body: JSON.stringify({ telefone, mensagem }),
         });
 
-        // Append reply atomically via RPC to avoid race conditions
-        const novaResposta = {
+        // Append reply to the ticket's respostas array
+        const { data: ticket } = await db
+            .from('whatsapp_atendimentos')
+            .select('respostas')
+            .eq('id', ticketId)
+            .single();
+
+        const respostas = ticket?.respostas || [];
+        respostas.push({
             remetente: 'secretaria',
             mensagem: mensagem.replace(/^\*[^:]+:\*\s*/, ''), // Remove prefix "*Nome:* " for storage
             atendente: atendenteName || 'Secretaria',
             timestamp: new Date().toISOString(),
-        };
-
-        const { error } = await db.rpc('append_atendimento_resposta', {
-            p_ticket_id: ticketId,
-            p_resposta: novaResposta,
-            p_novo_status: 'EM_ATENDIMENTO'
         });
 
-        if (error) {
-            console.error('Erro ao atualizar atendimento:', error);
-            throw error;
-        }
+        await db
+            .from('whatsapp_atendimentos')
+            .update({ 
+                respostas, 
+                status: 'EM_ATENDIMENTO',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', ticketId);
     },
 
     /**

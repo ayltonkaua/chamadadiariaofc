@@ -1,7 +1,7 @@
 const { startJustificativaFlow, handleWaitAlunoChoice, handleWaitDataChoice, handleWaitMotivo, handleWaitOutroAluno } = require('./flows/justificativaFlow');
 const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
 const { handleWaitQuerCadastro, handleWaitCadTipoUsuario, handleWaitCadEstudanteTelResp, handleWaitCadNomeAluno, handleWaitCadConfirmaAluno, handleWaitCadNomeResp, handleWaitCadConfirmaTel, handleWaitCadResumo } = require('./flows/cadastroFlow');
-const { handleWaitAtendimentoMsg, handleInAtendimento } = require('./flows/atendimentoFlow');
+const { handleWaitAtendimentoMsg, handleInAtendimento, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
 const { setSession, clearSession } = require('./utils/sessionManager');
 
 const SETOR_MAP = {
@@ -42,6 +42,19 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                     }, replyFn);
                     await replyFn(`Você selecionou: *${label}*\n\nPor favor, digite sua dúvida/pedido para os nossos secretários ou envie a foto do documento necessário.`);
                     return;
+                }
+
+                // Antes de rejeitar: verificar se o usuário tem ticket aberto
+                // (pode acontecer se a session expirou e foi recriada como WAIT_URA_CHOICE)
+                if (escolaId && phoneCom9) {
+                    const absorbed = await routeToOpenAtendimento(
+                        escolaId, sessionKey, phoneCom9, phoneSem9, 
+                        textContent, mediaFallbackText, replyFn
+                    );
+                    if (absorbed) {
+                        console.log(`🔀 [SM] Mensagem em WAIT_URA_CHOICE redirecionada para ticket aberto`);
+                        return;
+                    }
                 }
 
                 setSession(sessionKey, session, replyFn);

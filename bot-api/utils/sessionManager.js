@@ -11,13 +11,18 @@ function setSession(phone, data, replyFn) {
     if (activeConversations.has(phone)) {
         clearTimeout(activeConversations.get(phone).timer);
     }
-    // Timeout de 3 minutos
+
+    // Timeout diferente para atendimento (30 min) vs fluxos normais (3 min)
+    const isAtendimento = data && (data.stage === 'IN_ATENDIMENTO' || data.stage === 'WAIT_ATENDIMENTO_MSG');
+    const timeoutMs = isAtendimento ? 30 * 60 * 1000 : 3 * 60 * 1000;
+
     const timer = setTimeout(async () => {
         activeConversations.delete(phone);
         
         if (data && data.stage === 'IN_ATENDIMENTO') {
             // Se o usuário está em atendimento, ele provavelmente está aguardando a resposta da escola.
             // Apenas limpamos da memória para economizar recursos. Não fechamos o ticket.
+            console.log(`⏱️ [SESSION] Timeout IN_ATENDIMENTO para ${phone.slice(-8)} — removendo da RAM (ticket permanece aberto)`);
             return;
         }
         
@@ -28,7 +33,7 @@ function setSession(phone, data, replyFn) {
                 console.error("Erro ao enviar mensagem de inatividade:", err);
             }
         }
-    }, 3 * 60 * 1000);
+    }, timeoutMs);
     
     activeConversations.set(phone, { ...data, timer });
 }
