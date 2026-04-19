@@ -38,6 +38,10 @@ export default function BotAutomations({ config, savingConfig, onSaveConfig, isC
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [sendingBuscaAtiva, setSendingBuscaAtiva] = useState(false);
 
+  // Calendário / Aulas state
+  const [temAulaHoje, setTemAulaHoje] = useState(config?.tem_aula_hoje ?? true);
+  const [motivoSemAula, setMotivoSemAula] = useState(config?.motivo_sem_aula ?? '');
+
   // Sync local state when config loads/changes
   useEffect(() => {
     if (config) {
@@ -50,6 +54,8 @@ export default function BotAutomations({ config, savingConfig, onSaveConfig, isC
       setTemplateMensal(config.template_mensal ?? '');
       setGrupoBuscaAtivaId(config.grupo_busca_ativa_id ?? '');
       setTemplateEscalacao(config.template_escalacao ?? '');
+      setTemAulaHoje(config.tem_aula_hoje ?? true);
+      setMotivoSemAula(config.motivo_sem_aula ?? '');
     }
   }, [config]);
 
@@ -84,7 +90,9 @@ export default function BotAutomations({ config, savingConfig, onSaveConfig, isC
     autoMensal !== (config?.auto_mensal ?? false) ||
     templateMensal !== (config?.template_mensal ?? '') ||
     grupoBuscaAtivaId !== (config?.grupo_busca_ativa_id ?? '') ||
-    templateEscalacao !== (config?.template_escalacao ?? '');
+    templateEscalacao !== (config?.template_escalacao ?? '') ||
+    temAulaHoje !== (config?.tem_aula_hoje ?? true) ||
+    motivoSemAula !== (config?.motivo_sem_aula ?? '');
 
   const handleSave = async () => {
     await onSaveConfig({
@@ -97,6 +105,8 @@ export default function BotAutomations({ config, savingConfig, onSaveConfig, isC
       template_mensal: templateMensal,
       grupo_busca_ativa_id: grupoBuscaAtivaId || null,
       template_escalacao: templateEscalacao,
+      tem_aula_hoje: temAulaHoje,
+      motivo_sem_aula: motivoSemAula,
     } as any);
   };
 
@@ -134,6 +144,34 @@ export default function BotAutomations({ config, savingConfig, onSaveConfig, isC
           Salvar Modificações
         </Button>
       </div>
+
+      {/* Card 0: Status de Aula */}
+      <Card className={`border-l-4 transition-all ${temAulaHoje ? 'border-l-blue-500 bg-white' : 'border-l-orange-500 bg-orange-50/50'}`}>
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-center mb-1">
+            <Badge variant={temAulaHoje ? 'default' : 'destructive'} className={temAulaHoje ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}>
+              {temAulaHoje ? '📚 SIM, TEM AULA' : '❌ NÃO TEM AULA'}
+            </Badge>
+            <Switch checked={temAulaHoje} onCheckedChange={setTemAulaHoje} />
+          </div>
+          <CardTitle className="text-lg flex items-center gap-2">
+            Status de Aula Hoje
+          </CardTitle>
+          <CardDescription>
+            Como o bot deve responder quando os pais perguntarem "Hoje tem aula?".
+          </CardDescription>
+        </CardHeader>
+        {!temAulaHoje && (
+          <CardContent>
+            <label className="text-xs font-semibold text-slate-600 block mb-1">Motivo (ex: Recesso Escolar, Chuva Forte, Reunião)</label>
+            <Input 
+              value={motivoSemAula} 
+              onChange={(e) => setMotivoSemAula(e.target.value)}
+              placeholder="Ex: Ponto Facultativo..."
+            />
+          </CardContent>
+        )}
+      </Card>
 
       {!isConnected && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-sm flex items-center gap-3">

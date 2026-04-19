@@ -2,6 +2,8 @@ const { startJustificativaFlow, handleWaitAlunoChoice, handleWaitDataChoice, han
 const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
 const { handleWaitQuerCadastro, handleWaitCadTipoUsuario, handleWaitCadEstudanteTelResp, handleWaitCadNomeAluno, handleWaitCadConfirmaAluno, handleWaitCadNomeResp, handleWaitCadConfirmaTel, handleWaitCadResumo } = require('./flows/cadastroFlow');
 const { handleWaitAtendimentoMsg, handleInAtendimento, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
+const { startConsultaAulaFlow } = require('./flows/consultaAulaFlow');
+const { startConsultaBeneficioFlow, handleWaitBeneficioCpf } = require('./flows/consultaBeneficioFlow');
 const { setSession, clearSession } = require('./utils/sessionManager');
 const { classifyIntent } = require('./utils/aiClassifier');
 
@@ -41,6 +43,18 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                     return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
                 }
 
+                if (choice === '7') {
+                    // Note: socket info needed for group invite link is handled inside inbound.js when intent is detected,
+                    // but if users type 7, we pass null as sock since we don't have it directly here unless passed down.
+                    // This is a menu trap, usually AI classifies to inbound.js which has the sock object.
+                    // To be safe, we'll route to consulta aula (sock won't generate links if null).
+                    return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn);
+                }
+
+                if (choice === '8') {
+                    return await startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+                }
+
                 if (SETOR_MAP[choice]) {
                     const { setor, label } = SETOR_MAP[choice];
                     setSession(sessionKey, { 
@@ -77,6 +91,24 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                         if (aiResult.intent === 'consultar_faltas') {
                             return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
                         }
+                        // --- NOVOS INTENTS NA RECLASSIFICAÇÃO DO MENU ---
+                        if (aiResult.intent === 'consultar_aula') {
+                            return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn);
+                        }
+                        if (aiResult.intent === 'avisar_ausencia') {
+                            // Cria ticket temporário para avisar ausência
+                            const fakeSession = { setor: 'secretaria', setorLabel: 'Secretaria', escolaId, phoneCom9, phoneSem9 };
+                            const motivoAbs = `[AUSÊNCIA ANTECIPADA] ${text}`;
+                            return await handleWaitAtendimentoMsg(fakeSession, sessionKey, escolaId, phoneCom9, phoneSem9, motivoAbs, mediaFallbackText, replyFn);
+                        }
+                        if (aiResult.intent === 'consultar_beneficio') {
+                            return await startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+                        }
+                        if (aiResult.intent === 'corrigir_beneficio') {
+                            const fakeSession = { setor: 'correcao_beneficio', setorLabel: 'Correção Meu Tênis', escolaId, phoneCom9, phoneSem9 };
+                            return await handleWaitAtendimentoMsg(fakeSession, sessionKey, escolaId, phoneCom9, phoneSem9, text, mediaFallbackText, replyFn);
+                        }
+                        
                         if (AI_INTENT_SETOR[aiResult.intent]) {
                             const { setor, label } = AI_INTENT_SETOR[aiResult.intent];
                             setSession(sessionKey, { 
@@ -85,15 +117,15 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                                 setor,
                                 setorLabel: label,
                             }, replyFn);
+                            // Avoid greeting repetitively if not needed, but keep legacy support
                             await replyFn(`Entendi! Você precisa de ajuda com *${label}*. 😊\n\nPor favor, descreva seu pedido ou envie a foto do documento necessário:`);
                             return;
                         }
-                        // saudacao ou desconhecido → cai no fallback abaixo
                     }
                 }
 
                 setSession(sessionKey, session, replyFn);
-                await replyFn("Não consegui entender. 😅 Por favor, responda com o *número* da opção desejada (1 a 6), ou descreva o que precisa com mais detalhes.");
+                await replyFn("Não consegui entender. 😅 Por favor, responda com o *número* da opção desejada (1 a 8), ou descreva o que precisa com mais detalhes.");
                 return;
             }
 
@@ -132,6 +164,10 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
             case 'WAIT_OUTRO_ALUNO':
                 return await handleWaitOutroAluno(session, sessionKey, textLower, escolaId, replyFn);
             
+            // BENEFICIOS
+            case 'WAIT_BENEFICIO_CPF':
+                return await handleWaitBeneficioCpf(session, sessionKey, text, replyFn);
+
             default:
                 console.warn(`Stage desconhecido: ${session.stage}`);
                 clearSession(sessionKey);

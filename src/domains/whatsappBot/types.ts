@@ -17,6 +17,8 @@ export interface WhatsAppBotConfig {
     auto_mensal: boolean;
     horario_falta_diaria: string;
     ativo: boolean;
+    tem_aula_hoje: boolean;     // NOVO CAMPO
+    motivo_sem_aula: string;    // NOVO CAMPO
     created_at: string;
     updated_at: string;
 }
@@ -199,7 +201,7 @@ export interface JustificativaPendente {
 // WhatsApp Atendimentos (URA) Types
 // =====================
 
-export type AtendimentoSetor = 'carteirinha' | 'boletim' | 'declaracao' | 'pe_de_meia';
+export type AtendimentoSetor = 'carteirinha' | 'boletim' | 'declaracao' | 'pe_de_meia' | 'secretaria' | 'correcao_beneficio';
 export type AtendimentoStatus = 'ABERTO' | 'EM_ATENDIMENTO' | 'FINALIZADO';
 
 export interface AtendimentoReply {
@@ -220,3 +222,23 @@ export interface WhatsAppAtendimento {
     created_at: string;
     updated_at: string;
 }
+
+// =====================
+// CRM Contact Info Types
+// =====================
+
+export interface ContactAluno {
+    id: string;
+    nome: string;
+    matricula: string;
+    situacao: string;
+    turma_nome: string | null;
+}
+
+export interface ContactInfo {
+    nome_responsavel: string | null;
+    alunos: ContactAluno[];
+    tickets_anteriores: number;
+    primeiro_contato: string | null;
+}
+

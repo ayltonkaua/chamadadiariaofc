@@ -10,13 +10,14 @@
  */
 
 const { normalizePhone } = require('./utils/phoneNormalizer');
-const { hasSession, getSession, setSession } = require('./utils/sessionManager');
-const { handleStateMachine } = require('./stateMachine');
-const { routeToOpenAtendimento } = require('./flows/atendimentoFlow');
+const { getSession, setSession, hasSession, clearSession } = require('./utils/sessionManager');
 const { classifyIntent, getGreetingMessage, getUnknownMessage } = require('./utils/aiClassifier');
 const { startJustificativaFlow } = require('./flows/justificativaFlow');
 const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
-const { handleWaitAtendimentoMsg } = require('./flows/atendimentoFlow');
+const { startConsultaAulaFlow } = require('./flows/consultaAulaFlow');
+const { startConsultaBeneficioFlow } = require('./flows/consultaBeneficioFlow');
+const { handleStateMachine } = require('./stateMachine');
+const { handleWaitAtendimentoMsg, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
 
 // ═══════════════════════════════════════════════
 // Mapa LID → Telefone real (resolve o bug @lid do Baileys v6+)
@@ -175,7 +176,7 @@ function setupInboundListener(sock, escolaId) {
                 }
             };
 
-            await processIncomingMessage(escolaId, resolved.phone, textContent, replyFn, mediaFallbackText);
+            await processIncomingMessage(escolaId, resolved.phone, textContent, replyFn, mediaFallbackText, sock);
 
         } catch (error) {
             console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Error:`, error.message);
@@ -210,7 +211,7 @@ function setupInboundListener(sock, escolaId) {
     }
 }
 
-async function processIncomingMessage(escolaId, phoneString, textContent, replyFn, mediaFallbackText) {
+async function processIncomingMessage(escolaId, phoneString, textContent, replyFn, mediaFallbackText, sock = null) {
     const { sessionKey, phoneCom9, phoneSem9 } = normalizePhone(phoneString);
 
     console.log(`🔑 [INBOUND] [${escolaId.substring(0,8)}] sessionKey=${sessionKey.slice(-8)} | com9=${phoneCom9.slice(-8)} | sem9=${phoneSem9.slice(-8)}`);
@@ -219,6 +220,8 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
     if (hasSession(sessionKey)) {
         const session = getSession(sessionKey);
         console.log(`📌 [INBOUND] [${escolaId.substring(0,8)}] Session ativa: stage=${session.stage}`);
+        // StateMachine doesn't currently take sock directly, we'd have to pass it if needed, but only menu needs it.
+        // It's mostly passed by session storage natively, but if the menu option is pressed, menu doesn't have sock.
         return await handleStateMachine(session, sessionKey, textContent, mediaFallbackText, replyFn);
     }
 
@@ -235,7 +238,7 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
     const classification = await classifyIntent(textContent);
 
     if (classification) {
-        return await executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
+        return await executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn, sock);
     }
 
     // ═══ PASSO 4: IA não entendeu → Mensagem amigável com menu fallback ═══
@@ -253,7 +256,7 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
 /**
  * Executa a ação correspondente à intenção classificada pela IA.
  */
-async function executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn) {
+async function executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn, sock = null) {
     const { intent } = classification;
 
     // ── Justificar falta ──
@@ -262,10 +265,38 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
         return await startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
     }
 
-    // ── Consultar faltas ──
+    // ── Consultar Faltas ──
     if (intent === 'consultar_faltas') {
         console.log(`📊 [INBOUND] [${escolaId.substring(0,8)}] Intent: consultar_faltas`);
         return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+    }
+
+    // ── Consultar Aula ("Hoje tem aula?") ──
+    if (intent === 'consultar_aula') {
+        console.log(`📚 [INBOUND] [${escolaId.substring(0,8)}] Intent: consultar_aula`);
+        // Aqui temos o `sock` passado pelo processIncomingMessage.
+        return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, sock, replyFn); 
+    }
+
+    // ── Avisar Ausência Antecipada ──
+    if (intent === 'avisar_ausencia') {
+        console.log(`🤒 [INBOUND] [${escolaId.substring(0,8)}] Intent: avisar_ausencia`);
+        const fakeSession = { setor: 'secretaria', setorLabel: 'Secretaria', escolaId, phoneCom9, phoneSem9 };
+        const motivoAbs = `[AUSÊNCIA ANTECIPADA] ${textContent}`;
+        return await handleWaitAtendimentoMsg(fakeSession, sessionKey, escolaId, phoneCom9, phoneSem9, motivoAbs, mediaFallbackText, replyFn);
+    }
+
+    // ── Consultar Benefícios (Meu Tênis) ──
+    if (intent === 'consultar_beneficio') {
+        console.log(`👟 [INBOUND] [${escolaId.substring(0,8)}] Intent: consultar_beneficio`);
+        return await startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+    }
+
+    // ── Corrigir Benefícios ──
+    if (intent === 'corrigir_beneficio') {
+        console.log(`🔧 [INBOUND] [${escolaId.substring(0,8)}] Intent: corrigir_beneficio`);
+        const fakeSession = { setor: 'correcao_beneficio', setorLabel: 'Correção Meu Tênis', escolaId, phoneCom9, phoneSem9 };
+        return await handleWaitAtendimentoMsg(fakeSession, sessionKey, escolaId, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
     }
 
     // ── Atendimento (carteirinha, boletim, declaração, pé-de-meia) ──

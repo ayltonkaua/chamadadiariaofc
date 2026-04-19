@@ -26,4 +26,6 @@ export type {
     AtendimentoStatus,
     JustificativaStatus,
     JustificativaPendente,
+    ContactInfo,
+    ContactAluno,
 } from './types';

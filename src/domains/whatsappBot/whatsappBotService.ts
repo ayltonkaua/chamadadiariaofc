@@ -494,6 +494,76 @@ RESPONDA EXATAMENTE neste formato, sem texto extra antes ou depois:
         
         if (error) throw error;
     },
+
+    /**
+     * Get contact info for the CRM sidebar — student data, responsavel name, ticket history
+     */
+    async getContactInfo(escolaId: string, telefone: string): Promise<any> {
+        // Normalize phone variants
+        const cleaned = telefone.replace(/\D/g, '');
+        let phoneCom9 = cleaned;
+        let phoneSem9 = cleaned;
+        
+        if (cleaned.length === 13 && cleaned.startsWith('55') && cleaned[4] === '9') {
+            phoneSem9 = cleaned.substring(0, 4) + cleaned.substring(5);
+        } else if (cleaned.length === 12 && cleaned.startsWith('55')) {
+            phoneCom9 = cleaned.substring(0, 4) + '9' + cleaned.substring(4);
+        }
+
+        // Fetch students linked to this phone
+        const { data: students } = await db
+            .from('alunos')
+            .select('id, nome, matricula, situacao, turma_id')
+            .eq('escola_id', escolaId)
+            .eq('situacao', 'ativo')
+            .or(`telefone_responsavel.in.(${phoneCom9},${phoneSem9}),telefone_responsavel_2.in.(${phoneCom9},${phoneSem9})`);
+
+        // Get turma names
+        let alunos: any[] = [];
+        if (students && students.length > 0) {
+            const turmaIds = [...new Set(students.map((s: any) => s.turma_id).filter(Boolean))];
+            let turmaMap: Record<string, string> = {};
+            if (turmaIds.length > 0) {
+                const { data: turmas } = await db
+                    .from('turmas')
+                    .select('id, nome')
+                    .in('id', turmaIds);
+                if (turmas) {
+                    turmas.forEach((t: any) => { turmaMap[t.id] = t.nome; });
+                }
+            }
+            alunos = students.map((s: any) => ({
+                id: s.id,
+                nome: s.nome,
+                matricula: s.matricula,
+                situacao: s.situacao,
+                turma_nome: turmaMap[s.turma_id] || null,
+            }));
+        }
+
+        // Count previous tickets
+        const { count } = await db
+            .from('whatsapp_atendimentos')
+            .select('*', { count: 'exact', head: true })
+            .eq('escola_id', escolaId)
+            .in('telefone_origem', [cleaned, phoneCom9, phoneSem9]);
+
+        // Get first contact date
+        const { data: firstTicket } = await db
+            .from('whatsapp_atendimentos')
+            .select('created_at')
+            .eq('escola_id', escolaId)
+            .in('telefone_origem', [cleaned, phoneCom9, phoneSem9])
+            .order('created_at', { ascending: true })
+            .limit(1);
+
+        return {
+            nome_responsavel: students?.[0]?.nome_responsavel || null,
+            alunos,
+            tickets_anteriores: count || 0,
+            primeiro_contato: firstTicket?.[0]?.created_at || null,
+        };
+    },
 };
 
 /**
