@@ -19,25 +19,27 @@ const { formatDateBR } = require('../utils/dateFormatter');
 
 function maskCPF(cpf) {
     if (!cpf) return 'Não informado';
-    const clean = cpf.replace(/\D/g, '');
-    if (clean.length !== 11) return cpf;
+    const clean = String(cpf).replace(/\D/g, '');
+    if (clean.length !== 11) return String(cpf);
     return `***.${clean.substring(3, 6)}.***-${clean.substring(9)}`;
 }
 
 function maskConta(conta) {
     if (!conta) return 'Não informada';
-    if (conta.length <= 4) return '***' + conta;
-    return '***' + conta.slice(-4);
+    const strConta = String(conta);
+    if (strConta.length <= 4) return '***' + strConta;
+    return '***' + strConta.slice(-4);
 }
 
 function maskAgencia(agencia) {
     if (!agencia) return 'Não informada';
-    if (agencia.length <= 2) return agencia + '**';
-    return agencia.substring(0, 2) + '**';
+    const strAg = String(agencia);
+    if (strAg.length <= 2) return strAg + '**';
+    return strAg.substring(0, 2) + '**';
 }
 
 function formatCurrency(value) {
-    if (!value) return 'R$ 0,00';
+    if (!value || isNaN(Number(value))) return 'R$ 0,00';
     return `R$ ${parseFloat(value).toFixed(2).replace('.', ',')}`;
 }
 
@@ -150,7 +152,7 @@ async function handleWaitBeneficioCpf(session, sessionKey, text, replyFn) {
 
     for (const reg of registros) {
         const dados = reg.dados_pagamento || {};
-        const storedCpfClean = (dados.cpf_responsavel || '').replace(/\D/g, '');
+        const storedCpfClean = String(dados.cpf_responsavel || '').replace(/\D/g, '');
 
         if (inputClean === storedCpfClean) {
             authSuccess = true;
