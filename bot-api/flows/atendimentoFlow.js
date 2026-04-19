@@ -42,34 +42,24 @@ async function routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9
             return false; // return false para voltar ao menu
         }
 
-        let respostas = ticket.respostas;
-        if (typeof respostas === 'string') {
-            try { respostas = JSON.parse(respostas); } catch(e) { respostas = []; }
-        }
-        if (!Array.isArray(respostas)) {
-            respostas = [];
-        }
-
-        respostas.push({
+        const novaResposta = {
             remetente: 'pai',
             mensagem: mensagem.substring(0, 2000),
             timestamp: new Date().toISOString(),
-        });
+        };
 
-        const { error: updateError } = await supabase
-            .from('whatsapp_atendimentos')
-            .update({
-                respostas,
-                updated_at: new Date().toISOString(),
-            })
-            .eq('id', ticket.id);
+        const { data: updatedRespostas, error: updateError } = await supabase
+            .rpc('append_atendimento_resposta', {
+                p_ticket_id: ticket.id,
+                p_resposta: novaResposta
+            });
             
         if (updateError) {
              console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Erro update do ticket:`, updateError.message);
              return false;
         }
 
-        if (replyFn && respostas.length === 1) {
+        if (replyFn && Array.isArray(updatedRespostas) && updatedRespostas.length === 1) {
             try {
                 await replyFn("Sua mensagem foi adicionada ao atendimento aberto. Aguarde o retorno da secretaria ou digite *0* para sair.");
             } catch (replyErr) {
