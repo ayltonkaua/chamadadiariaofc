@@ -75,7 +75,7 @@ const SYNC_STRATEGIES: Record<SyncAtomType, SyncStrategy> = {
                 p_turma_id: chamada.turma_id,
                 p_data_chamada: chamada.data_chamada,
                 p_registros: chamada.registros,
-                p_client_timestamp: chamada.created_at
+                p_client_timestamp: chamada.updated_at
             };
         }
     },
@@ -92,7 +92,7 @@ const SYNC_STRATEGIES: Record<SyncAtomType, SyncStrategy> = {
                 p_data_observacao: obs.data_observacao,
                 p_titulo: obs.titulo,
                 p_descricao: obs.descricao,
-                p_client_timestamp: obs.created_at
+                p_client_timestamp: obs.updated_at
             };
         }
     },
