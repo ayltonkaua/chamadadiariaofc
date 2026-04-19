@@ -169,7 +169,7 @@ async function handleWaitBeneficioCpf(session, sessionKey, text, replyFn) {
     }
 
     if (authSuccess) {
-        msg += `⚠️ Se algum dado estiver incorreto,\nenvie _"corrigir meu tênis"_ para solicitar a alteração junto à escola.`;
+        msg += `⚠️ Se algum dado estiver incorreto (ex: conta diferente), ou você não o reconheça,\nbasta me responder com _"não conheço essa conta"_ ou _"corrigir dados"_ que abrirei um chamado pra você na secretaria.`;
         await replyFn(msg);
         clearSession(sessionKey); // Fluxo finalizado com sucesso
     } else {

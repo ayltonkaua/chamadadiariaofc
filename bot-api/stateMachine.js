@@ -32,7 +32,7 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
     try {
         switch (session.stage) {
             case 'WAIT_URA_CHOICE': {
-                const match = text.match(/^\[?0*([1-6])\]?[\.\-\)]*$/);
+                const match = text.match(/^\[?0*([1-8])\]?[\.\-\)]*$/);
                 const choice = match ? match[1] : null;
 
                 if (choice === '1') {
