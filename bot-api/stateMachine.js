@@ -3,12 +3,21 @@ const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
 const { handleWaitQuerCadastro, handleWaitCadTipoUsuario, handleWaitCadEstudanteTelResp, handleWaitCadNomeAluno, handleWaitCadConfirmaAluno, handleWaitCadNomeResp, handleWaitCadConfirmaTel, handleWaitCadResumo } = require('./flows/cadastroFlow');
 const { handleWaitAtendimentoMsg, handleInAtendimento, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
 const { setSession, clearSession } = require('./utils/sessionManager');
+const { classifyIntent } = require('./utils/aiClassifier');
 
 const SETOR_MAP = {
     '2': { setor: 'carteirinha', label: 'Carteira de Estudante' },
     '3': { setor: 'boletim', label: 'Histórico/Boletim Escolar' },
     '4': { setor: 'declaracao', label: 'Declaração de Escolaridade' },
     '5': { setor: 'pe_de_meia', label: 'Pé-de-Meia' },
+};
+
+// Mapa de intents AI → ação no WAIT_URA_CHOICE
+const AI_INTENT_SETOR = {
+    carteirinha: { setor: 'carteirinha', label: 'Carteira de Estudante' },
+    boletim:     { setor: 'boletim',     label: 'Histórico/Boletim Escolar' },
+    declaracao:  { setor: 'declaracao',  label: 'Declaração de Escolaridade' },
+    pe_de_meia:  { setor: 'pe_de_meia',  label: 'Pé-de-Meia' },
 };
 
 async function handleStateMachine(session, sessionKey, textContent, mediaFallbackText, replyFn) {
@@ -44,8 +53,7 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                     return;
                 }
 
-                // Antes de rejeitar: verificar se o usuário tem ticket aberto
-                // (pode acontecer se a session expirou e foi recriada como WAIT_URA_CHOICE)
+                // Verificar se o usuário tem ticket aberto
                 if (escolaId && phoneCom9) {
                     const absorbed = await routeToOpenAtendimento(
                         escolaId, sessionKey, phoneCom9, phoneSem9, 
@@ -57,8 +65,35 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                     }
                 }
 
+                // Não digitou número → tentar IA para classificar texto natural
+                if (text.length > 1 && escolaId) {
+                    const aiResult = await classifyIntent(text);
+                    if (aiResult && aiResult.confianca >= 0.6) {
+                        console.log(`🧠 [SM] WAIT_URA_CHOICE reclassificado via IA → ${aiResult.intent}`);
+                        
+                        if (aiResult.intent === 'justificar_falta') {
+                            return await startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+                        }
+                        if (aiResult.intent === 'consultar_faltas') {
+                            return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+                        }
+                        if (AI_INTENT_SETOR[aiResult.intent]) {
+                            const { setor, label } = AI_INTENT_SETOR[aiResult.intent];
+                            setSession(sessionKey, { 
+                                ...session, 
+                                stage: 'WAIT_ATENDIMENTO_MSG',
+                                setor,
+                                setorLabel: label,
+                            }, replyFn);
+                            await replyFn(`Entendi! Você precisa de ajuda com *${label}*. 😊\n\nPor favor, descreva seu pedido ou envie a foto do documento necessário:`);
+                            return;
+                        }
+                        // saudacao ou desconhecido → cai no fallback abaixo
+                    }
+                }
+
                 setSession(sessionKey, session, replyFn);
-                await replyFn("Não entendi. Por favor, responda apenas com o *número* da opção desejada (1 a 6).");
+                await replyFn("Não consegui entender. 😅 Por favor, responda com o *número* da opção desejada (1 a 6), ou descreva o que precisa com mais detalhes.");
                 return;
             }
 

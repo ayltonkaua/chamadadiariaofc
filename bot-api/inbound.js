@@ -1,22 +1,24 @@
 /**
- * WhatsApp Inbound Message Handler — v2 (Modularizado)
+ * WhatsApp Inbound Message Handler — v3 (AI Humanizado)
  * 
- * URA-based menu system for incoming messages:
- * 1 - Justificar Falta (com listagem de datas e múltiplos alunos)
- * 2 - Carteira de Estudante
- * 3 - Histórico/Boletim Escolar
- * 4 - Declaração de Escolaridade
- * 5 - Pé-de-Meia
+ * Substitui o menu URA rígido (1-6) por classificação de intenções via IA.
+ * A IA (Gemini Flash / Groq) é usada APENAS na primeira mensagem do usuário.
+ * Após classificada a intenção, os fluxos guiados (justificativa, cadastro, etc.)
+ * funcionam exatamente como antes via state machine.
  * 
- * Se o telefone não está vinculado, oferece auto-cadastro
- * (pré-cadastro com aprovação da secretaria).
+ * Fallback: se a IA falhar, exibe o menu URA clássico.
  */
 
 const { normalizePhone } = require('./utils/phoneNormalizer');
 const { hasSession, getSession, setSession } = require('./utils/sessionManager');
 const { handleStateMachine } = require('./stateMachine');
 const { routeToOpenAtendimento } = require('./flows/atendimentoFlow');
+const { classifyIntent, getGreetingMessage, getUnknownMessage } = require('./utils/aiClassifier');
+const { startJustificativaFlow } = require('./flows/justificativaFlow');
+const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
+const { handleWaitAtendimentoMsg } = require('./flows/atendimentoFlow');
 
+// Menu URA clássico como fallback
 const URA_MENU = `🤖 *Olá! Sou o assistente virtual da escola.* 
 
 Escolha uma opção digitando o número correspondente:
@@ -29,6 +31,14 @@ Escolha uma opção digitando o número correspondente:
 6️⃣ - Consultar Faltas
 
 _Responda apenas com o número da opção desejada._`;
+
+// Mapa de intents de atendimento → setor + label
+const ATENDIMENTO_INTENTS = {
+    carteirinha: { setor: 'carteirinha', label: 'Carteira de Estudante' },
+    boletim:     { setor: 'boletim',     label: 'Histórico/Boletim Escolar' },
+    declaracao:  { setor: 'declaracao',  label: 'Declaração de Escolaridade' },
+    pe_de_meia:  { setor: 'pe_de_meia',  label: 'Pé-de-Meia' },
+};
 
 const processedMessages = new Set();
 
@@ -44,28 +54,26 @@ function setupInboundListener(sock, escolaId) {
             if (msg.key.fromMe) return;
             if (msg.key.remoteJid.endsWith('@g.us')) return;
 
-            // Prevenção de duplicidade: ignorar se já processamos essa mensagem na memória
+            // Prevenção de duplicidade
             if (msg.key.id && processedMessages.has(msg.key.id)) {
                 return;
             }
-            
             if (msg.key.id) {
                 processedMessages.add(msg.key.id);
-                // Limpar cache a cada 200 mensagens para não gastar RAM infinita
                 if (processedMessages.size > 200) {
                     const firstItem = processedMessages.values().next().value;
                     processedMessages.delete(firstItem);
                 }
             }
 
-            // Detectar mídia (foto, documento, vídeo)
+            // Detectar mídia
             const hasMedia = !!(
                 msg.message.imageMessage || 
                 msg.message.documentMessage ||
                 msg.message.videoMessage
             );
 
-            // Extrair texto (com fallback para mídia)
+            // Extrair texto
             const textContent = 
                 msg.message.conversation || 
                 msg.message.extendedTextMessage?.text || 
@@ -74,12 +82,10 @@ function setupInboundListener(sock, escolaId) {
 
             const mediaFallbackText = hasMedia ? '[Atestado/Documento em anexo]' : null;
 
-            // Se não tem texto E não tem mídia, ignorar
             if (!textContent.trim() && !mediaFallbackText) return;
 
-            // Obter telefone do remetente e trata variacoes (@lid, etc)
+            // Obter telefone do remetente
             let rawPhone = msg.key.remoteJid;
-            
             if (rawPhone.includes('@lid')) {
                 const parsedMsg = JSON.parse(JSON.stringify(msg));
                 const realPhoneJid = parsedMsg.key?.senderPn || parsedMsg.key?.participant || parsedMsg.participant;
@@ -101,22 +107,30 @@ function setupInboundListener(sock, escolaId) {
 async function processIncomingMessage(escolaId, phoneString, textContent, replyFn, mediaFallbackText) {
     const { sessionKey, phoneCom9, phoneSem9 } = normalizePhone(phoneString);
 
-    // 1. Verificar se usuário já está navegando no BOT (Session ativa em RAM)
+    // ═══ PASSO 1: Session ativa na RAM? Continuar fluxo guiado ═══
     if (hasSession(sessionKey)) {
         const session = getSession(sessionKey);
         return await handleStateMachine(session, sessionKey, textContent, mediaFallbackText, replyFn);
     }
 
-    // 2. Verificar se usuário tem um ATENDIMENTO ABERTO no BD.
-    // (Pode não ter session na RAM pois estourou timeout, mas o ticket não foi fechado pela secretaria)
+    // ═══ PASSO 2: Ticket de atendimento aberto no BD? Canalizar ═══
     const hasOpenTicket = await routeToOpenAtendimento(escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
     if (hasOpenTicket) {
         console.log(`💬 [INBOUND] [${escolaId.substring(0,8)}] Mensagem canalizada para atendimento aberto | Tel: ${sessionKey.slice(-8)}`);
-        return; // Mensagem absorvida pelo ticket
+        return;
     }
 
-    // 3. Primeira interação: Exibir menu URA
-    console.log(`📋 [INBOUND] [${escolaId.substring(0,8)}] Exibindo menu URA para ${sessionKey.slice(-8)}`);
+    // ═══ PASSO 3: Classificar intenção via IA ═══
+    console.log(`🧠 [INBOUND] [${escolaId.substring(0,8)}] Classificando intenção para ${sessionKey.slice(-8)}...`);
+    
+    const classification = await classifyIntent(textContent);
+
+    if (classification) {
+        return await executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn);
+    }
+
+    // ═══ PASSO 4: IA não entendeu → Mensagem amigável com menu fallback ═══
+    console.log(`📋 [INBOUND] [${escolaId.substring(0,8)}] Fallback: exibindo ajuda para ${sessionKey.slice(-8)}`);
     setSession(sessionKey, { 
         stage: 'WAIT_URA_CHOICE', 
         escolaId, 
@@ -124,7 +138,86 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
         phoneSem9,
         originalMessage: textContent 
     }, replyFn);
-    await replyFn(URA_MENU);
+    await replyFn(getUnknownMessage());
+}
+
+/**
+ * Executa a ação correspondente à intenção classificada pela IA.
+ */
+async function executeIntent(classification, escolaId, sessionKey, phoneCom9, phoneSem9, textContent, mediaFallbackText, replyFn) {
+    const { intent } = classification;
+
+    // ── Justificar falta ──
+    if (intent === 'justificar_falta') {
+        console.log(`📝 [INBOUND] [${escolaId.substring(0,8)}] Intent: justificar_falta`);
+        return await startJustificativaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+    }
+
+    // ── Consultar faltas ──
+    if (intent === 'consultar_faltas') {
+        console.log(`📊 [INBOUND] [${escolaId.substring(0,8)}] Intent: consultar_faltas`);
+        return await startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn);
+    }
+
+    // ── Atendimento (carteirinha, boletim, declaração, pé-de-meia) ──
+    if (ATENDIMENTO_INTENTS[intent]) {
+        const { setor, label } = ATENDIMENTO_INTENTS[intent];
+        console.log(`🎫 [INBOUND] [${escolaId.substring(0,8)}] Intent: ${intent} → atendimento ${setor}`);
+
+        // Se veio com texto substancial (>10 chars), criar ticket diretamente
+        const textoSubstancial = (textContent || '').trim();
+        if (textoSubstancial.length > 10) {
+            // Criar ticket direto com a mensagem do usuário
+            const fakeSession = { 
+                setor, 
+                setorLabel: label, 
+                escolaId, 
+                phoneCom9, 
+                phoneSem9 
+            };
+            return await handleWaitAtendimentoMsg(
+                fakeSession, sessionKey, escolaId, phoneCom9, phoneSem9,
+                textoSubstancial, mediaFallbackText, replyFn
+            );
+        }
+
+        // Texto curto (ex: "boletim") → pedir detalhes
+        setSession(sessionKey, { 
+            stage: 'WAIT_ATENDIMENTO_MSG',
+            escolaId,
+            phoneCom9,
+            phoneSem9,
+            setor,
+            setorLabel: label,
+        }, replyFn);
+        await replyFn(`Entendi! Você precisa de ajuda com *${label}*. 😊\n\nPor favor, descreva seu pedido ou envie a foto do documento necessário para que a secretaria possa atender:`)
+        return;
+    }
+
+    // ── Saudação ──
+    if (intent === 'saudacao') {
+        console.log(`👋 [INBOUND] [${escolaId.substring(0,8)}] Intent: saudacao`);
+        setSession(sessionKey, { 
+            stage: 'WAIT_URA_CHOICE', 
+            escolaId, 
+            phoneCom9,
+            phoneSem9,
+            originalMessage: textContent 
+        }, replyFn);
+        await replyFn(getGreetingMessage());
+        return;
+    }
+
+    // ── Desconhecido / fallback ──
+    console.log(`❓ [INBOUND] [${escolaId.substring(0,8)}] Intent: desconhecido`);
+    setSession(sessionKey, { 
+        stage: 'WAIT_URA_CHOICE', 
+        escolaId, 
+        phoneCom9,
+        phoneSem9,
+        originalMessage: textContent 
+    }, replyFn);
+    await replyFn(getUnknownMessage());
 }
 
 module.exports = { setupInboundListener };
