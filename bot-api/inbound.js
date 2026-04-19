@@ -18,19 +18,76 @@ const { startJustificativaFlow } = require('./flows/justificativaFlow');
 const { startConsultaFaltasFlow } = require('./flows/consultaFaltasFlow');
 const { handleWaitAtendimentoMsg } = require('./flows/atendimentoFlow');
 
-// Menu URA clássico como fallback
-const URA_MENU = `🤖 *Olá! Sou o assistente virtual da escola.* 
+// ═══════════════════════════════════════════════
+// Mapa LID → Telefone real (resolve o bug @lid do Baileys v6+)
+// ═══════════════════════════════════════════════
+const lidToPhoneMap = new Map();
 
-Escolha uma opção digitando o número correspondente:
+/**
+ * Resolve o telefone REAL a partir de um remoteJid que pode ser @lid.
+ * Baileys v6+ envia JIDs @lid em que o ID NÃO é o número de telefone.
+ * 
+ * Estratégia:
+ * 1. Se é @s.whatsapp.net, extrair diretamente (caso clássico)
+ * 2. Se é @lid, tentar diversas fontes do msg para encontrar o telefone real
+ * 3. Se já mapeamos este LID antes, usar o cache
+ * 4. Último recurso: usar o próprio LID (vai falhar nas queries, mas pelo menos loga)
+ */
+function resolvePhoneFromMessage(msg) {
+    const remoteJid = msg.key.remoteJid || '';
 
-1️⃣ - Justificar Falta
-2️⃣ - Carteira de Estudante
-3️⃣ - Histórico/Boletim Escolar
-4️⃣ - Declaração de Escolaridade
-5️⃣ - Pé-de-Meia
-6️⃣ - Consultar Faltas
+    // ── Caso 1: JID normal @s.whatsapp.net ──
+    if (remoteJid.includes('@s.whatsapp.net')) {
+        const phone = remoteJid.split('@')[0];
+        // Cachear para caso futuro vir como @lid
+        return { phone, jid: remoteJid, source: 'jid' };
+    }
 
-_Responda apenas com o número da opção desejada._`;
+    // ── Caso 2: JID @lid — precisamos encontrar o telefone real ──
+    if (remoteJid.includes('@lid')) {
+        const lidId = remoteJid.split('@')[0];
+
+        // Fonte A: msg.verifiedBizName ou campos internos do Baileys
+        // Fonte B: senderPn (disponível em algumas versões)
+        // Fonte C: participant (usado em grupos, mas checamos)
+        // Fonte D: pushName não ajuda, mas key.participant pode
+        const parsedMsg = JSON.parse(JSON.stringify(msg));
+        
+        const candidates = [
+            parsedMsg.key?.senderPn,
+            parsedMsg.key?.participant,
+            parsedMsg.participant,
+            parsedMsg.verifiedBizName, // não é telefone, mas checamos
+        ].filter(Boolean);
+
+        for (const candidate of candidates) {
+            // Extrair telefone de qualquer formato JID
+            const cleaned = candidate.split('@')[0].replace(/\D/g, '');
+            if (cleaned.length >= 10 && cleaned.length <= 13) {
+                // Encontramos um telefone real! Cachear o mapeamento
+                lidToPhoneMap.set(lidId, cleaned);
+                console.log(`🔗 [LID-MAP] Mapeado ${lidId.substring(0,8)}... → ${cleaned.slice(-8)} (fonte: candidato)`);
+                return { phone: cleaned, jid: remoteJid, source: 'lid-resolved' };
+            }
+        }
+
+        // Fonte E: Cache de mapeamentos anteriores
+        if (lidToPhoneMap.has(lidId)) {
+            const cached = lidToPhoneMap.get(lidId);
+            console.log(`🔗 [LID-MAP] Cache hit: ${lidId.substring(0,8)}... → ${cached.slice(-8)}`);
+            return { phone: cached, jid: remoteJid, source: 'lid-cache' };
+        }
+
+        // Último recurso: LID puro (vai falhar nas queries, mas logamos para debug)
+        console.warn(`⚠️ [LID-MAP] NÃO conseguimos resolver LID: ${lidId}. Mensagem será perdida.`);
+        console.warn(`⚠️ [LID-MAP] msg.key:`, JSON.stringify(parsedMsg.key));
+        return { phone: null, jid: remoteJid, source: 'lid-unresolved' };
+    }
+
+    // ── Caso 3: Formato desconhecido ──
+    const phone = remoteJid.split('@')[0].replace(/\D/g, '');
+    return { phone: phone || null, jid: remoteJid, source: 'unknown-format' };
+}
 
 // Mapa de intents de atendimento → setor + label
 const ATENDIMENTO_INTENTS = {
@@ -45,14 +102,12 @@ const processedMessages = new Set();
 function setupInboundListener(sock, escolaId) {
     sock.ev.on('messages.upsert', async (m) => {
         try {
-            console.log(`\n\n=== 📥 NOVA MENSAGEM RECEBIDA [${escolaId.substring(0,8)}] ===`);
-
             if (m.type !== 'notify') return;
 
             const msg = m.messages[0];
             if (!msg || !msg.message) return;
             if (msg.key.fromMe) return;
-            if (msg.key.remoteJid.endsWith('@g.us')) return;
+            if (msg.key.remoteJid?.endsWith('@g.us')) return;
 
             // Prevenção de duplicidade
             if (msg.key.id && processedMessages.has(msg.key.id)) {
@@ -84,32 +139,86 @@ function setupInboundListener(sock, escolaId) {
 
             if (!textContent.trim() && !mediaFallbackText) return;
 
-            // Obter telefone do remetente
-            let rawPhone = msg.key.remoteJid;
-            if (rawPhone.includes('@lid')) {
-                const parsedMsg = JSON.parse(JSON.stringify(msg));
-                const realPhoneJid = parsedMsg.key?.senderPn || parsedMsg.key?.participant || parsedMsg.participant;
-                if (realPhoneJid) rawPhone = realPhoneJid;
-            }
+            // ═══ RESOLVER O TELEFONE REAL (fix definitivo do @lid) ═══
+            const resolved = resolvePhoneFromMessage(msg);
             
+            if (!resolved.phone) {
+                console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Não conseguimos resolver telefone do JID: ${msg.key.remoteJid}`);
+                // Tentar usar o JID numérico como último recurso
+                const fallbackPhone = (msg.key.remoteJid || '').split('@')[0].replace(/\D/g, '');
+                if (fallbackPhone.length < 8) {
+                    console.error(`❌ [INBOUND] Telefone irrecuperável. Ignorando mensagem.`);
+                    return;
+                }
+                resolved.phone = fallbackPhone;
+            }
+
+            // Se a mensagem veio de @s.whatsapp.net, pré-cachear para futuras @lid
+            if (resolved.source === 'jid' && resolved.phone) {
+                // O remoteJid é o telefone real. Quando o bot responder,
+                // o Baileys pode converter para @lid internamente.
+                // Vamos escutar a resposta do sendMessage para cachear.
+            }
+
+            console.log(`\n📥 [INBOUND] [${escolaId.substring(0,8)}] Msg de ${resolved.phone.slice(-8)} (${resolved.source}) | Texto: "${(textContent || '').substring(0,50)}"`);
+            
+            const phoneForMapping = resolved.phone;
             const replyFn = async (text) => {
-                await sock.sendMessage(msg.key.remoteJid, { text }, { quoted: msg });
+                const sentMsg = await sock.sendMessage(msg.key.remoteJid, { text }, { quoted: msg });
+                // Se o Baileys retornou a msg com um JID @lid diferente, cachear
+                if (sentMsg?.key?.remoteJid?.includes('@lid') && phoneForMapping) {
+                    const lidId = sentMsg.key.remoteJid.split('@')[0];
+                    if (!lidToPhoneMap.has(lidId)) {
+                        lidToPhoneMap.set(lidId, phoneForMapping);
+                        console.log(`🔗 [LID-MAP] replyFn: ${lidId.substring(0,8)}... → ${phoneForMapping.slice(-8)}`);
+                    }
+                }
             };
 
-            await processIncomingMessage(escolaId, rawPhone, textContent, replyFn, mediaFallbackText);
+            await processIncomingMessage(escolaId, resolved.phone, textContent, replyFn, mediaFallbackText);
 
         } catch (error) {
             console.error(`❌ [INBOUND] [${escolaId.substring(0,8)}] Error:`, error.message);
         }
     });
+
+    // ═══ LISTENER ADICIONAL: Mapear LID quando o Baileys informa ═══
+    // Alguns eventos do Baileys incluem mapeamento JID → telefone
+    try {
+        sock.ev.on('contacts.update', (contacts) => {
+            for (const contact of contacts) {
+                if (contact.id?.includes('@lid') && contact.notify) {
+                    // notify pode conter o nome, não o telefone, mas tentamos
+                }
+                // Se o contact tem um JID @lid e a versão do Baileys expõe o telefone:
+                if (contact.id?.includes('@lid')) {
+                    const lidId = contact.id.split('@')[0];
+                    // Checar lidPn (Phone Number) que algumas versões do Baileys incluem
+                    const pn = contact.lidPn || contact.verifiedName;
+                    if (pn) {
+                        const cleaned = pn.replace(/\D/g, '');
+                        if (cleaned.length >= 10) {
+                            lidToPhoneMap.set(lidId, cleaned);
+                            console.log(`🔗 [LID-MAP] contact.update: ${lidId.substring(0,8)}... → ${cleaned.slice(-8)}`);
+                        }
+                    }
+                }
+            }
+        });
+    } catch (e) {
+        // Ignorar se o evento não existir nessa versão do Baileys
+    }
 }
 
 async function processIncomingMessage(escolaId, phoneString, textContent, replyFn, mediaFallbackText) {
     const { sessionKey, phoneCom9, phoneSem9 } = normalizePhone(phoneString);
 
+    console.log(`🔑 [INBOUND] [${escolaId.substring(0,8)}] sessionKey=${sessionKey.slice(-8)} | com9=${phoneCom9.slice(-8)} | sem9=${phoneSem9.slice(-8)}`);
+
     // ═══ PASSO 1: Session ativa na RAM? Continuar fluxo guiado ═══
     if (hasSession(sessionKey)) {
         const session = getSession(sessionKey);
+        console.log(`📌 [INBOUND] [${escolaId.substring(0,8)}] Session ativa: stage=${session.stage}`);
         return await handleStateMachine(session, sessionKey, textContent, mediaFallbackText, replyFn);
     }
 
@@ -167,7 +276,6 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
         // Se veio com texto substancial (>10 chars), criar ticket diretamente
         const textoSubstancial = (textContent || '').trim();
         if (textoSubstancial.length > 10) {
-            // Criar ticket direto com a mensagem do usuário
             const fakeSession = { 
                 setor, 
                 setorLabel: label, 
@@ -220,4 +328,4 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
     await replyFn(getUnknownMessage());
 }
 
-module.exports = { setupInboundListener };
+module.exports = { setupInboundListener, lidToPhoneMap };

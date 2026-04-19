@@ -309,17 +309,33 @@ async function sendMessage(escolaId, phone, message) {
 
     // Busca na matriz do WhatsApp qual JID realmente existe
     let validJid = null;
+    let resolvedPhone = cleanPhone;
     for (const q of queries) {
         const jidToCheck = `${q}@s.whatsapp.net`;
         const result = await sock.onWhatsApp(jidToCheck);
         if (result && result.length > 0 && result[0].exists) {
             validJid = result[0].jid;
+            resolvedPhone = q;
             break;
         }
     }
 
     if (!validJid) {
         throw new Error('Número não possui conta de WhatsApp ativa (' + cleanPhone + ').');
+    }
+
+    // ═══ CACHEAR MAPEAMENTO LID → TELEFONE ═══
+    // Se o WhatsApp resolveu para um JID @lid, salvar o mapeamento
+    // para que quando o usuário responder (com @lid), saibamos o telefone real.
+    if (validJid.includes('@lid')) {
+        try {
+            const { lidToPhoneMap } = require('./inbound');
+            const lidId = validJid.split('@')[0];
+            lidToPhoneMap.set(lidId, resolvedPhone);
+            console.log(`🔗 [LID-MAP] sendMessage: ${lidId.substring(0,8)}... → ${resolvedPhone.slice(-8)}`);
+        } catch (e) {
+            // Ignorar se inbound ainda não foi carregado (startup)
+        }
     }
 
     await sock.sendMessage(validJid, { text: message });
