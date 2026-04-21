@@ -138,6 +138,24 @@ async function startConsultaBeneficioFlow(escolaId, sessionKey, phoneCom9, phone
 }
 
 async function handleWaitBeneficioCpf(session, sessionKey, text, replyFn) {
+    const textLower = text.trim().toLowerCase();
+    
+    if (textLower.match(/^(0|cancelar|sair|menu|voltar)$/i)) {
+        clearSession(sessionKey);
+        await replyFn("Consulta de benefícios cancelada. Retornando ao menu principal...");
+        return;
+    }
+
+    if (textLower.includes("não conheço") || textLower.includes("corrigir") || textLower.includes("errado") || textLower.includes("diferente")) {
+        // Redireciona o usuário para abrir chamado caso ele veja dados mascarados que já não reconhece
+        clearSession(sessionKey);
+        await replyFn("Entendi. Como você não reconhece ou precisa corrigir os dados, vou transferir para a secretaria...");
+        
+        const fakeSession = { setor: 'correcao_beneficio', setorLabel: 'Correção Meu Tênis', escolaId: session.escolaId };
+        const { handleWaitAtendimentoMsg } = require('./atendimentoFlow');
+        return await handleWaitAtendimentoMsg(fakeSession, sessionKey, session.escolaId, sessionKey, sessionKey, text, '', replyFn);
+    }
+
     const inputClean = text.replace(/\D/g, '');
 
     if (inputClean.length !== 11) {

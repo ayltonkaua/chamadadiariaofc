@@ -227,7 +227,7 @@ export const whatsappBotService = {
             'template_risco' | 'template_consecutiva' | 'template_mensal' | 
             'template_falta_diaria' | 'template_escalacao' | 'grupo_busca_ativa_id' | 
             'ativo' | 'auto_falta_diaria' | 'auto_consecutiva' | 'auto_mensal' | 'horario_falta_diaria' |
-            'grupos_favoritos'
+            'grupos_favoritos' | 'tem_aula_hoje' | 'motivo_sem_aula'
         >>
     ): Promise<WhatsAppBotConfig> {
         const existing = await whatsappBotService.getConfig(escolaId);

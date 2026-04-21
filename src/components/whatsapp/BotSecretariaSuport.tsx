@@ -27,6 +27,8 @@ const SETOR_CONFIG: Record<AtendimentoSetor, { label: string; icon: React.ReactN
     boletim: { label: 'Boletim', icon: <GraduationCap className="w-3.5 h-3.5" />, color: 'text-violet-700', bg: 'bg-violet-50 border-violet-200' },
     declaracao: { label: 'Declaração', icon: <FileText className="w-3.5 h-3.5" />, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
     pe_de_meia: { label: 'Pé-de-Meia', icon: <Coins className="w-3.5 h-3.5" />, color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+    secretaria: { label: 'Secretaria', icon: <MessageSquare className="w-3.5 h-3.5" />, color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' },
+    correcao_beneficio: { label: 'Meu Tênis PE', icon: <AlertCircle className="w-3.5 h-3.5" />, color: 'text-rose-700', bg: 'bg-rose-50 border-rose-200' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; dotColor: string; bgColor: string; textColor: string }> = {
