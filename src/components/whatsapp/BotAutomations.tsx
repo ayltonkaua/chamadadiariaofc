@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Zap, AlertTriangle, CalendarDays, Save, Sparkles, Users, Search, Send, RefreshCw, Shield } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import type { WhatsAppBotConfig, WhatsAppGroup } from '@/domains/whatsappBot';
 import { whatsappBotService } from '@/domains/whatsappBot';
 import AiMessageGenerator from './AiMessageGenerator';
