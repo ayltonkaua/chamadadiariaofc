@@ -48,7 +48,7 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                     // but if users type 7, we pass null as sock since we don't have it directly here unless passed down.
                     // This is a menu trap, usually AI classifies to inbound.js which has the sock object.
                     // To be safe, we'll route to consulta aula (sock won't generate links if null).
-                    return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn);
+                    return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn, textContent);
                 }
 
                 if (choice === '8') {
@@ -93,7 +93,7 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
                         }
                         // --- NOVOS INTENTS NA RECLASSIFICAÇÃO DO MENU ---
                         if (aiResult.intent === 'consultar_aula') {
-                            return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn);
+                            return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, null, replyFn, textContent);
                         }
                         if (aiResult.intent === 'avisar_ausencia') {
                             // Cria ticket temporário para avisar ausência

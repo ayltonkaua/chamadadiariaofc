@@ -38,7 +38,7 @@ Intenções possíveis:
 - "consultar_faltas": quer ver faltas, frequência, quantas faltas, como está a presença
 - "consultar_aula": quer saber se hoje tem aula, se vai ter escola, se tem aula amanhã, horário de aula
 - "consultar_beneficio": quer saber do meu tênis, benefício, auxílio material, dinheiro caiu, pagamento
-- "corrigir_beneficio": quer corrigir dados do benefício, conta errada, CPF errado, dados incorretos do meu tênis
+- "corrigir_beneficio": quer corrigir dados do benefício, conta errada, CPF errado, dados incorretos, "não conheço essa conta", "quero alterar dados da conta", "mudar a conta", "corrigir dados"
 - "carteirinha": carteira de estudante, carteirinha, ID escolar
 - "boletim": boletim, notas, histórico escolar, rendimento
 - "declaracao": declaração de escolaridade, comprovante de matrícula, declaração
@@ -62,6 +62,9 @@ Msg: "quero o boletim do meu filho" → {"intent":"boletim","confianca":0.92}
 Msg: "preciso de uma declaração" → {"intent":"declaracao","confianca":0.90}
 Msg: "quantas faltas tem?" → {"intent":"consultar_faltas","confianca":0.93}
 Msg: "cadê meu tênis?" → {"intent":"consultar_beneficio","confianca":0.94}
+Msg: "nao conheco essa conta" → {"intent":"corrigir_beneficio","confianca":0.98}
+Msg: "quero alterar dados da conta" → {"intent":"corrigir_beneficio","confianca":0.95}
+Msg: "mudar a conta" → {"intent":"corrigir_beneficio","confianca":0.95}
 Msg: "o dinheiro do uniforma caiu?" → {"intent":"consultar_beneficio","confianca":0.91}
 Msg: "minha conta tá errada no meu tênis" → {"intent":"corrigir_beneficio","confianca":0.93}
 Msg: "corrigir dados do benefício" → {"intent":"corrigir_beneficio","confianca":0.95}
@@ -283,8 +286,60 @@ function getUnknownMessage() {
     return `Não consegui entender exatamente o que você precisa 😅\n\nPosso te ajudar com:\n• Justificar faltas\n• Avisar que seu filho não vai hoje\n• Saber se hoje tem aula\n• Consultar frequência\n• Consultar benefícios (Meu Tênis)\n• Solicitar documentos (carteirinha, boletim, declaração)\n• Informações sobre Pé-de-Meia\n\nPode reformular seu pedido? Por exemplo:\n_"Hoje tem aula?" ou "Meu filho não vai hoje"_\n\nOu se preferir, digite um número:\n1️⃣ Justificar Falta\n2️⃣ Carteira de Estudante\n3️⃣ Histórico/Boletim\n4️⃣ Declaração\n5️⃣ Pé-de-Meia\n6️⃣ Consultar Faltas\n7️⃣ Hoje tem aula?\n8️⃣ Consultar Meu Tênis`;
 }
 
+// ═══════════════════════════════════════════════
+// Resposta Inteligente para Aula
+// ═══════════════════════════════════════════════
+
+async function generateSmartAulaResponse(userMessage, temAulaHoje, motivoSemAula) {
+    if (!GEMINI_API_KEY || !userMessage) return null;
+
+    const diasDaSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+    const now = new Date();
+    // Ajustar para fuso do Brasil (UTC-3)
+    now.setHours(now.getHours() - 3);
+    const todayName = diasDaSemana[now.getDay()];
+
+    const systemPrompt = `Você é o assistente virtual de uma escola. Responda de forma direta e curta se haverá aula, baseado nos dados fornecidos e na pergunta do usuário.
+DADOS DA ESCOLA:
+- Hoje é ${todayName}.
+- A escola definiu que para HOJE: ${temAulaHoje ? 'TEM AULA NORMALMENTE' : 'NÃO TEM AULA (' + motivoSemAula + ')'}.
+- Para outros dias (amanhã, semana que vem, etc): considere que de segunda a sexta normalmente há aula, e finais de semana (sábado e domingo) não há aula. No entanto, avise que a confirmação oficial de suspensão só é dada no próprio dia.
+
+Mensagem do usuário: "${userMessage}"
+
+Regras:
+1. Responda apenas com o texto que será enviado ao usuário no WhatsApp. Use emojis.
+2. Seja direto e simpático. Mantenha curto (máx 3-4 linhas).
+3. Se a pergunta for sobre HOJE, use a informação exata (TEM AULA ou NÃO TEM AULA).
+4. Se a pergunta for sobre AMANHÃ ou outro dia, responda baseando-se no dia da semana correspondente, mas com a ressalva de que imprevistos são avisados no próprio dia.
+5. Inicie a resposta com "✅ " ou "❌ " ou "ℹ️ " dependendo da situação.`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+        const res = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 150 },
+            }),
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+    } catch (err) {
+        clearTimeout(timeout);
+        return null;
+    }
+}
+
 module.exports = {
     classifyIntent,
     getGreetingMessage,
-    getUnknownMessage
+    getUnknownMessage,
+    generateSmartAulaResponse
 };

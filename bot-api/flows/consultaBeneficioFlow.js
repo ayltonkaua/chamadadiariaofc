@@ -156,15 +156,19 @@ async function handleWaitBeneficioCpf(session, sessionKey, text, replyFn) {
 
         if (inputClean === storedCpfClean) {
             authSuccess = true;
-            msg += `👤 *Aluno(a):* ${reg.alunoNome}\n`;
-            msg += `💰 *Benefício:* ${reg.programas_sociais.nome}\n`;
-            msg += `📅 *Pagamento:* ${dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Data não informada'}\n`;
-            msg += `💵 *Valor:* ${formatCurrency(dados.valor)}\n`;
-            msg += `✅ *Responsável:* ${dados.nome_responsavel || 'Não informado'} (${dados.cpf_responsavel})\n`;
-            msg += `🏦 *Banco:* ${dados.banco || 'Não informado'}\n`;
-            msg += `🏢 *Agência:* ${dados.agencia || 'Não informada'}\n`;
-            msg += `💳 *Conta:* ${dados.conta || 'Não informada'}\n`;
-            msg += `\n──────────────\n\n`;
+            msg += `╭━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `┃ 🎟️ *COMPROVANTE DE BENEFÍCIO*\n`;
+            msg += `╰━━━━━━━━━━━━━━━━━━━\n\n`;
+            msg += `👤 *Beneficiário:* ${reg.alunoNome}\n`;
+            msg += `📦 *Programa:* ${reg.programas_sociais.nome}\n`;
+            msg += `📅 *Data do Crédito:* ${dados.data_pagamento ? formatDateBR(dados.data_pagamento) : 'Pendente/Não informada'}\n`;
+            msg += `💵 *Valor Recebido:* ${formatCurrency(dados.valor)}\n\n`;
+            msg += `*🏦 DADOS BANCÁRIOS*\n`;
+            msg += `├ *Banco:* ${dados.banco || 'N/A'}\n`;
+            msg += `├ *Agência:* ${dados.agencia || 'N/A'}\n`;
+            msg += `├ *Conta:* ${dados.conta || 'N/A'}\n`;
+            msg += `╰ *Titular:* ${dados.nome_responsavel || 'N/A'} (CPF: ${dados.cpf_responsavel})\n`;
+            msg += `\n─────────────────────\n\n`;
         }
     }
 

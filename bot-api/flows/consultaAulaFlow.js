@@ -1,5 +1,6 @@
 const { supabase } = require('../supabase');
 const { setSession, clearSession } = require('../utils/sessionManager');
+const { generateSmartAulaResponse } = require('../utils/aiClassifier');
 
 /**
  * Consulta "Hoje tem aula?" Flow
@@ -10,7 +11,7 @@ const { setSession, clearSession } = require('../utils/sessionManager');
  * 4. Se não está → envia link de convite
  */
 
-async function startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, sock, replyFn) {
+async function startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, sock, replyFn, userText = '') {
     try {
         // 1. Buscar config da escola
         const { data: config } = await supabase
@@ -31,12 +32,17 @@ async function startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9,
             .eq('situacao', 'ativo')
             .or(`telefone_responsavel.in.(${phoneCom9},${phoneSem9}),telefone_responsavel_2.in.(${phoneCom9},${phoneSem9})`);
 
+        let respostaBase = temAula
+            ? '✅ *Sim, hoje tem aula normalmente!* 📚'
+            : `❌ *Hoje NÃO tem aula.*\n📋 Motivo: ${motivoSemAula}`;
+
+        if (userText && userText.trim().length > 2) {
+            const smartResponse = await generateSmartAulaResponse(userText, temAula, motivoSemAula);
+            if (smartResponse) respostaBase = smartResponse;
+        }
+
         if (!students || students.length === 0) {
             // Telefone não cadastrado
-            const respostaBase = temAula
-                ? '✅ *Sim, hoje tem aula normalmente!* 📚'
-                : `❌ *Hoje NÃO tem aula.*\n📋 Motivo: ${motivoSemAula}`;
-            
             await replyFn(`${respostaBase}\n\n_Obs: Seu número não está vinculado a nenhum aluno. Envie "oi" para se cadastrar._`);
             clearSession(sessionKey);
             return;
@@ -56,9 +62,7 @@ async function startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9,
         }
 
         // 4. Resposta base sobre aula
-        let msg = temAula
-            ? '✅ *Sim, hoje tem aula normalmente!* 📚\n\n'
-            : `❌ *Hoje NÃO tem aula.*\n📋 Motivo: _${motivoSemAula}_\n\n`;
+        let msg = `${respostaBase}\n\n`;
 
         // 5. Verificar participação nos grupos
         let allGroups = null;

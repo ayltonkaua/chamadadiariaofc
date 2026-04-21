@@ -274,8 +274,8 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
     // ── Consultar Aula ("Hoje tem aula?") ──
     if (intent === 'consultar_aula') {
         console.log(`📚 [INBOUND] [${escolaId.substring(0,8)}] Intent: consultar_aula`);
-        // Aqui temos o `sock` passado pelo processIncomingMessage.
-        return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, sock, replyFn); 
+        // Aqui temos o \`sock\` passado pelo processIncomingMessage.
+        return await startConsultaAulaFlow(escolaId, sessionKey, phoneCom9, phoneSem9, sock, replyFn, textContent); 
     }
 
     // ── Avisar Ausência Antecipada ──
