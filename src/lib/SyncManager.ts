@@ -1,16 +1,13 @@
 /**
  * SyncManager v2.0
- * 
- * RELIABLE synchronization engine for ChamadaDiária.
- * 
- * FIXES v2.0:
+ * * RELIABLE synchronization engine for ChamadaDiária.
+ * * FIXES v2.0:
  * - RPC timeout (15s) to prevent infinite waiting
  * - Circuit breaker does NOT auto-reset (manual only)
  * - Proper handling of RPC response (created, already_synced = SUCCESS)
  * - Terminal states guaranteed (synced or error, never stuck in syncing)
  * - Final progress notification always sent
- * 
- * CRITICAL: This is a public-policy system. Zero data loss allowed.
+ * * CRITICAL: This is a public-policy system. Zero data loss allowed.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -350,8 +347,7 @@ class SyncManager {
     ): void {
         const durationMs = Date.now() - startTime;
 
-        // Fire and forget - don't block sync
-        (supabase.rpc as any)('log_sync_metrics', {
+        const payload = {
             p_event_type: eventType,
             p_duration_ms: durationMs,
             p_items_total: total,
@@ -362,9 +358,19 @@ class SyncManager {
             p_client_version: CONFIG.CLIENT_VERSION,
             p_client_platform: CONFIG.CLIENT_PLATFORM,
             p_client_timestamp: new Date().toISOString()
-        }).catch((err: any) => {
-            console.warn('[SyncManager] Telemetry failed:', err.message);
-        });
+        };
+
+        // CORREÇÃO: Fire and forget estruturado corretamente (substituindo o .catch do RPC)
+        (async () => {
+            try {
+                const { error } = await (supabase.rpc as any)('log_sync_metrics', payload);
+                if (error) {
+                    console.warn('[SyncManager] Telemetry failed:', error.message || error);
+                }
+            } catch (err: any) {
+                console.warn('[SyncManager] Telemetry exception:', err.message);
+            }
+        })();
     }
 
     async retryFailed(): Promise<SyncResult[]> {
@@ -428,8 +434,7 @@ class SyncManager {
      * CRITICAL: Ensures valid JWT session before starting sync.
      * If session is expired, attempts refresh.
      * If refresh fails, throws error to abort sync cleanly.
-     * 
-     * This prevents ALL pending items from going to error state
+     * * This prevents ALL pending items from going to error state
      * when JWT expires during sync.
      */
     private async ensureValidSession(): Promise<void> {
@@ -500,14 +505,6 @@ class SyncManager {
             const result = await this.callRpcWithTimeout(chamada);
             const durationMs = Date.now() - startTime;
 
-            // DETAILED LOGGING FOR DEBUG
-            console.log('[SyncManager] RPC result:', {
-                chamadaId: chamada.id,
-                data: result.data,
-                error: result.error,
-                durationMs
-            });
-
             if (result.error) {
                 return await this.handleError(chamada, result.error, durationMs);
             }
@@ -545,7 +542,9 @@ class SyncManager {
             } else {
                 // RPC returned success: false or unknown format
                 const errorMsg = data?.message || data?.error || 'Resposta inesperada do servidor';
-                console.error('[SyncManager] RPC returned failure:', data);
+                
+                // CORREÇÃO: Transforma o objeto em JSON legível para facilitar o Debug
+                console.error('[SyncManager] RPC returned failure:', JSON.stringify(data, null, 2));
 
                 // RATE LIMIT: Special handling - pause sync, don't retry immediately
                 if (data?.error === 'rate_limit_exceeded' || data?.rate_limited === true) {
@@ -593,11 +592,9 @@ class SyncManager {
 
     /**
      * Call RPC with timeout - CRITICAL for preventing infinite spinner
-     * 
-     * Uses Promise.race to ensure timeout actually works regardless of
+     * * Uses Promise.race to ensure timeout actually works regardless of
      * whether the underlying fetch supports AbortController.
-     * 
-     * NEW: Supports multiple atom types via SYNC_STRATEGIES
+     * * NEW: Supports multiple atom types via SYNC_STRATEGIES
      */
     private async callRpcWithTimeout(atom: SyncableAtom): Promise<{ data: any; error: any }> {
         // Get strategy for this atom type
@@ -647,7 +644,8 @@ class SyncManager {
         error: any,
         durationMs: number
     ): Promise<SyncResult> {
-        const errorMessage = error?.message || String(error);
+        // CORREÇÃO: Transforma erros em objeto em strings legíveis
+        const errorMessage = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
         const isRetryable = this.isRetryableError(error);
 
         console.error(`[SyncManager] Error syncing ${chamada.id}:`, errorMessage);
