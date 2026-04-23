@@ -69,7 +69,6 @@ const SYNC_STRATEGIES: Record<SyncAtomType, SyncStrategy> = {
             const chamada = atom as ChamadaAtom;
             return {
                 p_idempotency_key: chamada.idempotencyKey,
-p_escola_id: chamada.escola_id,
                 p_turma_id: chamada.turma_id,
                 p_data_chamada: chamada.data_chamada,
                 p_registros: chamada.registros,
