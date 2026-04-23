@@ -1,5 +1,5 @@
 /**
- * AI Intent Classifier — Gemini Flash / Groq Fallback
+ * AI Intent Classifier — Gemini Flash / Groq Fallbackk
  * 
  * Classifica a intenção do usuário usando IA para substituir o menu URA rígido.
  * Usado APENAS na primeira mensagem (sem session ativa, sem ticket aberto).
@@ -200,7 +200,7 @@ async function classifyWithGroq(userMessage) {
 // ═══════════════════════════════════════════════
 
 const VALID_INTENTS = [
-    'justificar_falta', 'consultar_faltas', 'carteirinha', 
+    'justificar_falta', 'consultar_faltas', 'carteirinha',
     'boletim', 'declaracao', 'pe_de_meia', 'saudacao', 'desconhecido',
     'consultar_aula', 'avisar_ausencia', 'consultar_beneficio', 'corrigir_beneficio'
 ];
@@ -214,7 +214,7 @@ function parseAiResponse(rawText, source) {
         }
 
         const parsed = JSON.parse(jsonStr);
-        
+
         if (parsed.intent && VALID_INTENTS.includes(parsed.intent)) {
             return {
                 intent: parsed.intent,
@@ -244,25 +244,25 @@ async function classifyIntent(userMessage) {
     // 1. Tenta Gemini
     let result = await classifyWithGemini(text);
     if (result && result.confianca >= 0.6) {
-        console.log(`🧠 [AI-CLASSIFIER] ${result.source}: "${text.substring(0,40)}..." → ${result.intent} (${(result.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
+        console.log(`🧠 [AI-CLASSIFIER] ${result.source}: "${text.substring(0, 40)}..." → ${result.intent} (${(result.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
         return result;
     }
 
     // 2. Tenta Groq como fallback
     result = await classifyWithGroq(text);
     if (result && result.confianca >= 0.6) {
-        console.log(`🧠 [AI-CLASSIFIER] ${result.source}: "${text.substring(0,40)}..." → ${result.intent} (${(result.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
+        console.log(`🧠 [AI-CLASSIFIER] ${result.source}: "${text.substring(0, 40)}..." → ${result.intent} (${(result.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
         return result;
     }
 
     // 3. Tenta regex como último recurso
     const regexResult = classifyByRegex(text);
     if (regexResult) {
-        console.log(`🧠 [AI-CLASSIFIER] regex: "${text.substring(0,40)}..." → ${regexResult.intent} (${(regexResult.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
+        console.log(`🧠 [AI-CLASSIFIER] regex: "${text.substring(0, 40)}..." → ${regexResult.intent} (${(regexResult.confianca * 100).toFixed(0)}%) [${Date.now() - startTime}ms]`);
         return regexResult;
     }
 
-    console.log(`🧠 [AI-CLASSIFIER] NENHUM match para: "${text.substring(0,50)}..." [${Date.now() - startTime}ms]`);
+    console.log(`🧠 [AI-CLASSIFIER] NENHUM match para: "${text.substring(0, 50)}..." [${Date.now() - startTime}ms]`);
     return null;
 }
 
@@ -273,7 +273,7 @@ async function classifyIntent(userMessage) {
 function getGreetingMessage() {
     const hour = new Date().getHours() - 3;
     const adjustedHour = hour < 0 ? hour + 24 : hour;
-    
+
     let saudacao;
     if (adjustedHour >= 5 && adjustedHour < 12) saudacao = 'Bom dia';
     else if (adjustedHour >= 12 && adjustedHour < 18) saudacao = 'Boa tarde';
