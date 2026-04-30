@@ -118,9 +118,9 @@ async function sendListMessage(sock, jid, options) {
     }
 
     await sendInteractiveMessage(sock, jid, {
-        header: title ? { title } : undefined,
-        body: { text },
-        footer: footer ? { text: footer } : undefined,
+        title: title || '',
+        text: text,
+        footer: footer || '',
         interactiveButtons: [
             {
                 name: 'single_select',
