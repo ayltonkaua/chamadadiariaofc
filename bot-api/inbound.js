@@ -18,6 +18,7 @@ const { startConsultaAulaFlow } = require('./flows/consultaAulaFlow');
 const { startConsultaBeneficioFlow } = require('./flows/consultaBeneficioFlow');
 const { handleStateMachine } = require('./stateMachine');
 const { handleWaitAtendimentoMsg, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
+const { extractInteractiveResponse, sendMenuURA } = require('./utils/buttons');
 
 // ═══════════════════════════════════════════════
 // Mapa LID → Telefone real (resolve o bug @lid do Baileys v6+)
@@ -130,11 +131,21 @@ function setupInboundListener(sock, escolaId) {
             );
 
             // Extrair texto
-            const textContent = 
+            let textContent = 
                 msg.message.conversation || 
                 msg.message.extendedTextMessage?.text || 
                 msg.message.imageMessage?.caption ||
                 '';
+
+            // ═══ DETECTAR RESPOSTA INTERATIVA (botão/lista) ═══
+            // Quando o usuário clica em um botão ou seleciona item da lista,
+            // o WhatsApp envia buttonsResponseMessage / listResponseMessage
+            // em vez de conversation. Extraímos o selectedId como textContent.
+            const interactiveResponse = extractInteractiveResponse(msg);
+            if (interactiveResponse) {
+                textContent = interactiveResponse.selectedId || interactiveResponse.displayText || '';
+                console.log(`🔘 [INBOUND] Resposta interativa: tipo=${interactiveResponse.type} | id=${interactiveResponse.selectedId} | texto="${interactiveResponse.displayText}"`);
+            }
 
             const mediaFallbackText = hasMedia ? '[Atestado/Documento em anexo]' : null;
 
@@ -175,6 +186,9 @@ function setupInboundListener(sock, escolaId) {
                     }
                 }
             };
+            // Anexar sock e jid no replyFn para que helpers de botões possam usá-los
+            replyFn.sock = sock;
+            replyFn.jid = msg.key.remoteJid;
 
             await processIncomingMessage(escolaId, resolved.phone, textContent, replyFn, mediaFallbackText, sock);
 
@@ -250,7 +264,8 @@ async function processIncomingMessage(escolaId, phoneString, textContent, replyF
         phoneSem9,
         originalMessage: textContent 
     }, replyFn);
-    await replyFn(getUnknownMessage());
+    const menuSent = await sendMenuURA(replyFn, 'Não consegui entender exatamente o que você precisa 😅\n\nSelecione uma opção do menu abaixo, ou descreva o que precisa com mais detalhes:');
+    if (!menuSent) await replyFn(getUnknownMessage());
 }
 
 /**
@@ -343,7 +358,11 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
             phoneSem9,
             originalMessage: textContent 
         }, replyFn);
-        await replyFn(getGreetingMessage());
+        const hour = new Date().getHours() - 3;
+        const adjustedHour = hour < 0 ? hour + 24 : hour;
+        const saudacao = adjustedHour >= 5 && adjustedHour < 12 ? 'Bom dia' : adjustedHour >= 12 && adjustedHour < 18 ? 'Boa tarde' : 'Boa noite';
+        const greetSent = await sendMenuURA(replyFn, `${saudacao}! 😊 Sou o assistente virtual da escola.\n\nComo posso te ajudar? Selecione uma opção:`);
+        if (!greetSent) await replyFn(getGreetingMessage());
         return;
     }
 
@@ -357,6 +376,8 @@ async function executeIntent(classification, escolaId, sessionKey, phoneCom9, ph
         originalMessage: textContent 
     }, replyFn);
     await replyFn(getUnknownMessage());
+    // Tentar enviar menu interativo APÓS o texto de fallback
+    await sendMenuURA(replyFn, 'Selecione uma opção:').catch(() => {});
 }
 
 module.exports = { setupInboundListener, lidToPhoneMap };

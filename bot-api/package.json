@@ -8,6 +8,7 @@
         "dev": "node --watch server.js"
     },
     "dependencies": {
+        "@ryuu-reinzz/button-helper": "^2.2.3",
         "@supabase/supabase-js": "^2.49.4",
         "@whiskeysockets/baileys": "^6.7.16",
         "cors": "^2.8.5",

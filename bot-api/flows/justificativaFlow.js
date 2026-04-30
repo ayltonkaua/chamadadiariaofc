@@ -1,6 +1,7 @@
 const { supabase } = require('../supabase');
 const { setSession, clearSession } = require('../utils/sessionManager');
 const { formatDateBR } = require('../utils/dateFormatter');
+const { sendListMessage, sendSimNaoButtons } = require('../utils/buttons');
 
 const RECENT_DAYS_THRESHOLD = 30;
 
@@ -16,6 +17,29 @@ async function showAlunoSelection(escolaId, sessionKey, alunos, replyFn) {
         escolaId,
         alunosVinculados: alunos,
     }, replyFn);
+
+    // Tentar enviar como lista interativa (IDs numéricos = compatível com handler)
+    if (replyFn.sock && replyFn.jid && alunos.length <= 10) {
+        try {
+            await sendListMessage(replyFn.sock, replyFn.jid, {
+                title: '🎓 Selecionar Aluno',
+                text: 'Você possui mais de um aluno vinculado. Selecione abaixo:',
+                footer: 'Justificativa de Falta',
+                buttonText: '🎓 Selecionar Aluno',
+                sections: [{
+                    title: 'Alunos Vinculados',
+                    rows: alunos.map((a, i) => ({
+                        id: String(i + 1),
+                        title: a.nome,
+                        description: `Turma: ${a.turma_nome}`,
+                    })),
+                }],
+            });
+            return;
+        } catch (err) {
+            console.error('[BUTTONS] Falha lista alunos:', err.message);
+        }
+    }
     await replyFn(msg);
 }
 
@@ -48,7 +72,9 @@ async function showFaltasDoAluno(escolaId, sessionKey, aluno, todosAlunos, reply
                 escolaId,
                 alunosVinculados: todosAlunos,
             }, replyFn);
-            await replyFn(`✅ O aluno(a) *${aluno.nome}* não possui faltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias!\n\nDeseja verificar falta de *outro aluno*? Responda *S* ou *N*:`);
+            const semFaltaMsg = `✅ O aluno(a) *${aluno.nome}* não possui faltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias!\n\nDeseja verificar falta de *outro aluno*?`;
+            const btnSent = await sendSimNaoButtons(replyFn, semFaltaMsg);
+            if (!btnSent) await replyFn(semFaltaMsg + ' Responda *S* ou *N*:');
         } else {
             clearSession(sessionKey);
             await replyFn(`✅ O aluno(a) *${aluno.nome}* não possui faltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias!\n\nSe precisar de algo, envie uma nova mensagem.`);
@@ -69,6 +95,29 @@ async function showFaltasDoAluno(escolaId, sessionKey, aluno, todosAlunos, reply
         alunosVinculados: todosAlunos,
         faltasDisponiveis: faltas,
     }, replyFn);
+
+    // Tentar enviar como lista interativa
+    if (replyFn.sock && replyFn.jid && faltas.length <= 10) {
+        try {
+            const rows = faltas.map((f, i) => ({
+                id: String(i + 1),
+                title: formatDateBR(f.data_chamada),
+                description: `Falta #${i + 1}`,
+            }));
+            rows.push({ id: '0', title: '📌 Justificar TODAS', description: `Todas as ${faltas.length} datas acima` });
+
+            await sendListMessage(replyFn.sock, replyFn.jid, {
+                title: '📅 Selecionar Datas',
+                text: `Aluno(a): *${aluno.nome}*\n\nFaltas sem justificativa nos últimos ${RECENT_DAYS_THRESHOLD} dias. Selecione a data para justificar:`,
+                footer: 'Ou digite várias: 1,3 ou 0 para todas',
+                buttonText: '📅 Ver Datas',
+                sections: [{ title: 'Datas com Falta', rows }],
+            });
+            return;
+        } catch (err) {
+            console.error('[BUTTONS] Falha lista datas:', err.message);
+        }
+    }
     await replyFn(msg);
 }
 
@@ -222,7 +271,9 @@ async function handleWaitMotivo(session, sessionKey, text, mediaFallbackText, es
             ...session,
             stage: 'WAIT_OUTRO_ALUNO',
         }, replyFn);
-        await replyFn(`✅ *Justificativa(s) registrada(s) com sucesso!*\n\nAluno(a): *${nomeAluno}*\nDatas: ${datas.length} falta(s) justificada(s)\n\nA coordenação irá analisar e retornar em breve.\n\nDeseja justificar falta de *outro aluno*? Responda *S* (Sim) ou *N* (Não):`);
+        const outroMsg = `✅ *Justificativa(s) registrada(s) com sucesso!*\n\nAluno(a): *${nomeAluno}*\nDatas: ${datas.length} falta(s) justificada(s)\n\nA coordenação irá analisar e retornar em breve.\n\nDeseja justificar falta de *outro aluno*?`;
+        const btnSent = await sendSimNaoButtons(replyFn, outroMsg);
+        if (!btnSent) await replyFn(outroMsg + ' Responda *S* (Sim) ou *N* (Não):');
     } else {
         setSession(sessionKey, {
             ...session,

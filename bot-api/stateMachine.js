@@ -6,6 +6,7 @@ const { startConsultaAulaFlow } = require('./flows/consultaAulaFlow');
 const { startConsultaBeneficioFlow, handleWaitBeneficioCpf } = require('./flows/consultaBeneficioFlow');
 const { setSession, clearSession } = require('./utils/sessionManager');
 const { classifyIntent } = require('./utils/aiClassifier');
+const { sendMenuURA } = require('./utils/buttons');
 
 const SETOR_MAP = {
     '2': { setor: 'carteirinha', label: 'Carteira de Estudante' },
@@ -126,6 +127,8 @@ async function handleStateMachine(session, sessionKey, textContent, mediaFallbac
 
                 setSession(sessionKey, session, replyFn);
                 await replyFn("Não consegui entender. 😅 Por favor, responda com o *número* da opção desejada (1 a 8), ou descreva o que precisa com mais detalhes.");
+                // Enviar menu interativo como apoio visual
+                await sendMenuURA(replyFn, 'Selecione uma opção:').catch(() => {});
                 return;
             }
 

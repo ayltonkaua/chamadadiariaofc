@@ -1,5 +1,6 @@
 const { supabase } = require('../supabase');
 const { setSession, clearSession } = require('../utils/sessionManager');
+const { sendQuickReplyButtons, sendMenuURA } = require('../utils/buttons');
 
 async function startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem9, replyFn) {
     const { data: students, error: studentError } = await supabase
@@ -60,8 +61,34 @@ async function startConsultaFaltasFlow(escolaId, sessionKey, phoneCom9, phoneSem
         msg += `❌ Total de Aulas Perdidas (aprox): *${totalAulasGeral}* aulas\n\n`;
     });
 
-    clearSession(sessionKey);
+    // Enviar resumo
     await replyFn(msg + `_Para detalhamento por matéria, por favor procure a escola ou acesse o Portal do Aluno._`);
+
+    // Oferecer ações rápidas via botões
+    setSession(sessionKey, {
+        stage: 'WAIT_URA_CHOICE',
+        escolaId,
+        phoneCom9,
+        phoneSem9,
+    }, replyFn);
+
+    if (replyFn.sock && replyFn.jid) {
+        try {
+            await sendQuickReplyButtons(replyFn.sock, replyFn.jid, {
+                text: 'O que deseja fazer agora?',
+                footer: 'Chamada Diária Bot',
+                buttons: [
+                    { id: '1', text: '📎 Justificar Falta' },
+                    { id: '7', text: '📚 Hoje tem aula?' },
+                ]
+            });
+        } catch (err) {
+            console.error('[BUTTONS] Falha botões pós-consulta:', err.message);
+            clearSession(sessionKey);
+        }
+    } else {
+        clearSession(sessionKey);
+    }
 }
 
 module.exports = {
