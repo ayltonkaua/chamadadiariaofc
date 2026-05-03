@@ -32,33 +32,57 @@ async function transcribeAudio(audioBuffer) {
     try {
         fs.writeFileSync(tmpFile, audioBuffer);
 
-        // Enviar para o serviço whisper via fetch (Node 18+)
-        const FormData = (await import('undici')).FormData;
-        const { File: UndiciFile } = await import('undici');
+        // Enviar arquivo para o serviço whisper via HTTP multipart
+        const http = require('http');
+        
+        const result = await new Promise((resolve, reject) => {
+            const boundary = '----WhisperBoundary' + Date.now();
+            const fileData = fs.readFileSync(tmpFile);
+            
+            // Construir body multipart manualmente
+            const header = Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="file"; filename="audio.ogg"\r\n` +
+                `Content-Type: audio/ogg\r\n\r\n`
+            );
+            const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+            const body = Buffer.concat([header, fileData, footer]);
 
-        // Usar fetch nativo com FormData
-        const formData = new FormData();
-        const fileBlob = new Blob([audioBuffer], { type: 'audio/ogg' });
-        formData.append('file', fileBlob, 'audio.ogg');
+            const url = new URL(`${WHISPER_URL}/transcribe`);
+            const options = {
+                hostname: url.hostname,
+                port: url.port,
+                path: url.pathname,
+                method: 'POST',
+                headers: {
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': body.length,
+                },
+                timeout: TRANSCRIBE_TIMEOUT_MS,
+            };
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
+            const req = http.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 400) {
+                        reject(new Error(`Serviço retornou ${res.statusCode}: ${data}`));
+                        return;
+                    }
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(new Error(`Resposta inválida: ${data}`));
+                    }
+                });
+            });
 
-        const response = await fetch(`${WHISPER_URL}/transcribe`, {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal,
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+            req.write(body);
+            req.end();
         });
 
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[TRANSCRIBE] Serviço retornou ${response.status}: ${errorText}`);
-            return null;
-        }
-
-        const result = await response.json();
         console.log(`🎤 [TRANSCRIBE] ${result.duration || 0}s áudio → "${(result.text || '').substring(0, 80)}..." (${result.processing_time || 0}s proc)`);
 
         if (!result.text || result.text.trim().length === 0) {
