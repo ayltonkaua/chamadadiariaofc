@@ -154,8 +154,19 @@ function setupInboundListener(sock, escolaId) {
             // ═══ TRANSCRIÇÃO DE ÁUDIO ═══
             // Se o usuário enviou um áudio, transcrever via faster-whisper
             const audioMsg = msg.message.audioMessage;
+            const MAX_AUDIO_SECONDS = 120; // 2 minutos
             if (audioMsg && !textContent.trim()) {
                 try {
+                    // Verificar duração ANTES de baixar (economiza banda e processamento)
+                    const audioDuration = audioMsg.seconds || 0;
+                    if (audioDuration > MAX_AUDIO_SECONDS) {
+                        const mins = Math.ceil(audioDuration / 60);
+                        await sock.sendMessage(msg.key.remoteJid, { 
+                            text: `⏱️ Seu áudio tem ${mins} minuto(s), mas o limite é de ${Math.floor(MAX_AUDIO_SECONDS / 60)} minuto(s).\n\nPor favor, envie um áudio mais curto ou digite sua mensagem por texto. 😊` 
+                        }, { quoted: msg });
+                        return;
+                    }
+
                     // Feedback imediato
                     await sock.sendMessage(msg.key.remoteJid, { 
                         text: '🎤 Recebi seu áudio! Transcrevendo...' 
