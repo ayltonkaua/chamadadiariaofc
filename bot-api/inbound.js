@@ -19,6 +19,8 @@ const { startConsultaBeneficioFlow } = require('./flows/consultaBeneficioFlow');
 const { handleStateMachine } = require('./stateMachine');
 const { handleWaitAtendimentoMsg, routeToOpenAtendimento } = require('./flows/atendimentoFlow');
 const { extractInteractiveResponse, sendMenuURA } = require('./utils/buttons');
+const { transcribeAudio } = require('./utils/audioTranscriber');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 // ═══════════════════════════════════════════════
 // Mapa LID → Telefone real (resolve o bug @lid do Baileys v6+)
@@ -148,6 +150,49 @@ function setupInboundListener(sock, escolaId) {
             }
 
             const mediaFallbackText = hasMedia ? '[Atestado/Documento em anexo]' : null;
+
+            // ═══ TRANSCRIÇÃO DE ÁUDIO ═══
+            // Se o usuário enviou um áudio, transcrever via faster-whisper
+            const audioMsg = msg.message.audioMessage;
+            if (audioMsg && !textContent.trim()) {
+                try {
+                    // Feedback imediato
+                    await sock.sendMessage(msg.key.remoteJid, { 
+                        text: '🎤 Recebi seu áudio! Transcrevendo...' 
+                    }, { quoted: msg });
+
+                    // Baixar o áudio
+                    const stream = await downloadContentFromMessage(audioMsg, 'audio');
+                    const chunks = [];
+                    for await (const chunk of stream) {
+                        chunks.push(chunk);
+                    }
+                    const audioBuffer = Buffer.concat(chunks);
+
+                    // Transcrever
+                    const result = await transcribeAudio(audioBuffer);
+
+                    if (result && result.text) {
+                        textContent = result.text;
+                        console.log(`🎤 [INBOUND] Áudio transcrito (${result.duration}s): "${textContent.substring(0, 80)}..."`);
+                        // Confirmar transcrição ao usuário
+                        await sock.sendMessage(msg.key.remoteJid, { 
+                            text: `🎤 _Entendi:_ "${textContent.length > 200 ? textContent.substring(0, 200) + '...' : textContent}"` 
+                        }, { quoted: msg });
+                    } else {
+                        await sock.sendMessage(msg.key.remoteJid, { 
+                            text: '😅 Não consegui entender o áudio. Poderia enviar por texto, por favor?' 
+                        }, { quoted: msg });
+                        return;
+                    }
+                } catch (audioErr) {
+                    console.error('[INBOUND] Erro transcrição áudio:', audioErr.message);
+                    await sock.sendMessage(msg.key.remoteJid, { 
+                        text: '⚠️ Ocorreu um erro ao processar o áudio. Tente enviar por texto.' 
+                    }, { quoted: msg });
+                    return;
+                }
+            }
 
             if (!textContent.trim() && !mediaFallbackText) return;
 
